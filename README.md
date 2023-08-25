@@ -8,4 +8,5 @@ Multiscale Imaging for marMOset Software &amp; Analysis
 git clone https://github.com/arnaudletroter/mimosa.git
 
 ### Create the environment by running
+
 conda env create -f environment_macosX_13.4.yml
