@@ -1,6 +1,6 @@
 import argparse
 import os
-import czi_convert as czi
+from python_scripts import czi_convert as czi
 
 # Folder containing the input czi data
 input_path='/tmp'
