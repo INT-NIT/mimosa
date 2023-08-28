@@ -1,5 +1,5 @@
-# mimosa
-Multiscale Imaging for marMOset Software &amp; Analysis
+# the mimosa project
+a set of tools for Multiscale Imaging for marMOset Software &amp; Analysis
 
 # Installing for development
 
@@ -11,3 +11,6 @@ git clone https://github.com/arnaudletroter/mimosa.git
 conda env create -f environment_macosX_13.4.yml \
 conda activate mimosa_dev \
 pip install pylibCZIrw-3.5.1-cp311-cp311-macosx_10_9_universal2.whl
+
+## for Linux ( tested on Debian 12 bookworm):
+
