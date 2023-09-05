@@ -110,3 +110,52 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                     filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C1.nii.gz"
                     array_img = nib.Nifti1Image(np.swapaxes(mosaic_image_C1, 0, 1), np.eye(4))
                     nib.save(array_img, filename)
+
+
+def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format):
+    czifile_scenes = os.path.join(pathin, czifilename)
+
+    with pyczi.open_czi(czifile_scenes) as czidoc:
+        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
+
+        for i in range(0, len(scenes_bounding_rectangle)):
+
+            print("ROI Scene",i)
+
+            zoom_factor = float (1.0 / downsampling_factor)
+
+            print(i, scenes_bounding_rectangle[i])
+
+            mosaic_image_C0 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
+            mosaic_image_C1 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
+
+            with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
+
+                print(i, scenes_bounding_rectangle[i])
+                my_real_roi = (
+                scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
+                scenes_bounding_rectangle[i][3])
+                print(my_real_roi)
+                ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, zoom=zoom_factor)
+                ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, zoom=zoom_factor)
+
+                cziname = os.path.splitext(czifilename)[0]
+
+                if (ouput_format=="tiff"):
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C0.tiff"
+                    imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
+                    imC0.save(filename)
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C1.tiff"
+                    imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
+                    imC1.save(filename)
+
+                if (ouput_format == "nii"):
+                    #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C0.nii.gz"
+                    array_img = nib.Nifti1Image(np.swapaxes(ch0_downsampled, 0, 1), np.eye(4))
+                    nib.save(array_img, filename)
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C1.nii.gz"
+                    array_img = nib.Nifti1Image(np.swapaxes(ch1_downsampled, 0, 1), np.eye(4))
+                    nib.save(array_img, filename)
+
+                bar()
