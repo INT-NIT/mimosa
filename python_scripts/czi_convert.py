@@ -126,8 +126,8 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
 
             print(i, scenes_bounding_rectangle[i])
 
-            mosaic_image_C0 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
-            mosaic_image_C1 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
+            #mosaic_image_C0 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
+            #mosaic_image_C1 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
 
             with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
 
