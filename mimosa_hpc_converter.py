@@ -23,7 +23,8 @@ def main():
 
     input_path=dir_path(args.input_path)
     output_format=args.output_format
-    downsampling_factor=(args.downsampling_factor)**2
+    #downsampling_factor=(args.downsampling_factor)**2
+    downsampling_factor = 2 ** (args.downsampling_factor)
 
     if args.output_path is not None:
         output_path = dir_path(args.output_path)
