@@ -136,8 +136,8 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                 scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
                 scenes_bounding_rectangle[i][3])
                 print(my_real_roi)
-                ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, scene=1, zoom=zoom_factor)
-                ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, scene=1, zoom=zoom_factor)
+                ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, scene=i, zoom=zoom_factor)
+                ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, scene=i, zoom=zoom_factor)
 
                 #add # read a 2D image from a specific channel and scene
 
