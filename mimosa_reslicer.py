@@ -6,8 +6,6 @@ import nibabel as nb
 
 # Folder containing the input czi data
 input_path='/tmp'
-
-
 def dir_path(path):
     if os.path.isdir(path):
         return path
@@ -38,25 +36,21 @@ def main():
     if args.padding_size is not None:
         padding_size=args.padding_size
 
+    if args.norm:
+        print("Normalization is enabled")
+
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         print("PATH OUT '% s' not created (already exists)" % output_path)
 
-
     print("PATH IN:",input_path)
     print("downsampling factor:",downsampling_factor)
-    if args.norm:
-        print("Normalization is enabled")
-        pathNorm=output_path+"norm/"
-        if not os.path.exists(pathNorm):
-            os.mkdir(pathNorm)
+
     #if args.denoise:
     #    print("Denoising is enabled")
 
     dirFiles = os.listdir(input_path)  # list of directory files
     # parse folder and replace prefix format by %03d for sort
-
-
     extensions = ('.nii.gz')
     for files in dirFiles:
         if extensions in files:
@@ -64,6 +58,7 @@ def main():
             new_files = split_files[0].zfill(3) + "-" + split_files[1]
             os.rename(input_path + '/' + files, input_path + '/' + new_files)
 
+    dirFiles = os.listdir(input_path)  # list of directory files
     extensions = ('C0.nii.gz')
     myimages = []  # list of image filenames
     for files in dirFiles:  # filter out all non jpgs
