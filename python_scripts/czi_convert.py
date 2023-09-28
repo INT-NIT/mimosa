@@ -144,19 +144,19 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                 cziname = os.path.splitext(czifilename)[0]
 
                 if (ouput_format=="tiff"):
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C0.tiff"
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
                     imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
                     imC0.save(filename)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C1.tiff"
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
                     imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
                     imC1.save(filename)
 
                 if (ouput_format == "nii"):
                     #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C0.nii.gz"
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.nii.gz"
                     array_img = nib.Nifti1Image(np.swapaxes(ch0_downsampled, 0, 1), np.eye(4))
                     nib.save(array_img, filename)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i) + "_C1.nii.gz"
+                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.nii.gz"
                     array_img = nib.Nifti1Image(np.swapaxes(ch1_downsampled, 0, 1), np.eye(4))
                     nib.save(array_img, filename)
 
