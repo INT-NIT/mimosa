@@ -4,7 +4,8 @@ import json
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
-from PIL import Image
+#from PIL import Image
+import tifffile as tf
 import nibabel as nib
 from skimage import img_as_ubyte
 
@@ -95,12 +96,18 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                 cziname = os.path.splitext(czifilename)[0]
 
                 if (ouput_format=="tiff"):
+
+                    #old method using PIL (replaced by tifffile)
+                    
                     filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
-                    imC0 = Image.fromarray((mosaic_image_C0).astype(np.uint16))
-                    imC0.save(filename)
+                    #imC0 = Image.fromarray((mosaic_image_C0).astype(np.uint16))
+                    #imC0.save(filename)
+                    tf.imwrite(filename, mosaic_image_C0,imagej=True)
+
                     filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
-                    imC1 = Image.fromarray((mosaic_image_C1).astype(np.uint16))
-                    imC1.save(filename)
+                    #imC1 = Image.fromarray((mosaic_image_C1).astype(np.uint16))
+                    #imC1.save(filename)
+                    tf.imwrite(filename, mosaic_image_C1,imagej=True)
 
                 if (ouput_format == "nii"):
                     #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
@@ -144,12 +151,16 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                 cziname = os.path.splitext(czifilename)[0]
 
                 if (ouput_format=="tiff"):
+                    #old method using PIL (replaced by tifffile)
                     filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
-                    imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
-                    imC0.save(filename)
+                    #imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
+                    #imC0.save(filename)
+                    tf.imwrite(filename, ch0_downsampled,imagej=True)
+                    
                     filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
-                    imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
-                    imC1.save(filename)
+                    #imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
+                    #imC1.save(filename)
+                    tf.imwrite(filename, ch1_downsampled,imagej=True)
 
                 if (ouput_format == "nii"):
                     #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
