@@ -17,14 +17,14 @@ def main():
     parser = argparse.ArgumentParser(description='Process for CZI concersion to BIDS')
     parser.add_argument('-i', '--input_path', type=dir_path, help='root path containing all .czi files')
     parser.add_argument('-df', '--downsampling_factor', type=int)
-    parser.add_argument("--test", action="store_true", help="normalize signal robust [min,max] -> [0,255]")
+    parser.add_argument("--test", action="store_true", help="just print the result of renaiming")
 
     args = parser.parse_args()
 
-    downsampling_factor = 4
+    #value by default
+    downsampling_factor = 3
 
     input_path=dir_path(args.input_path)
-    output_path = args.output_path
 
     if args.downsampling_factor is not None:
         downsampling_factor = args.downsampling_factor
@@ -51,8 +51,9 @@ def main():
                 if args.test:
                     print(files," ->" , new_files)
                 else:
-                    prtin("coucou")
-                    #shutil.move(input_path + '/' + files, input_path + '/' + new_files)
+                    shutil.move(input_path + '/' + files, input_path + '/' + new_files)
+
+    print("done")
 
 if __name__ == "__main__":
     main()
