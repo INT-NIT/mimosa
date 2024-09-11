@@ -3,7 +3,7 @@ a set of tools for Multiscale Imaging for marMOset Software &amp; Analysis
 
 # Installing for development
 
-git clone https://github.com/arnaudletroter/mimosa.git \
+git clone https://github.com/INT-NIT/mimosa.git \
 cd mimosa
 
 ### Create the conda environment by running
