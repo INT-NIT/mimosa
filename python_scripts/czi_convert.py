@@ -8,7 +8,7 @@ import numpy as np
 import tifffile as tf
 import nibabel as nib
 from skimage import img_as_ubyte
-
+import xml.etree.ElementTree as ET
 from alive_progress import alive_bar # barre de progression jolie en console 
 
 #This function returns the largest multiple of the number a smaller than b
@@ -22,6 +22,24 @@ def multiple(a, b):
 
     return m
 
+def get_nb_channels(czidoc):
+    # get the metadat file  in form of xml chaine            
+    metadata_dict = czidoc.metadata
+    # convert this XML chaine to XML tree , from root we can navigate in XML nodes 
+    Channel_size=int(metadata_dict["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
+    print(Channel_size)
+    # in case we didnt find any channel which is illogic we should verify ( maybe by mistake from the microscope which doesnt write well the XML file )
+    if Channel_size == 0:
+        while True:
+            try:
+                _ = czidoc.read(roi=(0,0,10,10), plane={'C': Channel_size})
+                Channel_size += 1
+            except Exception:
+                break
+        print(f"Nombre de canaux confirmés : {Channel_size}")
+    return Channel_size
+
+
 def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, full_patch_w_h,ouput_format):
     # patch_factor = facteur de combinaison des petits carrées (patchs)
     # full_patch_w_h = taille de base d'un patch avant réduction
@@ -29,8 +47,8 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
     with pyczi.open_czi(czifile_scenes) as czidoc: # ouverture fichier czi 
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle # récuperer la taille et la position de chaque scene 
-        # recuperer le nombre de canaux dans cette image 
-        nb_channels = czidoc.shape['C']
+        print("Rectangles de scènes:", scenes_bounding_rectangle)   
+        Channel_size=get_nb_channels(czidoc)
         for i in range(0, len(scenes_bounding_rectangle)): # ya plusieurs scenes dans scenes_bounding_rectangle
 
             #with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
@@ -47,7 +65,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
             mosaic_image_height = round(float(scenes_bounding_rectangle[i].h) / (downsampling_factor) + 0.5)
             # créer des mosaiques vides pour les channels 
             mosaic_image={}
-            for c in range(nb_channels):
+            for c in range(Channel_size):
                 mosaic_image[c] = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
             # taille d'un patch réduit en pixel avec downsampling 
             mosaic_image_patch_size_w = int(downsampled_patch_w_h * patch_factor)
@@ -83,11 +101,15 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                             if (max_value==patch_width):patch_width=max_mul8_value
                             else:patch_height = max_mul8_value
 
-                        my_roi_patched = (scenes_bounding_rectangle[i].x + patch_factor * full_patch_w_h * x,
-                                          scenes_bounding_rectangle[i].y + patch_factor * full_patch_w_h * y,
-                                          patch_width, patch_height)
+                        # Convertir en entiers — pylibCZIrw attend des IntRect (int values)
+                        x0 = int(scenes_bounding_rectangle[i].x + patch_factor * full_patch_w_h * x)
+                        y0 = int(scenes_bounding_rectangle[i].y + patch_factor * full_patch_w_h * y)
+                        w0 = int(max(1, patch_width))
+                        h0 = int(max(1, patch_height))
+                        my_roi_patched = (x0, y0, w0, h0)
 
-                        for c in range(nb_channels):
+
+                        for c in range(Channel_size):
                             # lit la region my_roi_patched pour le canal c
                             ch = czidoc.read(roi=my_roi_patched, plane={'C': c})
                             # on skip downsampling_factor patch par exemple on lit tt sauf les 4 dernier 
@@ -100,7 +122,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
                 # Enlève .czi → pour construire les noms des fichiers de sortie.
                 cziname = os.path.splitext(czifilename)[0]
-                for c in range(nb_channels):
+                for c in range(Channel_size):
                     if (ouput_format=="tiff"):
                         #old method using PIL (replaced by tifffile)
                         filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".tiff"
@@ -135,6 +157,7 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                 scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
                 scenes_bounding_rectangle[i][3]) # ici toute la scène d'un coup pas de patch 
                 print(my_real_roi)
+                
                 ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, scene=i, zoom=zoom_factor)
                 ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, scene=i, zoom=zoom_factor)
 
@@ -164,3 +187,17 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                     nib.save(array_img, filename)
 
                 bar()
+
+def main():
+    pathin = "/DATA/mimosa/dataset/1-Fenouil-MTO10092101/"
+    pathout = "/DATA/mimosa/renamed"
+    czifilename ="MTO10092101_Cx_248-256.czi"
+    patch_factor = 0.5
+    downsampling_factor = 4
+    full_patch_w_h = 1024
+    ouput_format="nii" #or "nii"
+
+    czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, full_patch_w_h,ouput_format)
+
+if __name__ == "__main__":
+    main()
