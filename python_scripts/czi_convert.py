@@ -23,9 +23,7 @@ def multiple(a, b):
     return m
 
 def get_nb_channels(czidoc):
-    # get the metadat file  in form of xml chaine            
     metadata_dict = czidoc.metadata
-    # convert this XML chaine to XML tree , from root we can navigate in XML nodes 
     Channel_size=int(metadata_dict["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
     print(Channel_size)
     # in case we didnt find any channel which is illogic we should verify ( maybe by mistake from the microscope which doesnt write well the XML file )
@@ -43,20 +41,20 @@ def get_nb_channels(czidoc):
 def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, full_patch_w_h,ouput_format):
     # patch_factor = facteur de combinaison des petits carrées (patchs)
     # full_patch_w_h = taille de base d'un patch avant réduction
-    czifile_scenes = os.path.join(pathin, czifilename) # combine le nom du fichier et le dossier ou se trouve le fichier 
+    czifile_scenes = os.path.join(pathin, czifilename) 
 
-    with pyczi.open_czi(czifile_scenes) as czidoc: # ouverture fichier czi 
-        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle # récuperer la taille et la position de chaque scene 
+    with pyczi.open_czi(czifile_scenes) as czidoc:
+        # récuperer la taille et la position de chaque scene 
+        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle 
         print("Rectangles de scènes:", scenes_bounding_rectangle)   
         nb_channels=get_nb_channels(czidoc)
-        for i in range(0, len(scenes_bounding_rectangle)): # ya plusieurs scenes dans scenes_bounding_rectangle
-
+        for i in range(0, len(scenes_bounding_rectangle)): 
             #with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
             print("ROI Scene",i)
             # calcul de la taille réduite des patchs 
             downsampled_patch_w_h = int(full_patch_w_h / downsampling_factor)
-
-            print(i, scenes_bounding_rectangle[i]) # affiche 0 Rectangle(x=0, y=0, w=64000, h=64000)
+            # pour chaque scene on affiche ses coordonnées
+            print(i, scenes_bounding_rectangle[i]) 
             # calcul de nombre de patch necessaires 
             nb_patch_w = int((scenes_bounding_rectangle[i].w) / (full_patch_w_h * patch_factor)) # patch factor => 0.5 means on fais 2 fois plus de patchs quand par exemple on veut eviter les zones vides entre deux patchs quand on veut une lecture plus précise 
             nb_patch_h = int((scenes_bounding_rectangle[i].h) / (full_patch_w_h * patch_factor))
@@ -87,12 +85,6 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
                         if ((y == nb_patch_h and x == nb_patch_w)):
                             print(f'last corner size={patch_width}/{patch_height} - patch={downsampled_patch_w_h}')
-                            """
-                            •Le coin bas-droit pose souvent problème dans la librairie Zeiss :
-                            elle veut des tailles multiples de 8.
-	                        •Donc ici on ajuste la taille pour que patch_width ou patch_height
-                            soit le plus grand multiple de 8 possible (fonction multiple(8, valeur)).
-                            """
                             #to overcome the bug in the czidoc.read function, find the largest multiple of 8,
                             # less than the largest value between the width and height of the last upper corner patch."
                             max_value=max(patch_width,patch_height)
@@ -101,7 +93,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                             if (max_value==patch_width):patch_width=max_mul8_value
                             else:patch_height = max_mul8_value
 
-                        # Convertir en entiers — pylibCZIrw attend des IntRect (int values)
+                        # pylibCZIrw wait "int" values in order to represent a real one pixel and not a flloat , "max" for the last patch can cause problem in case it has null or negative value 
                         x0 = int(scenes_bounding_rectangle[i].x + patch_factor * full_patch_w_h * x)
                         y0 = int(scenes_bounding_rectangle[i].y + patch_factor * full_patch_w_h * y)
                         w0 = int(max(1, patch_width))
