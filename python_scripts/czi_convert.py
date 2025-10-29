@@ -125,13 +125,13 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                 for c in range(nb_channels):
                     if (ouput_format=="tiff"):
                         #old method using PIL (replaced by tifffile)
-                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".tiff"
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+str(c)+".tiff"
                         #imC0 = Image.fromarray((mosaic_image_C0).astype(np.uint16))
                         #imC0.save(filename)
                         tf.imwrite(filename, mosaic_image[c],imagej=True)
                     if (ouput_format == "nii"):
                         #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".nii.gz"
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+str(c)+".nii.gz"
                         array_img = nib.Nifti1Image(np.swapaxes(mosaic_image[c], 0, 1), np.eye(4))
                         nib.save(array_img, filename)
 
@@ -170,19 +170,19 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
                 for c in range(nb_channels):
                     if (ouput_format=="tiff"):
                         #old method using PIL (replaced by tifffile)
-                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".tiff"
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+str(c)+".tiff"
                         #imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
                         #imC0.save(filename)
                         tf.imwrite(filename, channel_images[c],imagej=True)
 
                     if (ouput_format == "nii"):
                         #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".nii.gz"
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+str(c)+".nii.gz"
                         array_img = nib.Nifti1Image(np.swapaxes(channel_images[c], 0, 1), np.eye(4))
                         nib.save(array_img, filename)
 
                 bar()
-
+"""
 def main():
     pathin = "/DATA/mimosa/dataset/1-Fenouil-MTO10092101/"
     pathout = "/DATA/mimosa/renamed"
@@ -196,3 +196,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""
