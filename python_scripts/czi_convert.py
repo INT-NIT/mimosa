@@ -48,7 +48,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
     with pyczi.open_czi(czifile_scenes) as czidoc: # ouverture fichier czi 
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle # récuperer la taille et la position de chaque scene 
         print("Rectangles de scènes:", scenes_bounding_rectangle)   
-        Channel_size=get_nb_channels(czidoc)
+        nb_channels=get_nb_channels(czidoc)
         for i in range(0, len(scenes_bounding_rectangle)): # ya plusieurs scenes dans scenes_bounding_rectangle
 
             #with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
@@ -65,7 +65,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
             mosaic_image_height = round(float(scenes_bounding_rectangle[i].h) / (downsampling_factor) + 0.5)
             # créer des mosaiques vides pour les channels 
             mosaic_image={}
-            for c in range(Channel_size):
+            for c in range(nb_channels):
                 mosaic_image[c] = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
             # taille d'un patch réduit en pixel avec downsampling 
             mosaic_image_patch_size_w = int(downsampled_patch_w_h * patch_factor)
@@ -109,7 +109,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
                         my_roi_patched = (x0, y0, w0, h0)
 
 
-                        for c in range(Channel_size):
+                        for c in range(nb_channels):
                             # lit la region my_roi_patched pour le canal c
                             ch = czidoc.read(roi=my_roi_patched, plane={'C': c})
                             # on skip downsampling_factor patch par exemple on lit tt sauf les 4 dernier 
@@ -122,7 +122,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
                 # Enlève .czi → pour construire les noms des fichiers de sortie.
                 cziname = os.path.splitext(czifilename)[0]
-                for c in range(Channel_size):
+                for c in range(nb_channels):
                     if (ouput_format=="tiff"):
                         #old method using PIL (replaced by tifffile)
                         filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".tiff"
@@ -140,7 +140,7 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
 
     with pyczi.open_czi(czifile_scenes) as czidoc: # with garantit que le fichier sera bien enfermé apres lecture 
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
-
+        nb_channels=get_nb_channels(czidoc)
         for i in range(0, len(scenes_bounding_rectangle)):
 
             print("ROI Scene",i)
@@ -153,38 +153,33 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
             with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
 
                 print(i, scenes_bounding_rectangle[i])
+                # on lis toute la scene entiere 
                 my_real_roi = (
                 scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
-                scenes_bounding_rectangle[i][3]) # ici toute la scène d'un coup pas de patch 
+                scenes_bounding_rectangle[i][3]) 
                 print(my_real_roi)
-                
-                ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, scene=i, zoom=zoom_factor)
-                ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, scene=i, zoom=zoom_factor)
 
+                # Dictionnaire pour stocker les images de chaque canal
+                channel_images = {}
+                for c in range(nb_channels):
+                    # on lis chaque canal separement 
+                    channel_images[c]=czidoc.read(roi=my_real_roi, plane={'C':c}, scene=i,zoom=zoom_factor)
                 #add # read a 2D image from a specific channel and scene
 
                 cziname = os.path.splitext(czifilename)[0]
+                for c in range(nb_channels):
+                    if (ouput_format=="tiff"):
+                        #old method using PIL (replaced by tifffile)
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".tiff"
+                        #imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
+                        #imC0.save(filename)
+                        tf.imwrite(filename, channel_images[c],imagej=True)
 
-                if (ouput_format=="tiff"):
-                    #old method using PIL (replaced by tifffile)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
-                    #imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
-                    #imC0.save(filename)
-                    tf.imwrite(filename, ch0_downsampled,imagej=True)
-                    
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
-                    #imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
-                    #imC1.save(filename)
-                    tf.imwrite(filename, ch1_downsampled,imagej=True)
-
-                if (ouput_format == "nii"):
-                    #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(ch0_downsampled, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(ch1_downsampled, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
+                    if (ouput_format == "nii"):
+                        #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
+                        filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C"+{c}+".nii.gz"
+                        array_img = nib.Nifti1Image(np.swapaxes(channel_images[c], 0, 1), np.eye(4))
+                        nib.save(array_img, filename)
 
                 bar()
 
