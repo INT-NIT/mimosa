@@ -26,7 +26,7 @@ def get_nb_channels(czidoc):
     metadata_dict = czidoc.metadata
     Channel_size=int(metadata_dict["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
     print(Channel_size)
-    # in case we didnt find any channel which is illogic we should verify ( maybe by mistake from the microscope which doesnt write well the XML file )
+    # in case we didnt find any channel which is illogic we should verify ( maybe by mistake from the microscope )
     if Channel_size == 0:
         while True:
             try:
@@ -34,7 +34,7 @@ def get_nb_channels(czidoc):
                 Channel_size += 1
             except Exception:
                 break
-        print(f"Nombre de canaux confirmés : {Channel_size}")
+        print(f"Number of channels confirmed : {Channel_size}")
     return Channel_size
 
 
@@ -44,40 +44,38 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
     czifile_scenes = os.path.join(pathin, czifilename) 
 
     with pyczi.open_czi(czifile_scenes) as czidoc:
-        # récuperer la taille et la position de chaque scene 
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle 
         print("Rectangles de scènes:", scenes_bounding_rectangle)   
         nb_channels=get_nb_channels(czidoc)
         for i in range(0, len(scenes_bounding_rectangle)): 
             #with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
             print("ROI Scene",i)
-            # calcul de la taille réduite des patchs 
+            # calculation of the reduced patch size
             downsampled_patch_w_h = int(full_patch_w_h / downsampling_factor)
-            # pour chaque scene on affiche ses coordonnées
             print(i, scenes_bounding_rectangle[i]) 
-            # calcul de nombre de patch necessaires 
+            # calculation of the necessary number of patchs 
             nb_patch_w = int((scenes_bounding_rectangle[i].w) / (full_patch_w_h * patch_factor)) # patch factor => 0.5 means on fais 2 fois plus de patchs quand par exemple on veut eviter les zones vides entre deux patchs quand on veut une lecture plus précise 
             nb_patch_h = int((scenes_bounding_rectangle[i].h) / (full_patch_w_h * patch_factor))
-            # taille mosaic finale de la scene 
+            # final reduced mosaic size of the scene  
             mosaic_image_width = round(float(scenes_bounding_rectangle[i].w) / (downsampling_factor) + 0.5) # 0.5 astuce d'arrondi pour qu'on perd pas de pixel 
             mosaic_image_height = round(float(scenes_bounding_rectangle[i].h) / (downsampling_factor) + 0.5)
-            # créer des mosaiques vides pour les channels 
+            # create empty mosaics for each channel
             mosaic_image={}
             for c in range(nb_channels):
                 mosaic_image[c] = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
-            # taille d'un patch réduit en pixel avec downsampling 
+            # reduced patch size in pixels 
             mosaic_image_patch_size_w = int(downsampled_patch_w_h * patch_factor)
             mosaic_image_patch_size_h = int(downsampled_patch_w_h * patch_factor)
 
             with alive_bar((nb_patch_w+1)*(nb_patch_h+1),force_tty=True) as bar:
-                #on parcourt tous les patchs d'une scene 
-                for x in range(0, nb_patch_w + 1): # +1 sert à couvrir le bord droit et bas de la scène 
+                # +1 is used to cover the right and bottom edge of the stage
+                for x in range(0, nb_patch_w + 1): 
                     for y in range(0, nb_patch_h + 1):
 
-                       # fixer la taille normale d'un patch 
-                        patch_width = patch_factor * full_patch_w_h # si on a patch_factor = 0.5 ca veut on divise encore un patch en deux patchs 
+                       # the normal size of a patch  
+                        patch_width = patch_factor * full_patch_w_h # si on a patch_factor = 0.5 ca veut on divise encore un patch en deux patchs (facteur de recouvrement d'un patch)
                         patch_height = patch_factor * full_patch_w_h
-                        # sert à corriger la taille du dernier patch pour s'adapter exactement à la fin de la scène 
+                        # is used to correct the size of the last patch to fit exactly at the end of the scene
                         if (y == nb_patch_h):
                             patch_height = scenes_bounding_rectangle[i].h - (patch_factor * full_patch_w_h * y)
                         if (x == nb_patch_w):
@@ -92,7 +90,7 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
                             if (max_value==patch_width):patch_width=max_mul8_value
                             else:patch_height = max_mul8_value
-
+                        # roi here is a patch itself 
                         # pylibCZIrw wait "int" values in order to represent a real one pixel and not a flloat , "max" for the last patch can cause problem in case it has null or negative value 
                         x0 = int(scenes_bounding_rectangle[i].x + patch_factor * full_patch_w_h * x)
                         y0 = int(scenes_bounding_rectangle[i].y + patch_factor * full_patch_w_h * y)
@@ -102,17 +100,17 @@ def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, 
 
 
                         for c in range(nb_channels):
-                            # lit la region my_roi_patched pour le canal c
+                            # reads the my_roi_patched region for channel c
                             ch = czidoc.read(roi=my_roi_patched, plane={'C': c})
-                            # on skip downsampling_factor patch par exemple on lit tt sauf les 4 dernier 
+                            # perform the resolution , skipping for exemple 4 pixels in the roi  
                             ch_res = ch[::downsampling_factor, ::downsampling_factor]
-                            # on place le patch du canal 0 dans la mosaique 
+                            # placing the patch in the mosaic image of a given channel 
                             mosaic_image[c][
                             y * mosaic_image_patch_size_h:y * mosaic_image_patch_size_h + ch_res[..., 0].shape[0],
                             x * mosaic_image_patch_size_w:x * mosaic_image_patch_size_w + ch_res[..., 0].shape[1]] = ch_res[..., 0]
-                        bar() # fais avancer la barre d'une étape pour montrer que ce patch est terminé 
+                        bar() 
 
-                # Enlève .czi → pour construire les noms des fichiers de sortie.
+                # Remove .czi → to construct the output filenames.
                 cziname = os.path.splitext(czifilename)[0]
                 for c in range(nb_channels):
                     if (ouput_format=="tiff"):
@@ -145,16 +143,16 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format
             with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
 
                 print(i, scenes_bounding_rectangle[i])
-                # on lis toute la scene entiere 
+                # Roi is a scene here , previously it was a patch 
                 my_real_roi = (
                 scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
                 scenes_bounding_rectangle[i][3]) 
                 print(my_real_roi)
 
-                # Dictionnaire pour stocker les images de chaque canal
+                # dictionnary to stock the images of each channel 
                 channel_images = {}
                 for c in range(nb_channels):
-                    # on lis chaque canal separement 
+                    # read each channel alone and stock its scene image 
                     channel_images[c]=czidoc.read(roi=my_real_roi, plane={'C':c}, scene=i,zoom=zoom_factor)
                 #add # read a 2D image from a specific channel and scene
 
