@@ -153,8 +153,8 @@ def main():
             stack_of_slices[:, :, stack_id] = image_data_norm_arr_padded[:, :]
             stack_id = stack_id + 1
 
-        empty_header = nb.Nifti1Header()
-        empty_header.get_data_shape()
+            empty_header = nb.Nifti1Header()
+            empty_header.get_data_shape()
 
         img = nb.Nifti1Image(stack_of_slices, new_affine, empty_header)
 
