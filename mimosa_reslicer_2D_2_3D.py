@@ -72,13 +72,13 @@ def main():
             if match :
                 sub = match.group("sub")
                 scenes_raw = match.group("scenes")
+                scenes_list = [int(x) for x in re.split(r"[-_]", scenes_raw)]
+
                 S_index = int(match.group("S"))
+                scene_value = scenes_list[S_index]
                 C = "C" + match.group("C")
-                scenes_list = re.split(r"[-_]", scenes_raw)
-                scenes_list = [int(x) for x in scenes_list]
-                if S_index:
-                    scene_value = scenes_list[S_index]
-                    new_name = f"{sub}-{scene_value}-{C}.nii.gz"
+                
+                new_name = f"{sub}-{scene_value}-{C}.nii.gz"
 
                 shutil.copyfile(input_path + '/' + files, output_path + '/' + new_name)
 
