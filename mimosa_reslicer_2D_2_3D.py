@@ -54,21 +54,33 @@ def main():
 
     dirFiles = os.listdir(input_path)  # list of directory files
     # parse folder and replace prefix format by %03d for sort
+
+    # create a regex to be able to analyse any format with - or _ 
+    pattern = re.compile(
+    r'(?P<sub>[A-Za-z0-9]+)[-_]'
+    r'(?P<sample>[A-Za-z0-9]+)[-_]'
+    r'(?P<scenes>[0-9\-_]+)[-_]'
+    r'ds(?P<ds>\d+)[-_]'
+    r'S(?P<S>\d+)[-_]'
+    r'C(?P<C>\d+)'
+    )
+
     extensions = ('.nii.gz')
     for files in dirFiles:
         if extensions in files:
-            split_files = files.split("_")
-            split_S = split_files[len(split_files)-2].split("S")
+            match = pattern.search(files)
+            if match :
+                sub = match.group("sub")
+                scenes_raw = match.group("scenes")
+                S_index = int(match.group("S"))
+                C = "C" + match.group("C")
+                scenes_list = re.split(r"[-_]", scenes_raw)
+                scenes_list = [int(x) for x in scenes_list]
+                if S_index:
+                    scene_value = scenes_list[S_index]
+                    new_name = f"{sub}-{scene_value}-{C}.nii.gz"
 
-            index_scene=(int(split_S[1]))
-
-            val_index_from_S=split_files[index_scene + 2].zfill(3)
-
-            if (val_index_from_S!="ds64"):
-                print(files)
-                new_files = split_files[0].zfill(3) + "-" + split_files[index_scene + 2].zfill(3)   + "-" + split_files[len(split_files)-1]
-
-                shutil.copyfile(input_path + '/' + files, output_path + '/' + new_files)
+                shutil.copyfile(input_path + '/' + files, output_path + '/' + new_name)
 
     dirFiles = os.listdir(output_path)  # list of directory files
 
@@ -76,7 +88,7 @@ def main():
     detected_channels=set()
     for files in dirFiles:
         if '.nii.gz' in files:
-            match = re.search(r'C(\d+)', files)   # search the pattern C followed by a number        
+            match = re.search(r'C(\d+)', files)   # search the pattern C followed by a number  in files       
             if match: # match = object which contains <re.Match object; span=(6, 8), match='C1'>
                 channel = match.group(0) # get C1 
                 detected_channels.add(channel)
