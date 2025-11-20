@@ -1,10 +1,10 @@
 import os
 import argparse
-import shutil # copy or move files easily 
-
+import shutil
+import re 
 import numpy as np
 import subprocess as sp
-import nibabel as nb # medical imaging lib for reading/writing .nii and .nii.gz NifTi files 
+import nibabel as nb
 
 # Folder containing the input czi data
 input_path='/tmp'
@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description='Process for CZI concersion to BIDS')
     parser.add_argument('-i', '--input_path', type=dir_path, help='root path containing all .czi files')
     parser.add_argument('-df', '--downsampling_factor', type=int, help=' factor N for downsampling (default: N=4 (=2^4)=16): 256x256 -> 16x16')
-    parser.add_argument('-ps', '--padding_size', type=int, help=' size of padding (in pixels), default = 100') # how much empty space to add around each slice 
+    parser.add_argument('-ps', '--padding_size', type=int, help=' size of padding (in pixels), default = 100')
     parser.add_argument("--norm", action="store_true", help="normalize signal robust [min,max] -> [0,255]")
     parser.add_argument("--denoise", action="store_true", help="Denoise image using NLM from Ants Library")
     parser.add_argument('-o', '--output_path', type=str, help='output path (default: input_path/preproc')
@@ -25,9 +25,9 @@ def main():
     args = parser.parse_args()
 
     downsampling_factor = 64
-    original_res = 0.0003249 # pixel size (micro or milimetres)
+    original_res = 0.0003249
     #original_thickness = 0.400
-    original_thickness = 0.100 # distance between 2 slices 
+    original_thickness = 0.100
     padding_size = 100
 
     input_path=dir_path(args.input_path)
@@ -54,24 +54,14 @@ def main():
 
     dirFiles = os.listdir(input_path)  # list of directory files
     # parse folder and replace prefix format by %03d for sort
-
-
-
-    nii_files = [f for f in os.listdir(output_path) if f.endswith(".nii.gz")]
-    channels = sorted(list(set([f.split("_")[-1].replace(".nii.gz", "") for f in nii_files])))
-    print(f"Detected channels: {channels}")
-
-
-
     extensions = ('.nii.gz')
     for files in dirFiles:
         if extensions in files:
             split_files = files.split("_")
-            # take the second to last part the split it by S to get the number of the scene 
             split_S = split_files[len(split_files)-2].split("S")
 
             index_scene=(int(split_S[1]))
-            
+
             val_index_from_S=split_files[index_scene + 2].zfill(3)
 
             if (val_index_from_S!="ds64"):
@@ -83,27 +73,33 @@ def main():
     dirFiles = os.listdir(output_path)  # list of directory files
 
 
-    for channel in range(len(channels)) :
-        C=f"C{channel}"
-        extensions = (f"{C}.nii.gz")
-        # extensions = ('C1.nii.gz')
+    detected_channels=set()
+    for files in dirFiles:
+        if '.nii.gz' in files:
+            match = re.search(r'C(\d+)', files)   # search the pattern C followed by a number        
+            if match: # match = object which contains <re.Match object; span=(6, 8), match='C1'>
+                channel = match.group(0) # get C1 
+                detected_channels.add(channel)
+    detected_channels = sorted(list(detected_channels))
+    print(f"Detected channels: {detected_channels}") 
+    
 
-        myimages = []  # list of image filenames
+    for channel in detected_channels:
+        myimages_channel = []  # list of image filenames
         for files in dirFiles:  # filter out all non jpgs
-            if extensions in files:
-                myimages.append(files)
+            if channel+'.nii.gz' in files:
+                myimages_channel.append(files)
 
-        myimages_sorted = myimages.sort()  # good initial sort but doesnt sort numerically very well
-        myimages_sorted = sorted(myimages)  # sort numerically in ascending order
+        myimages_channel_sorted = sorted(myimages_channel)  # sort numerically in ascending order
+        print(f"Number of images per channel  {channel}: {len(myimages_channel_sorted)}")
 
-        print(len(myimages_sorted))
-        print(myimages_sorted)
+
 
         list_w = []
         list_h = []
 
-        for i in range(0, len(myimages_sorted) - 1):
-            rawImage = output_path + "/" + myimages_sorted[i]
+        for i in range(0, len(myimages_channel_sorted) ):
+            rawImage = output_path + "/" + myimages_channel_sorted[i]
             rawImage_nii = nb.load(rawImage)
             list_w.append(rawImage_nii.shape[0])
             list_h.append(rawImage_nii.shape[1])
@@ -113,12 +109,11 @@ def main():
         max_h = np.max(list_h)
         max_h_index = list_h.index(max_h)
         print(max_w, max_w_index, max_h, max_h_index)
-        # compute the final shape of the 3D stack , depth = number of slices 
-        padding_target_shape = np.array((padding_size + max_w, padding_size + max_h, len(myimages_sorted)))
+        padding_target_shape = np.array((padding_size + max_w, padding_size + max_h, len(myimages_channel_sorted)))
         print(padding_target_shape)
 
-        downsampled_res = original_res * downsampling_factor # the new pixel resolution after downsampling 
-        new_resolution = [downsampled_res, downsampled_res, original_thickness] # define voxel size [x,y,z]
+        downsampled_res = original_res * downsampling_factor
+        new_resolution = [downsampled_res, downsampled_res, original_thickness]
         new_affine = np.zeros((4, 4))
         new_affine[:3, :3] = np.diag(new_resolution)
         new_affine[:3, 3] = padding_target_shape * new_resolution / 2. * -1
@@ -126,11 +121,11 @@ def main():
         stack_of_slices = np.zeros((padding_target_shape[0], padding_target_shape[1], padding_target_shape[2]))
         stack_id = 0
 
-        print(len(myimages_sorted))
+        print(len(myimages_channel_sorted))
 
 
-        for i in range(0, len(myimages_sorted) - 1):
-            rawImage = output_path + "/" + myimages_sorted[i]
+        for i in range(0, len(myimages_channel_sorted)):
+            rawImage = output_path + "/" + myimages_channel_sorted[i]
 
             array_img = nb.load(rawImage)
             image_data = array_img.get_fdata()
@@ -153,14 +148,13 @@ def main():
             stack_of_slices[:, :, stack_id] = image_data_norm_arr_padded[:, :]
             stack_id = stack_id + 1
 
-            empty_header = nb.Nifti1Header()
-            empty_header.get_data_shape()
+        empty_header = nb.Nifti1Header()
+        empty_header.get_data_shape()
 
         img = nb.Nifti1Image(stack_of_slices, new_affine, empty_header)
 
-        path3D = f"{output_path}/slice3D_{C}.nii.gz"
+        path3D = output_path + "/" + f"slice3D_{channel}.nii.gz"
         nb.save(img, path3D)
-
 
 
 
