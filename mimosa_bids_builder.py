@@ -1,70 +1,24 @@
 from __future__ import annotations
-from pylibCZIrw import czi as czirw  
+
+from pylibCZIrw import czi as czirw
 from pathlib import Path
-import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 import re
 
 
-def get_czi_xml(czi_path: Path) -> str:
+def get_czi_metadata(czi_path: Path) -> dict:
     """
-    Return the metadata XML string from a CZI using pylibCZIrw.
-
-    This function tries multiple common attribute/method names to stay robust
-    across pylibCZIrw versions.
-
-    Raises:
-        RuntimeError: if the XML metadata cannot be retrieved.
+    Read and return CZI metadata as a Python dictionary using pylibCZIrw.
     """
     with czirw.open_czi(str(czi_path)) as doc:
-        # Try common attribute names
-        for attr in ("metadata", "meta", "xml_metadata", "raw_metadata"):
-            if hasattr(doc, attr):
-                val = getattr(doc, attr)
-                if callable(val):
-                    try:
-                        val = val()
-                    except TypeError:
-                        pass
-                if isinstance(val, bytes):
-                    return val.decode("utf-8", errors="ignore")
-                if isinstance(val, str) and val.strip().startswith("<"):
-                    return val
-
-        # Try common method names
-        for fn in ("get_metadata", "get_xml_metadata", "read_metadata"):
-            if hasattr(doc, fn):
-                val = getattr(doc, fn)()
-                if isinstance(val, bytes):
-                    return val.decode("utf-8", errors="ignore")
-                if isinstance(val, str) and val.strip().startswith("<"):
-                    return val
-
-    raise RuntimeError(f"pylibCZIrw: could not retrieve XML metadata from {czi_path}")
-
-def local(tag: str) -> str:
-    """
-    Return the local XML tag name without the namespace.
-
-    Example:
-        '{http://example}ImageName' -> 'ImageName'
-    """
-    return tag.split("}")[-1] if "}" in tag else tag
+        return doc.metadata
 
 
 def guess_subject_from_filename(stem: str) -> Optional[str]:
     """
-    Guess a subject identifier from the filename (without extension).
-
-    Heuristic:
-        - Split by '_' (and '-' treated as '_')
-        - Return the first token that contains BOTH letters and digits
-        - Token length must be between 6 and 40 characters
-
-    Returns:
-        A subject-like token (e.g. 'MTO10092101') or None if not found.
+    Guess a subject identifier from the filename stem.
     """
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
     for t in tokens:
@@ -77,17 +31,7 @@ def guess_subject_from_filename(stem: str) -> Optional[str]:
 
 def guess_sample_from_filename(stem: str) -> Optional[str]:
     """
-    Guess a sample label from the filename (without extension).
-
-    Heuristic:
-        - Split by '_' (and '-' treated as '_')
-        - Identify the subject token first (guess_subject_from_filename)
-        - Then scan tokens after the subject token
-        - Return the first short alphabetic token (1..8 chars)
-        - Normalize 'cortex' -> 'Cx'
-
-    Returns:
-        A sample label (e.g. 'Cx') or None if not found.
+    Guess a sample label from the filename stem.
     """
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
 
@@ -104,21 +48,6 @@ def guess_sample_from_filename(stem: str) -> Optional[str]:
     return None
 
 
-def get_imagename_text(root: ET.Element) -> Optional[str]:
-    """
-    Extract the value of the first <ImageName> tag found in the metadata XML.
-
-    Returns:
-        The ImageName string, or None if not found / empty.
-    """
-    for el in root.iter():
-        if local(el.tag) == "ImageName":
-            txt = (el.text or "").strip()
-            if txt:
-                return txt
-    return None
-
-
 def _valid_ymd(y: int, m: int, d: int) -> bool:
     """
     Validate that a (year, month, day) triple is a real calendar date.
@@ -132,15 +61,7 @@ def _valid_ymd(y: int, m: int, d: int) -> bool:
 
 def guess_session_from_imagename(imagename: str) -> Optional[str]:
     """
-    Guess a BIDS session label from the ImageName string.
-
-    Supported date patterns in ImageName:
-        - YYYYMMDD (e.g. 20230417)
-        - DD-MM-YYYY or DD/MM/YYYY (e.g. 17-04-2023)
-        - YYYY-MM-DD or YYYY/MM/DD (e.g. 2023-04-17)
-
-    Returns:
-        'ses-YYYYMMDD' if a valid date is found, else None.
+    Build ses-YYYYMMDD by extracting a date from ImageName.
     """
     for m in re.finditer(r"\b(20\d{2})(\d{2})(\d{2})\b", imagename):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -160,136 +81,138 @@ def guess_session_from_imagename(imagename: str) -> Optional[str]:
     return None
 
 
-def extract_microscope_name(root: ET.Element) -> Optional[str]:
+def _walk(obj: Any):
     """
-    Extract the microscope name from metadata.
-
-    This targets the structure observed in your CZI metadata:
-        .../Device with attributes Id='Microscope' and Name='Axio Scan.Z1'
-
-    Returns:
-        Microscope name (e.g. 'Axio Scan.Z1') or None if not found.
+    Recursively walk a nested structure (dict/list) and yield dict nodes.
     """
-    for el in root.iter():
-        if local(el.tag) == "Device":
-            attrs = el.attrib or {}
-            if attrs.get("Id") == "Microscope" and attrs.get("Name"):
-                return attrs["Name"].strip()
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _walk(v)
+    elif isinstance(obj, list):
+        for it in obj:
+            yield from _walk(it)
+
+
+def get_imagename_from_metadata(meta: dict) -> Optional[str]:
+    """
+    Best-effort extraction of ImageName from pylibCZIrw metadata dict.
+    """
+    # common location for ImageName in many CZIs:
+    try:
+        v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"]
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except Exception:
+        pass
+
+    # fallback: search any dict key named ImageName
+    for d in _walk(meta):
+        if "ImageName" in d and isinstance(d["ImageName"], str) and d["ImageName"].strip():
+            return d["ImageName"].strip()
+        if "@ImageName" in d and isinstance(d["@ImageName"], str) and d["@ImageName"].strip():
+            return d["@ImageName"].strip()
+
     return None
 
 
-def extract_channels(root: ET.Element) -> List[str]:
+def get_microscope_name(meta: dict) -> Optional[str]:
     """
-    Extract channel names from metadata.
-
-    This targets the structure observed in your CZI metadata:
-        .../Channel elements with attribute Name='DAPI', 'EGFP', 'DsRed', ...
-
-    Returns:
-        A list of unique channel names in first-seen order (possibly empty).
+    Find microscope device name from metadata dict.
+    Looks for a Device with Id='Microscope' and Name='...'.
     """
-    chans: List[str] = []
-    for el in root.iter():
-        if local(el.tag) == "Channel":
-            name = (el.attrib or {}).get("Name")
-            if name:
-                name = name.strip()
-                if name and name not in chans:
-                    chans.append(name)
-    return chans
+    for d in _walk(meta):
+        dev_id = d.get("@Id") or d.get("Id")
+        if dev_id == "Microscope":
+            name = d.get("@Name") or d.get("Name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+    return None
 
 
-def extract_pixel_xy_um(root: ET.Element) -> Tuple[Optional[float], Optional[float]]:
+def get_channel_names(meta: dict) -> List[str]:
     """
-    Extract pixel size for X and Y axes (in micrometers) from metadata.
-
-    This targets Distance nodes:
-        <Distance Id="X"> <Value>...</Value> <Unit>...</Unit> </Distance>
-        <Distance Id="Y"> ...
-
-    If Unit is missing (unit=None), values are often stored in meters in Zeiss XML.
-    In that case, we convert meters -> micrometers by multiplying by 1e6.
-
-    Returns:
-        (pixel_size_x_um, pixel_size_y_um), each may be None.
+    Extract unique channel names from metadata dict.
+    Looks for dict nodes that look like Channel with a Name attribute.
     """
-    px = {"X": None, "Y": None}
-
-    for dist in root.iter():
-        if local(dist.tag).lower() != "distance":
-            continue
-
-        axis = (dist.attrib or {}).get("Id") or (dist.attrib or {}).get("id")
-        axis = (axis or "").strip().upper()
-        if axis not in ("X", "Y"):
-            continue
-
-        value = None
-        unit = None
-        for ch in list(dist):
-            t = local(ch.tag).lower()
-            if t == "value":
-                try:
-                    value = float((ch.text or "").strip())
-                except Exception:
-                    value = None
-            elif t == "unit":
-                unit = (ch.text or "").strip()
-
-        if value is None:
-            continue
-
-        if unit in (None, "", "m", "meter", "metre"):
-            v_um = value * 1e6
-        elif unit in ("µm", "um"):
-            v_um = value
-        elif unit == "nm":
-            v_um = value / 1000.0
+    names: List[str] = []
+    for d in _walk(meta):
+        # Heuristic: Channel objects often contain Name or @Name
+        if d.get("@Name") and (d.get("@IsActivated") is not None or d.get("ChannelSetupId") is not None or d.get("@ChannelSetupId") is not None):
+            nm = d.get("@Name")
         else:
-            v_um = value
+            nm = d.get("Name") or d.get("@Name")
 
-        px[axis] = v_um
+        if isinstance(nm, str) and nm.strip():
+            nm = nm.strip()
+            # avoid collecting unrelated "Name" fields:
+            # keep only short-ish channel labels
+            if 1 <= len(nm) <= 32 and nm not in names:
+                names.append(nm)
+    return names
 
-    x = None if px["X"] is None else round(px["X"], 6)
-    y = None if px["Y"] is None else round(px["Y"], 6)
-    return x, y
 
-
-def make_acq_signature(root: ET.Element) -> Optional[Tuple]:
+def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
     """
-    Build an acquisition signature used to group files into acq-1, acq-2, ...
+    Extract pixel size X/Y from metadata dict by searching Distance nodes with Id X/Y.
+    If Unit missing, assume meters and convert to micrometers.
+    """
+    px: Dict[str, Optional[float]] = {"X": None, "Y": None}
 
-    Signature fields:
+    for d in _walk(meta):
+        dist_id = d.get("@Id") or d.get("Id")
+        if dist_id not in ("X", "Y"):
+            continue
+
+        # Value may be stored in different ways
+        val = d.get("Value") or d.get("@Value")
+        unit = d.get("Unit") or d.get("@Unit")
+
+        if isinstance(val, dict):
+            # sometimes {"#text": "..."} or {"text": "..."}
+            val = val.get("#text") or val.get("text") or val.get("Value")
+
+        try:
+            fval = float(str(val).strip())
+        except Exception:
+            continue
+
+        # normalize to µm
+        if unit in (None, "", "m", "meter", "metre"):
+            v_um = fval * 1e6
+        elif unit in ("µm", "um"):
+            v_um = fval
+        elif unit == "nm":
+            v_um = fval / 1000.0
+        else:
+            v_um = fval
+
+        px[dist_id] = round(v_um, 6)
+
+    return px["X"], px["Y"]
+
+
+def make_acq_signature(meta: dict) -> Optional[Tuple]:
+    """
+    Build an acquisition signature for grouping into acq-1, acq-2, ...
+
+    Signature:
         (microscope_name, pixel_x_um, pixel_y_um, channels_tuple)
-
-    Returns:
-        The signature tuple, or None if microscope name is missing.
     """
-    microscope = extract_microscope_name(root)
+    microscope = get_microscope_name(meta)
     if microscope is None:
         return None
 
-    px, py = extract_pixel_xy_um(root)
-    chans = tuple(extract_channels(root))
+    px, py = get_pixel_xy_um(meta)
+    chans = tuple(get_channel_names(meta))
     return (microscope, px, py, chans)
 
 
 def parse_one_file(czi_path: Path) -> Optional[dict]:
     """
-    Parse one CZI file and extract fields required to build the sourcedata tree.
-
-    Extraction rules:
-        - subject: from filename (heuristic)
-        - sample:  from filename (heuristic)
-        - ses:     from ImageName metadata (date parsing)
-        - acq_sig: from microscope + pixel size + channels metadata
-
-    Returns:
-        A dict with keys: src, subject, sample, ses, acq_sig
-        or None if any required field is missing.
+    Parse one CZI and extract subject/sample from filename, and ses/acq_sig from metadata dict.
     """
-    xml = get_czi_xml(czi_path)
-    root = ET.fromstring(xml)
+    meta = get_czi_metadata(czi_path)
 
     subject = guess_subject_from_filename(czi_path.stem)
     if subject is None:
@@ -299,7 +222,7 @@ def parse_one_file(czi_path: Path) -> Optional[dict]:
     if sample is None:
         return None
 
-    imagename = get_imagename_text(root)
+    imagename = get_imagename_from_metadata(meta)
     if imagename is None:
         return None
 
@@ -307,7 +230,7 @@ def parse_one_file(czi_path: Path) -> Optional[dict]:
     if ses is None:
         return None
 
-    sig = make_acq_signature(root)
+    sig = make_acq_signature(meta)
     if sig is None:
         return None
 
@@ -319,9 +242,10 @@ def parse_one_file(czi_path: Path) -> Optional[dict]:
         "acq_sig": sig,
     }
 
+
 def move_file(src: Path, dst: Path) -> None:
     """
-    Link our empty BIDS file to the real one in src 
+    Create a symlink at dst pointing to src (BIDS-named alias).
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
@@ -331,20 +255,8 @@ def move_file(src: Path, dst: Path) -> None:
 
 def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8) -> None:
     """
-    Organize all CZI files from input_dir into sourcedata_dir.
-
-    Output structure:
-        sourcedata/sub-XX/ses-YYYYMMDD/sample-<sample>/acq-<n>/
-            sub-XX_ses-YYYYMMDD_sample-<sample>_acq-<n>_run-YY.czi
-
-    Grouping rules:
-        - sub-XX: created per unique subject (sorted for deterministic numbering)
-        - ses: extracted from metadata ImageName date
-        - sample: extracted from filename
-        - acq-N: assigned per unique acquisition signature within (sub, ses, sample)
-        - run-YY: incremented within (sub, ses, sample, acq)
-
-    Files missing required fields are skipped (printed as warnings).
+    Organize CZI files into:
+      sourcedata/sub-XX/ses-YYYYMMDD/sample-<sample>/acq-<n>/sub-XX_ses-..._sample-..._acq-..._run-YY.czi
     """
     czis = sorted(Path(input_dir).glob("*.czi"))
     if not czis:
@@ -410,9 +322,6 @@ def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8)
 
 
 def main() -> None:
-    """
-    Example entry point.
-    """
     input_dir = Path("/DATA/mimosa/original-dataset/1-Fenouil-MTO10092101")
     sourcedata_dir = Path("/DATA/mimosa/MIMOSA_BIDS_dataset/sourcedata")
     organize_sourcedata(input_dir, sourcedata_dir, workers=8)
