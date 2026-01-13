@@ -1,8 +1,7 @@
 from __future__ import annotations
-
+from pylibCZIrw import czi as czirw  
 from pathlib import Path
 import shutil
-import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Optional, Tuple, List, Dict
@@ -11,27 +10,39 @@ import re
 
 def get_czi_xml(czi_path: Path) -> str:
     """
-    Read and return the metadata XML string from a CZI file.
+    Return the metadata XML string from a CZI using pylibCZIrw.
 
-    The function tries to use `aicspylibczi` first. If it is not available,
-    it falls back to `czifile`.
+    This function tries multiple common attribute/method names to stay robust
+    across pylibCZIrw versions.
 
     Raises:
-        RuntimeError: if no backend can read the CZI metadata.
+        RuntimeError: if the XML metadata cannot be retrieved.
     """
-    try:
-        from aicspylibczi import CziFile  # type: ignore
-        return CziFile(str(czi_path)).meta
-    except Exception:
-        pass
+    with czirw.open_czi(str(czi_path)) as doc:
+        # Try common attribute names
+        for attr in ("metadata", "meta", "xml_metadata", "raw_metadata"):
+            if hasattr(doc, attr):
+                val = getattr(doc, attr)
+                if callable(val):
+                    try:
+                        val = val()
+                    except TypeError:
+                        pass
+                if isinstance(val, bytes):
+                    return val.decode("utf-8", errors="ignore")
+                if isinstance(val, str) and val.strip().startswith("<"):
+                    return val
 
-    try:
-        import czifile  # type: ignore
-        with czifile.CziFile(str(czi_path)) as czi:
-            return czi.metadata()
-    except Exception as e:
-        raise RuntimeError(f"Cannot read CZI metadata for {czi_path}: {e}")
+        # Try common method names
+        for fn in ("get_metadata", "get_xml_metadata", "read_metadata"):
+            if hasattr(doc, fn):
+                val = getattr(doc, fn)()
+                if isinstance(val, bytes):
+                    return val.decode("utf-8", errors="ignore")
+                if isinstance(val, str) and val.strip().startswith("<"):
+                    return val
 
+    raise RuntimeError(f"pylibCZIrw: could not retrieve XML metadata from {czi_path}")
 
 def local(tag: str) -> str:
     """
@@ -308,22 +319,14 @@ def parse_one_file(czi_path: Path) -> Optional[dict]:
         "acq_sig": sig,
     }
 
-
 def move_file(src: Path, dst: Path) -> None:
     """
-    Move a file to destination path (creating parent directories).
-
-    If moving is not permitted (e.g. source dataset is read-only),
-    the function falls back to copying, so the BIDS tree can still be built.
+    Link our empty BIDS file to the real one in src 
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         return
-
-    try:
-        shutil.move(str(src), str(dst))
-    except PermissionError:
-        shutil.copy2(src, dst)
+    dst.symlink_to(src.resolve())
 
 
 def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8) -> None:
