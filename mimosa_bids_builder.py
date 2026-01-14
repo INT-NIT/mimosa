@@ -9,17 +9,13 @@ import re
 
 
 def get_czi_metadata(czi_path: Path) -> dict:
-    """
-    Read and return CZI metadata as a Python dictionary using pylibCZIrw.
-    """
+    """Read and return CZI metadata as a Python dictionary using pylibCZIrw."""
     with czirw.open_czi(str(czi_path)) as doc:
         return doc.metadata
 
 
-def guess_subject_from_filename(stem: str) -> Optional[str]:
-    """
-    Guess a subject identifier from the filename stem.
-    """
+def get_subject_from_filename(stem: str) -> Optional[str]:
+    """Extract a subject-like identifier from the filename stem (heuristic)."""
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
     for t in tokens:
         has_a = any(ch.isalpha() for ch in t)
@@ -29,13 +25,11 @@ def guess_subject_from_filename(stem: str) -> Optional[str]:
     return None
 
 
-def guess_sample_from_filename(stem: str) -> Optional[str]:
-    """
-    Guess a sample label from the filename stem.
-    """
+def get_sample_from_filename(stem: str) -> Optional[str]:
+    """Extract a sample label from the filename stem (heuristic)."""
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
 
-    subj = guess_subject_from_filename(stem)
+    subj = get_subject_from_filename(stem)
     start_idx = 0
     if subj and subj in tokens:
         start_idx = tokens.index(subj) + 1
@@ -49,9 +43,7 @@ def guess_sample_from_filename(stem: str) -> Optional[str]:
 
 
 def _valid_ymd(y: int, m: int, d: int) -> bool:
-    """
-    Validate that a (year, month, day) triple is a real calendar date.
-    """
+    """Validate that (year, month, day) is a real calendar date."""
     try:
         date(y, m, d)
         return True
@@ -59,32 +51,8 @@ def _valid_ymd(y: int, m: int, d: int) -> bool:
         return False
 
 
-def guess_session_from_imagename(imagename: str) -> Optional[str]:
-    """
-    Build ses-YYYYMMDD by extracting a date from ImageName.
-    """
-    for m in re.finditer(r"\b(20\d{2})(\d{2})(\d{2})\b", imagename):
-        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if _valid_ymd(y, mo, d):
-            return f"ses-{y:04d}{mo:02d}{d:02d}"
-
-    for m in re.finditer(r"\b(\d{2})[-/](\d{2})[-/](20\d{2})\b", imagename):
-        d_, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if _valid_ymd(y, mo, d_):
-            return f"ses-{y:04d}{mo:02d}{d_:02d}"
-
-    for m in re.finditer(r"\b(20\d{2})[-/](\d{2})[-/](\d{2})\b", imagename):
-        y, mo, d_ = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if _valid_ymd(y, mo, d_):
-            return f"ses-{y:04d}{mo:02d}{d_:02d}"
-
-    return None
-
-
 def _walk(obj: Any):
-    """
-    Recursively walk a nested structure (dict/list) and yield dict nodes.
-    """
+    """Recursively walk a nested (dict/list) structure and yield dict nodes."""
     if isinstance(obj, dict):
         yield obj
         for v in obj.values():
@@ -95,9 +63,7 @@ def _walk(obj: Any):
 
 
 def get_imagename_from_metadata(meta: dict) -> Optional[str]:
-    """
-    Best-effort extraction of ImageName from pylibCZIrw metadata dict.
-    """
+    """Best-effort extraction of ImageName from pylibCZIrw metadata dict."""
     try:
         v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"]
         if isinstance(v, str) and v.strip():
@@ -113,11 +79,69 @@ def get_imagename_from_metadata(meta: dict) -> Optional[str]:
     return None
 
 
+def get_best_datetime_for_session(meta: dict) -> Optional[str]:
+    """Return a string that contains a date for building the BIDS session.
+
+    Priority:
+      1) Information/Image/AcquisitionDateAndTime
+      2) Information/Document/CreationDate
+      3) ImageName (may contain a date)
+    """
+    try:
+        v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"]
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except Exception:
+        pass
+
+    try:
+        v = meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"]
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    except Exception:
+        pass
+
+    imagename = get_imagename_from_metadata(meta)
+    if isinstance(imagename, str) and imagename.strip():
+        return imagename.strip()
+
+    return None
+
+
+def ses_from_any_datetime(s: str) -> Optional[str]:
+    """Extract a date from a string and return a BIDS session label 'ses-YYYYMMDD'.
+
+    Supported patterns inside the string:
+      - YYYY-MM-DD (e.g., 2024-07-27T10:37:13Z)
+      - YYYYMMDD (e.g., 20230417_765.czi)
+      - DD-MM-YYYY or DD/MM/YYYY (e.g., 17-04-2023)
+    """
+    # YYYY-MM-DD
+    m = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if _valid_ymd(y, mo, d):
+            return f"ses-{y:04d}{mo:02d}{d:02d}"
+
+    # YYYYMMDD
+    m = re.search(r"\b(20\d{2})(\d{2})(\d{2})\b", s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if _valid_ymd(y, mo, d):
+            return f"ses-{y:04d}{mo:02d}{d:02d}"
+
+    # DD-MM-YYYY or DD/MM/YYYY
+    m = re.search(r"\b(\d{2})[-/](\d{2})[-/](20\d{2})\b", s)
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if _valid_ymd(y, mo, d):
+            return f"ses-{y:04d}{mo:02d}{d:02d}"
+
+    return None
+
+
 def get_microscope_name(meta: dict) -> Optional[str]:
-    """
-    Find microscope device name from metadata dict.
-    Looks for a Device with Id='Microscope' and Name='...'.
-    """
+    """Find microscope device name from metadata dict (Device Id='Microscope')."""
     for d in _walk(meta):
         dev_id = d.get("@Id") or d.get("Id")
         if dev_id == "Microscope":
@@ -128,9 +152,9 @@ def get_microscope_name(meta: dict) -> Optional[str]:
 
 
 def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
-    """
-    Extract pixel size X/Y from metadata dict by searching Distance nodes with Id X/Y.
-    If Unit missing, assume meters and convert to micrometers.
+    """Extract pixel size X/Y in micrometers from metadata dict.
+
+    Values are often stored as meters when unit is missing; we convert m -> µm.
     """
     px: Dict[str, Optional[float]] = {"X": None, "Y": None}
 
@@ -144,6 +168,9 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
 
         if isinstance(val, dict):
             val = val.get("#text") or val.get("text") or val.get("Value")
+
+        if val is None:
+            continue
 
         try:
             fval = float(str(val).strip())
@@ -159,14 +186,14 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         else:
             v_um = fval
 
-        px[dist_id] = round(v_um, 3)  # less sensitive
+        # Less sensitive rounding to avoid creating too many acq-* folders
+        px[dist_id] = round(v_um, 3)
 
     return px["X"], px["Y"]
 
 
 def make_acq_signature(meta: dict) -> Optional[Tuple]:
-    """
-    Build an acquisition signature for grouping into acq-1, acq-2, ...
+    """Build an acquisition signature for grouping into acq-1, acq-2, ...
 
     Less sensitive signature:
         (microscope_name, pixel_x_um, pixel_y_um)
@@ -180,24 +207,22 @@ def make_acq_signature(meta: dict) -> Optional[Tuple]:
 
 
 def parse_one_file(czi_path: Path) -> Optional[dict]:
-    """
-    Parse one CZI and extract subject/sample from filename, and ses/acq_sig from metadata dict.
-    """
+    """Parse one CZI and extract fields required to build the sourcedata tree."""
     meta = get_czi_metadata(czi_path)
 
-    subject = guess_subject_from_filename(czi_path.stem)
+    subject = get_subject_from_filename(czi_path.stem)
     if subject is None:
         return None
 
-    sample = guess_sample_from_filename(czi_path.stem)
+    sample = get_sample_from_filename(czi_path.stem)
     if sample is None:
         return None
 
-    imagename = get_imagename_from_metadata(meta)
-    if imagename is None:
+    dt_str = get_best_datetime_for_session(meta)
+    if dt_str is None:
         return None
 
-    ses = guess_session_from_imagename(imagename)
+    ses = ses_from_any_datetime(dt_str)
     if ses is None:
         return None
 
@@ -215,9 +240,7 @@ def parse_one_file(czi_path: Path) -> Optional[dict]:
 
 
 def move_file(src: Path, dst: Path) -> None:
-    """
-    Create a symlink at dst pointing to src (BIDS-named alias).
-    """
+    """Create a symlink at dst pointing to src (BIDS-named alias)."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         return
@@ -225,10 +248,8 @@ def move_file(src: Path, dst: Path) -> None:
 
 
 def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8) -> None:
-    """
-    Same as before, but reads CZIs recursively under input_root (folder of folders).
-    """
-    czis = sorted(Path(input_root).rglob("*.czi"))  # <-- key change
+    """Organize CZIs recursively under input_root into a sourcedata BIDS-like tree."""
+    czis = sorted(Path(input_root).rglob("*.czi"))
     if not czis:
         print(f"[INFO] No .czi files found under {input_root}")
         return
@@ -292,7 +313,7 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
 
 
 def main() -> None:
-    input_root = Path("/DATA/mimosa/original-dataset")  # folder containing the 7 subject folders
+    input_root = Path("/DATA/mimosa/original-dataset")
     sourcedata_dir = Path("/DATA/mimosa/MIMOSA_BIDS_dataset/sourcedata")
     organize_sourcedata(input_root, sourcedata_dir, workers=8)
 
