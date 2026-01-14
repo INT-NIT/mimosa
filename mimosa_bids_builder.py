@@ -69,14 +69,14 @@ def guess_session_from_imagename(imagename: str) -> Optional[str]:
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
     for m in re.finditer(r"\b(\d{2})[-/](\d{2})[-/](20\d{2})\b", imagename):
-        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if _valid_ymd(y, mo, d):
-            return f"ses-{y:04d}{mo:02d}{d:02d}"
+        d_, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if _valid_ymd(y, mo, d_):
+            return f"ses-{y:04d}{mo:02d}{d_:02d}"
 
     for m in re.finditer(r"\b(20\d{2})[-/](\d{2})[-/](\d{2})\b", imagename):
-        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if _valid_ymd(y, mo, d):
-            return f"ses-{y:04d}{mo:02d}{d:02d}"
+        y, mo, d_ = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if _valid_ymd(y, mo, d_):
+            return f"ses-{y:04d}{mo:02d}{d_:02d}"
 
     return None
 
@@ -98,7 +98,6 @@ def get_imagename_from_metadata(meta: dict) -> Optional[str]:
     """
     Best-effort extraction of ImageName from pylibCZIrw metadata dict.
     """
-    # common location for ImageName in many CZIs:
     try:
         v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"]
         if isinstance(v, str) and v.strip():
@@ -106,12 +105,10 @@ def get_imagename_from_metadata(meta: dict) -> Optional[str]:
     except Exception:
         pass
 
-    # fallback: search any dict key named ImageName
     for d in _walk(meta):
-        if "ImageName" in d and isinstance(d["ImageName"], str) and d["ImageName"].strip():
-            return d["ImageName"].strip()
-        if "@ImageName" in d and isinstance(d["@ImageName"], str) and d["@ImageName"].strip():
-            return d["@ImageName"].strip()
+        v = d.get("ImageName") or d.get("@ImageName")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
 
     return None
 
@@ -130,28 +127,6 @@ def get_microscope_name(meta: dict) -> Optional[str]:
     return None
 
 
-def get_channel_names(meta: dict) -> List[str]:
-    """
-    Extract unique channel names from metadata dict.
-    Looks for dict nodes that look like Channel with a Name attribute.
-    """
-    names: List[str] = []
-    for d in _walk(meta):
-        # Heuristic: Channel objects often contain Name or @Name
-        if d.get("@Name") and (d.get("@IsActivated") is not None or d.get("ChannelSetupId") is not None or d.get("@ChannelSetupId") is not None):
-            nm = d.get("@Name")
-        else:
-            nm = d.get("Name") or d.get("@Name")
-
-        if isinstance(nm, str) and nm.strip():
-            nm = nm.strip()
-            # avoid collecting unrelated "Name" fields:
-            # keep only short-ish channel labels
-            if 1 <= len(nm) <= 32 and nm not in names:
-                names.append(nm)
-    return names
-
-
 def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
     """
     Extract pixel size X/Y from metadata dict by searching Distance nodes with Id X/Y.
@@ -164,12 +139,10 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         if dist_id not in ("X", "Y"):
             continue
 
-        # Value may be stored in different ways
         val = d.get("Value") or d.get("@Value")
         unit = d.get("Unit") or d.get("@Unit")
 
         if isinstance(val, dict):
-            # sometimes {"#text": "..."} or {"text": "..."}
             val = val.get("#text") or val.get("text") or val.get("Value")
 
         try:
@@ -177,7 +150,6 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         except Exception:
             continue
 
-        # normalize to µm
         if unit in (None, "", "m", "meter", "metre"):
             v_um = fval * 1e6
         elif unit in ("µm", "um"):
@@ -187,7 +159,7 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         else:
             v_um = fval
 
-        px[dist_id] = round(v_um, 6)
+        px[dist_id] = round(v_um, 3)  # less sensitive
 
     return px["X"], px["Y"]
 
@@ -196,7 +168,7 @@ def make_acq_signature(meta: dict) -> Optional[Tuple]:
     """
     Build an acquisition signature for grouping into acq-1, acq-2, ...
 
-    Less sensitive signature (to avoid too many acq folders):
+    Less sensitive signature:
         (microscope_name, pixel_x_um, pixel_y_um)
     """
     microscope = get_microscope_name(meta)
@@ -252,14 +224,13 @@ def move_file(src: Path, dst: Path) -> None:
     dst.symlink_to(src.resolve())
 
 
-def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8) -> None:
+def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8) -> None:
     """
-    Organize CZI files into:
-      sourcedata/sub-XX/ses-YYYYMMDD/sample-<sample>/acq-<n>/sub-XX_ses-..._sample-..._acq-..._run-YY.czi
+    Same as before, but reads CZIs recursively under input_root (folder of folders).
     """
-    czis = sorted(Path(input_dir).glob("*.czi"))
+    czis = sorted(Path(input_root).rglob("*.czi"))  # <-- key change
     if not czis:
-        print(f"[INFO] No .czi files in {input_dir}")
+        print(f"[INFO] No .czi files found under {input_root}")
         return
 
     records: List[dict] = []
@@ -269,7 +240,7 @@ def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8)
             czi = futs[fut]
             rec = fut.result()
             if rec is None:
-                print(f"[WARN] Missing required fields (subject/sample/ses/acq): {czi.name}")
+                print(f"[WARN] Missing required fields (subject/sample/ses/acq): {czi}")
                 continue
             records.append(rec)
 
@@ -321,9 +292,9 @@ def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8)
 
 
 def main() -> None:
-    input_dir = Path("/DATA/mimosa/original-dataset")
+    input_root = Path("/DATA/mimosa/original-dataset")  # folder containing the 7 subject folders
     sourcedata_dir = Path("/DATA/mimosa/MIMOSA_BIDS_dataset/sourcedata")
-    organize_sourcedata(input_dir, sourcedata_dir, workers=8)
+    organize_sourcedata(input_root, sourcedata_dir, workers=8)
 
 
 if __name__ == "__main__":
