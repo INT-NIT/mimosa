@@ -196,16 +196,15 @@ def make_acq_signature(meta: dict) -> Optional[Tuple]:
     """
     Build an acquisition signature for grouping into acq-1, acq-2, ...
 
-    Signature:
-        (microscope_name, pixel_x_um, pixel_y_um, channels_tuple)
+    Less sensitive signature (to avoid too many acq folders):
+        (microscope_name, pixel_x_um, pixel_y_um)
     """
     microscope = get_microscope_name(meta)
     if microscope is None:
         return None
 
     px, py = get_pixel_xy_um(meta)
-    chans = tuple(get_channel_names(meta))
-    return (microscope, px, py, chans)
+    return (microscope, px, py)
 
 
 def parse_one_file(czi_path: Path) -> Optional[dict]:
