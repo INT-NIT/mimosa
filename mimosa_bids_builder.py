@@ -26,8 +26,10 @@ def as_text(v: Any) -> Optional[str]:
         except Exception:
             return None
     if isinstance(v, list) and v:
+        # some fields are stored as a list (ex: ImageName)
         return as_text(v[0])
     if isinstance(v, dict):
+        # common XML->dict patterns
         return as_text(v.get("#text") or v.get("text") or v.get("Value") or v.get("@Value"))
     return None
 
@@ -88,8 +90,7 @@ def get_sample_from_filename(stem: str) -> Optional[str]:
 
 def get_subject_from_path(czi_path: Path) -> Optional[str]:
     """Fallback: try to extract an id-like token from folder names."""
-    parts = list(czi_path.parts)
-    for part in reversed(parts[:-1]):  # ignore filename
+    for part in reversed(czi_path.parts[:-1]):  # ignore filename
         toks = re.split(r"[_\-\s]+", part)
         for t in toks:
             if any(ch.isalpha() for ch in t) and any(ch.isdigit() for ch in t) and 6 <= len(t) <= 40:
@@ -98,7 +99,7 @@ def get_subject_from_path(czi_path: Path) -> Optional[str]:
 
 
 # -----------------------------
-# Date/session extraction
+# Date/session extraction (STRICT ON FIELD NAMES, NOT ON PATHS)
 # -----------------------------
 
 def _valid_ymd(y: int, m: int, d: int) -> bool:
@@ -111,18 +112,21 @@ def _valid_ymd(y: int, m: int, d: int) -> bool:
 
 def ses_from_string(s: str) -> Optional[str]:
     """Extract date from a string and return ses-YYYYMMDD."""
+    # YYYY-MM-DD
     m = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", s)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if _valid_ymd(y, mo, d):
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
+    # YYYYMMDD
     m = re.search(r"\b(20\d{2})(\d{2})(\d{2})\b", s)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if _valid_ymd(y, mo, d):
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
+    # DD-MM-YYYY or DD/MM/YYYY
     m = re.search(r"\b(\d{2})[-/](\d{2})[-/](20\d{2})\b", s)
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -134,65 +138,49 @@ def ses_from_string(s: str) -> Optional[str]:
 
 def best_session(meta: dict) -> Tuple[Optional[str], Optional[str]]:
     """
-    Return (ses_label, source_path) using ONLY approved metadata fields.
+    STRICT session extraction:
+    We ONLY accept dates coming from these field names (anywhere in metadata):
+      1) AcquisitionDateAndTime
+      2) StartTime
+      3) SessionName / @SessionName
+      4) CreationDate
 
-    Priority:
-      1) ImageDocument/Metadata/Information/Image/AcquisitionDateAndTime
-      2) ImageDocument/Metadata/Information/Image/Dimensions/T/StartTime (or any *StartTime)
-      3) any @SessionName / SessionName (often contains YYYYMMDD)
-      4) ImageDocument/Metadata/Information/Document/CreationDate
-
-    If nothing is found, return (None, None).
+    No global date search. No mtime. No ses-01 fallback.
+    Return (None, None) if not found.
     """
 
-    # 1) AcquisitionDateAndTime (canonical)
-    try:
-        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"])
-        if v:
-            ses = ses_from_string(v)
-            if ses:
-                return ses, "ImageDocument/Metadata/Information/Image/AcquisitionDateAndTime"
-    except Exception:
-        pass
-
-    # 2) StartTime: prefer canonical path first
-    preferred_path = "ImageDocument/Metadata/Information/Image/Dimensions/T/StartTime"
-    for p, v in walk_all(meta):
-        if p.endswith(preferred_path):
-            txt = as_text(v)
-            if txt:
+    # helper: search by field name (end of path)
+    def first_match_by_suffix(suffixes: Tuple[str, ...]) -> Optional[Tuple[str, str]]:
+        for p, v in walk_all(meta):
+            pl = p.lower()
+            if any(pl.endswith(sfx) for sfx in suffixes):
+                txt = as_text(v)
+                if not txt:
+                    continue
                 ses = ses_from_string(txt)
                 if ses:
                     return ses, p
+        return None
 
-    # Otherwise any StartTime
-    for p, v in walk_all(meta):
-        if p.lower().endswith("/starttime"):
-            txt = as_text(v)
-            if txt:
-                ses = ses_from_string(txt)
-                if ses:
-                    return ses, p
+    # 1) AcquisitionDateAndTime
+    hit = first_match_by_suffix(("/acquisitiondateandtime",))
+    if hit:
+        return hit
 
-    # 3) SessionName anywhere
-    for p, v in walk_all(meta):
-        pl = p.lower()
-        if pl.endswith("/@sessionname") or pl.endswith("/sessionname"):
-            txt = as_text(v)
-            if txt:
-                ses = ses_from_string(txt)
-                if ses:
-                    return ses, p
+    # 2) StartTime
+    hit = first_match_by_suffix(("/starttime",))
+    if hit:
+        return hit
+
+    # 3) SessionName
+    hit = first_match_by_suffix(("/@sessionname", "/sessionname"))
+    if hit:
+        return hit
 
     # 4) CreationDate
-    try:
-        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"])
-        if v:
-            ses = ses_from_string(v)
-            if ses:
-                return ses, "ImageDocument/Metadata/Information/Document/CreationDate"
-    except Exception:
-        pass
+    hit = first_match_by_suffix(("/creationdate",))
+    if hit:
+        return hit
 
     return None, None
 
@@ -214,20 +202,18 @@ def microscope_name(meta: dict) -> Optional[str]:
 
 
 def pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
-    """Extract pixel size X/Y (µm). Robust search for Distance Id X/Y."""
+    """Extract pixel size X/Y (µm)."""
     px: Dict[str, Optional[float]] = {"X": None, "Y": None}
 
     for _, d in walk_all(meta):
         if not isinstance(d, dict):
             continue
+
         dist_id = as_text(d.get("@Id") or d.get("Id"))
         if dist_id not in ("X", "Y"):
             continue
 
-        val_txt = as_text(d.get("Value") or d.get("@Value"))
-        if val_txt is None:
-            val_txt = as_text(d.get("Value"))
-
+        val_txt = as_text(d.get("Value") or d.get("@Value") or d.get("#text") or d.get("text"))
         unit_txt = as_text(d.get("Unit") or d.get("@Unit"))
 
         if val_txt is None:
@@ -318,6 +304,8 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
             rec = fut.result()
             if rec is None:
                 skipped += 1
+                # show quickly why it was skipped
+                # print(f"[WARN] No session found in allowed fields: {czi}")
                 continue
             records.append(rec)
 
