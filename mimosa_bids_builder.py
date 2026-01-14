@@ -138,68 +138,69 @@ def ses_from_string(s: str) -> Optional[str]:
 
     return None
 
+def best_session_strict(meta: dict) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Return (ses_label, source_path) using ONLY approved metadata fields.
 
-def best_session(meta: dict, czi_path: Path) -> Tuple[str, str]:
+    Priority:
+      1) ImageDocument/Metadata/Information/Image/AcquisitionDateAndTime
+      2) ImageDocument/Metadata/Information/Image/Dimensions/T/StartTime (or any *StartTime)
+      3) any @SessionName / SessionName (often contains YYYYMMDD)
+      4) ImageDocument/Metadata/Information/Document/CreationDate
+
+    If nothing is found, return (None, None).
     """
-    Return (ses_label, source).
-    Robust strategy:
-      1) AcquisitionDateAndTime (best)
-      2) CreationDate
-      3) ImageName
-      4) Any metadata string that contains a date (search)
-      5) File modification time (mtime)
-      6) fallback ses-01
-    """
-    # 1) AcquisitionDateAndTime
+
+    # 1) AcquisitionDateAndTime (canonical)
     try:
         v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"])
         if v:
             ses = ses_from_string(v)
             if ses:
-                return ses, "meta:AcquisitionDateAndTime"
+                return ses, "ImageDocument/Metadata/Information/Image/AcquisitionDateAndTime"
     except Exception:
         pass
 
-    # 2) CreationDate
+    # 2) StartTime: prefer the canonical microscopy-like path first
+    preferred_path = "ImageDocument/Metadata/Information/Image/Dimensions/T/StartTime"
+    for p, v in walk_all(meta):
+        if p.endswith(preferred_path):
+            txt = as_text(v)
+            if txt:
+                ses = ses_from_string(txt)
+                if ses:
+                    return ses, p
+
+    # Otherwise any StartTime
+    for p, v in walk_all(meta):
+        if p.lower().endswith("/starttime"):
+            txt = as_text(v)
+            if txt:
+                ses = ses_from_string(txt)
+                if ses:
+                    return ses, p
+
+    # 3) SessionName anywhere
+    for p, v in walk_all(meta):
+        pl = p.lower()
+        if pl.endswith("/@sessionname") or pl.endswith("/sessionname"):
+            txt = as_text(v)
+            if txt:
+                ses = ses_from_string(txt)
+                if ses:
+                    return ses, p
+
+    # 4) CreationDate
     try:
         v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"])
         if v:
             ses = ses_from_string(v)
             if ses:
-                return ses, "meta:CreationDate"
+                return ses, "ImageDocument/Metadata/Information/Document/CreationDate"
     except Exception:
         pass
 
-    # 3) ImageName
-    try:
-        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"])
-        if v:
-            ses = ses_from_string(v)
-            if ses:
-                return ses, "meta:ImageName"
-    except Exception:
-        pass
-
-    # 4) Search anywhere in metadata for a date-looking string
-    for p, v in walk_all(meta):
-        txt = as_text(v)
-        if not txt:
-            continue
-        ses = ses_from_string(txt)
-        if ses:
-            return ses, f"meta-search:{p}"
-
-    # 5) File mtime
-    try:
-        ts = datetime.fromtimestamp(czi_path.stat().st_mtime)
-        return f"ses-{ts:%Y%m%d}", "file:mtime"
-    except Exception:
-        pass
-
-    # 6) fallback
-    return "ses-01", "fallback:ses-01"
-
-
+    return None, None
 # -----------------------------
 # Acquisition extraction (acq)
 # -----------------------------
