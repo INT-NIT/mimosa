@@ -292,7 +292,10 @@ def parse_one_file(czi_path: Path) -> dict:
     subject = get_subject_from_filename(czi_path.stem) or get_subject_from_path(czi_path) or "unknown"
     sample = get_sample_from_filename(czi_path.stem) or "unknown"
 
-    ses, ses_src = best_session(meta, czi_path)
+    ses, ses_src = best_session(meta)
+    ses, ses_src = best_session(meta)
+    if ses is None:
+        return None
     sig = acq_signature(meta)
 
     return {
