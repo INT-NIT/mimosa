@@ -138,7 +138,7 @@ def ses_from_string(s: str) -> Optional[str]:
 
     return None
 
-def best_session_strict(meta: dict) -> Tuple[Optional[str], Optional[str]]:
+def best_session(meta: dict) -> Tuple[Optional[str], Optional[str]]:
     """
     Return (ses_label, source_path) using ONLY approved metadata fields.
 
