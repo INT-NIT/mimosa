@@ -321,7 +321,7 @@ def organize_sourcedata(input_dir: Path, sourcedata_dir: Path, workers: int = 8)
 
 
 def main() -> None:
-    input_dir = Path("/DATA/mimosa/original-dataset/1-Fenouil-MTO10092101")
+    input_dir = Path("/DATA/mimosa/original-dataset")
     sourcedata_dir = Path("/DATA/mimosa/MIMOSA_BIDS_dataset/sourcedata")
     organize_sourcedata(input_dir, sourcedata_dir, workers=8)
 
