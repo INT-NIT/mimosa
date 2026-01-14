@@ -8,6 +8,20 @@ from typing import Optional, Tuple, List, Dict, Any
 import re
 
 
+def as_text(v: Any) -> Optional[str]:
+    """Normalize metadata values to a usable string (handles str/list/dict)."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        return s if s else None
+    if isinstance(v, list) and v:
+        return as_text(v[0])
+    if isinstance(v, dict):
+        return as_text(v.get("#text") or v.get("text") or v.get("Value"))
+    return None
+
+
 def get_czi_metadata(czi_path: Path) -> dict:
     """Read and return CZI metadata as a Python dictionary using pylibCZIrw."""
     with czirw.open_czi(str(czi_path)) as doc:
@@ -66,15 +80,16 @@ def get_imagename_from_metadata(meta: dict) -> Optional[str]:
     """Best-effort extraction of ImageName from pylibCZIrw metadata dict."""
     try:
         v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"]
-        if isinstance(v, str) and v.strip():
-            return v.strip()
+        txt = as_text(v)
+        if txt:
+            return txt
     except Exception:
         pass
 
     for d in _walk(meta):
-        v = d.get("ImageName") or d.get("@ImageName")
-        if isinstance(v, str) and v.strip():
-            return v.strip()
+        txt = as_text(d.get("ImageName") or d.get("@ImageName"))
+        if txt:
+            return txt
 
     return None
 
@@ -89,33 +104,29 @@ def get_best_datetime_for_session(meta: dict) -> Optional[str]:
     """
     try:
         v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"]
-        if isinstance(v, str) and v.strip():
-            return v.strip()
+        txt = as_text(v)
+        if txt:
+            return txt
     except Exception:
         pass
 
     try:
         v = meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"]
-        if isinstance(v, str) and v.strip():
-            return v.strip()
+        txt = as_text(v)
+        if txt:
+            return txt
     except Exception:
         pass
 
     imagename = get_imagename_from_metadata(meta)
-    if isinstance(imagename, str) and imagename.strip():
-        return imagename.strip()
+    if imagename:
+        return imagename
 
     return None
 
 
 def ses_from_any_datetime(s: str) -> Optional[str]:
-    """Extract a date from a string and return a BIDS session label 'ses-YYYYMMDD'.
-
-    Supported patterns inside the string:
-      - YYYY-MM-DD (e.g., 2024-07-27T10:37:13Z)
-      - YYYYMMDD (e.g., 20230417_765.czi)
-      - DD-MM-YYYY or DD/MM/YYYY (e.g., 17-04-2023)
-    """
+    """Extract a date from a string and return a BIDS session label 'ses-YYYYMMDD'."""
     # YYYY-MM-DD
     m = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", s)
     if m:
@@ -145,17 +156,14 @@ def get_microscope_name(meta: dict) -> Optional[str]:
     for d in _walk(meta):
         dev_id = d.get("@Id") or d.get("Id")
         if dev_id == "Microscope":
-            name = d.get("@Name") or d.get("Name")
-            if isinstance(name, str) and name.strip():
-                return name.strip()
+            name = as_text(d.get("@Name") or d.get("Name"))
+            if name:
+                return name
     return None
 
 
 def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
-    """Extract pixel size X/Y in micrometers from metadata dict.
-
-    Values are often stored as meters when unit is missing; we convert m -> µm.
-    """
+    """Extract pixel size X/Y in micrometers from metadata dict (Distance Id X/Y)."""
     px: Dict[str, Optional[float]] = {"X": None, "Y": None}
 
     for d in _walk(meta):
@@ -165,43 +173,36 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
 
         val = d.get("Value") or d.get("@Value")
         unit = d.get("Unit") or d.get("@Unit")
+        val_txt = as_text(val)
+        unit_txt = as_text(unit)
 
-        if isinstance(val, dict):
-            val = val.get("#text") or val.get("text") or val.get("Value")
-
-        if val is None:
+        if val_txt is None:
             continue
 
         try:
-            fval = float(str(val).strip())
+            fval = float(val_txt)
         except Exception:
             continue
 
-        if unit in (None, "", "m", "meter", "metre"):
+        if unit_txt in (None, "", "m", "meter", "metre"):
             v_um = fval * 1e6
-        elif unit in ("µm", "um"):
+        elif unit_txt in ("µm", "um"):
             v_um = fval
-        elif unit == "nm":
+        elif unit_txt == "nm":
             v_um = fval / 1000.0
         else:
             v_um = fval
 
-        # Less sensitive rounding to avoid creating too many acq-* folders
         px[dist_id] = round(v_um, 3)
 
     return px["X"], px["Y"]
 
 
 def make_acq_signature(meta: dict) -> Optional[Tuple]:
-    """Build an acquisition signature for grouping into acq-1, acq-2, ...
-
-    Less sensitive signature:
-        (microscope_name, pixel_x_um, pixel_y_um)
-    """
+    """Build an acquisition signature for grouping into acq-1, acq-2, ..."""
     microscope = get_microscope_name(meta)
     if microscope is None:
         return None
-
     px, py = get_pixel_xy_um(meta)
     return (microscope, px, py)
 
