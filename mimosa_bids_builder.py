@@ -3,10 +3,14 @@ from __future__ import annotations
 from pylibCZIrw import czi as czirw
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 import re
 
+
+# -----------------------------
+# Helpers: normalize metadata
+# -----------------------------
 
 def as_text(v: Any) -> Optional[str]:
     """Normalize metadata values to a usable string (handles str/list/dict)."""
@@ -15,12 +19,38 @@ def as_text(v: Any) -> Optional[str]:
     if isinstance(v, str):
         s = v.strip()
         return s if s else None
+    if isinstance(v, bytes):
+        try:
+            s = v.decode("utf-8", errors="ignore").strip()
+            return s if s else None
+        except Exception:
+            return None
     if isinstance(v, list) and v:
+        # often ImageName is a list
         return as_text(v[0])
     if isinstance(v, dict):
-        return as_text(v.get("#text") or v.get("text") or v.get("Value"))
+        # common XML->dict patterns
+        return as_text(v.get("#text") or v.get("text") or v.get("Value") or v.get("@Value"))
     return None
 
+
+def walk_all(obj: Any, path: str = ""):
+    """Yield (path, value) for every node in nested dict/list metadata."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            p = f"{path}/{k}" if path else str(k)
+            yield (p, v)
+            yield from walk_all(v, p)
+    elif isinstance(obj, list):
+        for i, it in enumerate(obj):
+            p = f"{path}[{i}]"
+            yield (p, it)
+            yield from walk_all(it, p)
+
+
+# -----------------------------
+# Read metadata
+# -----------------------------
 
 def get_czi_metadata(czi_path: Path) -> dict:
     """Read and return CZI metadata as a Python dictionary using pylibCZIrw."""
@@ -28,8 +58,12 @@ def get_czi_metadata(czi_path: Path) -> dict:
         return doc.metadata
 
 
+# -----------------------------
+# Subject + sample
+# -----------------------------
+
 def get_subject_from_filename(stem: str) -> Optional[str]:
-    """Extract a subject-like identifier from the filename stem (heuristic)."""
+    """Heuristic: first token that contains letters+digits and is not too short."""
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
     for t in tokens:
         has_a = any(ch.isalpha() for ch in t)
@@ -40,24 +74,38 @@ def get_subject_from_filename(stem: str) -> Optional[str]:
 
 
 def get_sample_from_filename(stem: str) -> Optional[str]:
-    """Extract a sample label from the filename stem (heuristic)."""
+    """Heuristic: first short alphabetic token after subject token."""
     tokens = [t for t in stem.replace("-", "_").split("_") if t]
-
     subj = get_subject_from_filename(stem)
     start_idx = 0
     if subj and subj in tokens:
         start_idx = tokens.index(subj) + 1
-
     for t in tokens[start_idx:]:
-        if t.isalpha() and 1 <= len(t) <= 8:
+        if t.isalpha() and 1 <= len(t) <= 12:
             if t.lower() == "cortex":
                 return "Cx"
             return t
     return None
 
 
+def get_subject_from_path(czi_path: Path) -> Optional[str]:
+    """Fallback: try to extract an id-like token from folder names."""
+    parts = list(czi_path.parts)
+    # scan folder names for an alnum token
+    for part in reversed(parts[:-1]):  # ignore filename
+        # split by separators
+        toks = re.split(r"[_\-\s]+", part)
+        for t in toks:
+            if any(ch.isalpha() for ch in t) and any(ch.isdigit() for ch in t) and 6 <= len(t) <= 40:
+                return t
+    return None
+
+
+# -----------------------------
+# Date/session extraction
+# -----------------------------
+
 def _valid_ymd(y: int, m: int, d: int) -> bool:
-    """Validate that (year, month, day) is a real calendar date."""
     try:
         date(y, m, d)
         return True
@@ -65,68 +113,8 @@ def _valid_ymd(y: int, m: int, d: int) -> bool:
         return False
 
 
-def _walk(obj: Any):
-    """Recursively walk a nested (dict/list) structure and yield dict nodes."""
-    if isinstance(obj, dict):
-        yield obj
-        for v in obj.values():
-            yield from _walk(v)
-    elif isinstance(obj, list):
-        for it in obj:
-            yield from _walk(it)
-
-
-def get_imagename_from_metadata(meta: dict) -> Optional[str]:
-    """Best-effort extraction of ImageName from pylibCZIrw metadata dict."""
-    try:
-        v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"]
-        txt = as_text(v)
-        if txt:
-            return txt
-    except Exception:
-        pass
-
-    for d in _walk(meta):
-        txt = as_text(d.get("ImageName") or d.get("@ImageName"))
-        if txt:
-            return txt
-
-    return None
-
-
-def get_best_datetime_for_session(meta: dict) -> Optional[str]:
-    """Return a string that contains a date for building the BIDS session.
-
-    Priority:
-      1) Information/Image/AcquisitionDateAndTime
-      2) Information/Document/CreationDate
-      3) ImageName (may contain a date)
-    """
-    try:
-        v = meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"]
-        txt = as_text(v)
-        if txt:
-            return txt
-    except Exception:
-        pass
-
-    try:
-        v = meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"]
-        txt = as_text(v)
-        if txt:
-            return txt
-    except Exception:
-        pass
-
-    imagename = get_imagename_from_metadata(meta)
-    if imagename:
-        return imagename
-
-    return None
-
-
-def ses_from_any_datetime(s: str) -> Optional[str]:
-    """Extract a date from a string and return a BIDS session label 'ses-YYYYMMDD'."""
+def ses_from_string(s: str) -> Optional[str]:
+    """Extract date from a string and return ses-YYYYMMDD."""
     # YYYY-MM-DD
     m = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", s)
     if m:
@@ -151,30 +139,110 @@ def ses_from_any_datetime(s: str) -> Optional[str]:
     return None
 
 
-def get_microscope_name(meta: dict) -> Optional[str]:
-    """Find microscope device name from metadata dict (Device Id='Microscope')."""
-    for d in _walk(meta):
-        dev_id = d.get("@Id") or d.get("Id")
-        if dev_id == "Microscope":
-            name = as_text(d.get("@Name") or d.get("Name"))
-            if name:
-                return name
+def best_session(meta: dict, czi_path: Path) -> Tuple[str, str]:
+    """
+    Return (ses_label, source).
+    Robust strategy:
+      1) AcquisitionDateAndTime (best)
+      2) CreationDate
+      3) ImageName
+      4) Any metadata string that contains a date (search)
+      5) File modification time (mtime)
+      6) fallback ses-01
+    """
+    # 1) AcquisitionDateAndTime
+    try:
+        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Image"]["AcquisitionDateAndTime"])
+        if v:
+            ses = ses_from_string(v)
+            if ses:
+                return ses, "meta:AcquisitionDateAndTime"
+    except Exception:
+        pass
+
+    # 2) CreationDate
+    try:
+        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Document"]["CreationDate"])
+        if v:
+            ses = ses_from_string(v)
+            if ses:
+                return ses, "meta:CreationDate"
+    except Exception:
+        pass
+
+    # 3) ImageName
+    try:
+        v = as_text(meta["ImageDocument"]["Metadata"]["Information"]["Image"]["ImageName"])
+        if v:
+            ses = ses_from_string(v)
+            if ses:
+                return ses, "meta:ImageName"
+    except Exception:
+        pass
+
+    # 4) Search anywhere in metadata for a date-looking string
+    for p, v in walk_all(meta):
+        txt = as_text(v)
+        if not txt:
+            continue
+        ses = ses_from_string(txt)
+        if ses:
+            return ses, f"meta-search:{p}"
+
+    # 5) File mtime
+    try:
+        ts = datetime.fromtimestamp(czi_path.stat().st_mtime)
+        return f"ses-{ts:%Y%m%d}", "file:mtime"
+    except Exception:
+        pass
+
+    # 6) fallback
+    return "ses-01", "fallback:ses-01"
+
+
+# -----------------------------
+# Acquisition extraction (acq)
+# -----------------------------
+
+def microscope_name(meta: dict) -> Optional[str]:
+    """Try hard to find microscope name."""
+    # direct known place (sometimes exists)
+    for p, v in walk_all(meta):
+        if p.endswith("/@Id") or p.endswith("/Id"):
+            if as_text(v) == "Microscope":
+                # parent should have Name
+                # we cannot easily jump to parent, so just continue scanning:
+                pass
+
+    # common pattern: a dict with Id='Microscope' and Name='...'
+    for _, d in walk_all(meta):
+        if isinstance(d, dict):
+            dev_id = as_text(d.get("@Id") or d.get("Id"))
+            if dev_id == "Microscope":
+                nm = as_text(d.get("@Name") or d.get("Name"))
+                if nm:
+                    return nm
+
     return None
 
 
-def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
-    """Extract pixel size X/Y in micrometers from metadata dict (Distance Id X/Y)."""
+def pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
+    """Extract pixel size X/Y (µm). Robust search for Distance Id X/Y."""
     px: Dict[str, Optional[float]] = {"X": None, "Y": None}
 
-    for d in _walk(meta):
-        dist_id = d.get("@Id") or d.get("Id")
+    for _, d in walk_all(meta):
+        if not isinstance(d, dict):
+            continue
+        dist_id = as_text(d.get("@Id") or d.get("Id"))
         if dist_id not in ("X", "Y"):
             continue
 
-        val = d.get("Value") or d.get("@Value")
-        unit = d.get("Unit") or d.get("@Unit")
-        val_txt = as_text(val)
-        unit_txt = as_text(unit)
+        val_txt = as_text(d.get("Value") or d.get("@Value"))
+        if val_txt is None:
+            # sometimes nested dict
+            val_txt = as_text(d.get("Value"))
+
+        unit_txt = as_text(d.get("Unit") or d.get("@Unit"))
 
         if val_txt is None:
             continue
@@ -193,52 +261,52 @@ def get_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         else:
             v_um = fval
 
+        # less sensitive rounding to reduce acq explosion
         px[dist_id] = round(v_um, 3)
 
     return px["X"], px["Y"]
 
 
-def make_acq_signature(meta: dict) -> Optional[Tuple]:
-    """Build an acquisition signature for grouping into acq-1, acq-2, ..."""
-    microscope = get_microscope_name(meta)
-    if microscope is None:
-        return None
-    px, py = get_pixel_xy_um(meta)
-    return (microscope, px, py)
+def acq_signature(meta: dict) -> Tuple[str, Optional[float], Optional[float]]:
+    """
+    Return a stable signature used to assign acq-1/acq-2...
+    Robust: never returns None.
+    """
+    mic = microscope_name(meta) or "unknown"
+    px, py = pixel_xy_um(meta)
+    return (mic, px, py)
 
 
-def parse_one_file(czi_path: Path) -> Optional[dict]:
-    """Parse one CZI and extract fields required to build the sourcedata tree."""
+# -----------------------------
+# Main parsing per file
+# -----------------------------
+
+def parse_one_file(czi_path: Path) -> dict:
+    """
+    Parse one CZI and return a record dict.
+    Robust: never returns None; uses fallbacks.
+    """
     meta = get_czi_metadata(czi_path)
 
-    subject = get_subject_from_filename(czi_path.stem)
-    if subject is None:
-        return None
+    subject = get_subject_from_filename(czi_path.stem) or get_subject_from_path(czi_path) or "unknown"
+    sample = get_sample_from_filename(czi_path.stem) or "unknown"
 
-    sample = get_sample_from_filename(czi_path.stem)
-    if sample is None:
-        return None
-
-    dt_str = get_best_datetime_for_session(meta)
-    if dt_str is None:
-        return None
-
-    ses = ses_from_any_datetime(dt_str)
-    if ses is None:
-        return None
-
-    sig = make_acq_signature(meta)
-    if sig is None:
-        return None
+    ses, ses_src = best_session(meta, czi_path)
+    sig = acq_signature(meta)
 
     return {
         "src": czi_path,
-        "subject": subject,
+        "subject_raw": subject,      # ID we found (or unknown)
         "sample": sample,
         "ses": ses,
+        "ses_src": ses_src,
         "acq_sig": sig,
     }
 
+
+# -----------------------------
+# File placement (symlink)
+# -----------------------------
 
 def move_file(src: Path, dst: Path) -> None:
     """Create a symlink at dst pointing to src (BIDS-named alias)."""
@@ -248,8 +316,11 @@ def move_file(src: Path, dst: Path) -> None:
     dst.symlink_to(src.resolve())
 
 
+# -----------------------------
+# Organize all files
+# -----------------------------
+
 def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8) -> None:
-    """Organize CZIs recursively under input_root into a sourcedata BIDS-like tree."""
     czis = sorted(Path(input_root).rglob("*.czi"))
     if not czis:
         print(f"[INFO] No .czi files found under {input_root}")
@@ -259,41 +330,40 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(parse_one_file, czi): czi for czi in czis}
         for fut in as_completed(futs):
-            czi = futs[fut]
-            rec = fut.result()
-            if rec is None:
-                print(f"[WARN] Missing required fields (subject/sample/ses/acq): {czi}")
-                continue
-            records.append(rec)
+            records.append(fut.result())
 
-    if not records:
-        print("[INFO] No usable files.")
-        return
-
-    subjects = sorted({r["subject"] for r in records})
+    # map subject ids to sub-XX deterministically
+    subjects = sorted({r["subject_raw"] for r in records})
     subject_to_sub = {sid: f"sub-{i:02d}" for i, sid in enumerate(subjects, start=1)}
 
+    # assign acq numbers within (sub, ses, sample) based on signature
     group_sigs: Dict[Tuple[str, str, str], List[Tuple]] = {}
     for r in records:
-        sub = subject_to_sub[r["subject"]]
+        sub = subject_to_sub[r["subject_raw"]]
         key = (sub, r["ses"], r["sample"])
         group_sigs.setdefault(key, [])
         if r["acq_sig"] not in group_sigs[key]:
             group_sigs[key].append(r["acq_sig"])
 
+    # stable ordering
     for key in group_sigs:
         group_sigs[key] = sorted(group_sigs[key], key=lambda x: str(x))
 
     run_counter: Dict[Tuple[str, str, str, int], int] = {}
 
     def sort_key(r: dict):
-        sub = subject_to_sub[r["subject"]]
+        sub = subject_to_sub[r["subject_raw"]]
         key3 = (sub, r["ses"], r["sample"])
         acq_num = group_sigs[key3].index(r["acq_sig"]) + 1
         return (sub, r["ses"], r["sample"], acq_num, r["src"].name)
 
+    # optional: small report on session sources
+    print("[INFO] Session sources summary (first 30 files):")
+    for rr in sorted(records, key=lambda x: x["src"].name)[:30]:
+        print(f"  - {rr['src'].name}: {rr['ses']} ({rr['ses_src']})")
+
     for r in sorted(records, key=sort_key):
-        sub = subject_to_sub[r["subject"]]
+        sub = subject_to_sub[r["subject_raw"]]
         ses = r["ses"]
         sample = r["sample"]
 
