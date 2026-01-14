@@ -3,7 +3,7 @@ from __future__ import annotations
 from pylibCZIrw import czi as czirw
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
+from datetime import date
 from typing import Optional, Tuple, List, Dict, Any
 import re
 
@@ -26,10 +26,8 @@ def as_text(v: Any) -> Optional[str]:
         except Exception:
             return None
     if isinstance(v, list) and v:
-        # often ImageName is a list
         return as_text(v[0])
     if isinstance(v, dict):
-        # common XML->dict patterns
         return as_text(v.get("#text") or v.get("text") or v.get("Value") or v.get("@Value"))
     return None
 
@@ -91,9 +89,7 @@ def get_sample_from_filename(stem: str) -> Optional[str]:
 def get_subject_from_path(czi_path: Path) -> Optional[str]:
     """Fallback: try to extract an id-like token from folder names."""
     parts = list(czi_path.parts)
-    # scan folder names for an alnum token
     for part in reversed(parts[:-1]):  # ignore filename
-        # split by separators
         toks = re.split(r"[_\-\s]+", part)
         for t in toks:
             if any(ch.isalpha() for ch in t) and any(ch.isdigit() for ch in t) and 6 <= len(t) <= 40:
@@ -115,21 +111,18 @@ def _valid_ymd(y: int, m: int, d: int) -> bool:
 
 def ses_from_string(s: str) -> Optional[str]:
     """Extract date from a string and return ses-YYYYMMDD."""
-    # YYYY-MM-DD
     m = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", s)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if _valid_ymd(y, mo, d):
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
-    # YYYYMMDD
     m = re.search(r"\b(20\d{2})(\d{2})(\d{2})\b", s)
     if m:
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if _valid_ymd(y, mo, d):
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
-    # DD-MM-YYYY or DD/MM/YYYY
     m = re.search(r"\b(\d{2})[-/](\d{2})[-/](20\d{2})\b", s)
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -137,6 +130,7 @@ def ses_from_string(s: str) -> Optional[str]:
             return f"ses-{y:04d}{mo:02d}{d:02d}"
 
     return None
+
 
 def best_session(meta: dict) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -161,7 +155,7 @@ def best_session(meta: dict) -> Tuple[Optional[str], Optional[str]]:
     except Exception:
         pass
 
-    # 2) StartTime: prefer the canonical microscopy-like path first
+    # 2) StartTime: prefer canonical path first
     preferred_path = "ImageDocument/Metadata/Information/Image/Dimensions/T/StartTime"
     for p, v in walk_all(meta):
         if p.endswith(preferred_path):
@@ -201,21 +195,14 @@ def best_session(meta: dict) -> Tuple[Optional[str], Optional[str]]:
         pass
 
     return None, None
+
+
 # -----------------------------
 # Acquisition extraction (acq)
 # -----------------------------
 
 def microscope_name(meta: dict) -> Optional[str]:
     """Try hard to find microscope name."""
-    # direct known place (sometimes exists)
-    for p, v in walk_all(meta):
-        if p.endswith("/@Id") or p.endswith("/Id"):
-            if as_text(v) == "Microscope":
-                # parent should have Name
-                # we cannot easily jump to parent, so just continue scanning:
-                pass
-
-    # common pattern: a dict with Id='Microscope' and Name='...'
     for _, d in walk_all(meta):
         if isinstance(d, dict):
             dev_id = as_text(d.get("@Id") or d.get("Id"))
@@ -223,7 +210,6 @@ def microscope_name(meta: dict) -> Optional[str]:
                 nm = as_text(d.get("@Name") or d.get("Name"))
                 if nm:
                     return nm
-
     return None
 
 
@@ -240,7 +226,6 @@ def pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
 
         val_txt = as_text(d.get("Value") or d.get("@Value"))
         if val_txt is None:
-            # sometimes nested dict
             val_txt = as_text(d.get("Value"))
 
         unit_txt = as_text(d.get("Unit") or d.get("@Unit"))
@@ -262,17 +247,13 @@ def pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float]]:
         else:
             v_um = fval
 
-        # less sensitive rounding to reduce acq explosion
         px[dist_id] = round(v_um, 3)
 
     return px["X"], px["Y"]
 
 
 def acq_signature(meta: dict) -> Tuple[str, Optional[float], Optional[float]]:
-    """
-    Return a stable signature used to assign acq-1/acq-2...
-    Robust: never returns None.
-    """
+    """Stable signature used to assign acq-1/acq-2..."""
     mic = microscope_name(meta) or "unknown"
     px, py = pixel_xy_um(meta)
     return (mic, px, py)
@@ -282,25 +263,22 @@ def acq_signature(meta: dict) -> Tuple[str, Optional[float], Optional[float]]:
 # Main parsing per file
 # -----------------------------
 
-def parse_one_file(czi_path: Path) -> dict:
-    """
-    Parse one CZI and return a record dict.
-    Robust: never returns None; uses fallbacks.
-    """
+def parse_one_file(czi_path: Path) -> Optional[dict]:
+    """Parse one CZI; return record dict or None if session cannot be found."""
     meta = get_czi_metadata(czi_path)
 
     subject = get_subject_from_filename(czi_path.stem) or get_subject_from_path(czi_path) or "unknown"
     sample = get_sample_from_filename(czi_path.stem) or "unknown"
 
     ses, ses_src = best_session(meta)
-    ses, ses_src = best_session(meta)
     if ses is None:
         return None
+
     sig = acq_signature(meta)
 
     return {
         "src": czi_path,
-        "subject_raw": subject,      # ID we found (or unknown)
+        "subject_raw": subject,
         "sample": sample,
         "ses": ses,
         "ses_src": ses_src,
@@ -331,16 +309,27 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
         return
 
     records: List[dict] = []
+    skipped = 0
+
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(parse_one_file, czi): czi for czi in czis}
         for fut in as_completed(futs):
-            records.append(fut.result())
+            czi = futs[fut]
+            rec = fut.result()
+            if rec is None:
+                skipped += 1
+                continue
+            records.append(rec)
 
-    # map subject ids to sub-XX deterministically
+    if not records:
+        print(f"[INFO] No usable files. Skipped: {skipped}")
+        return
+
+    print(f"[INFO] Parsed: {len(records)} files (skipped: {skipped})")
+
     subjects = sorted({r["subject_raw"] for r in records})
     subject_to_sub = {sid: f"sub-{i:02d}" for i, sid in enumerate(subjects, start=1)}
 
-    # assign acq numbers within (sub, ses, sample) based on signature
     group_sigs: Dict[Tuple[str, str, str], List[Tuple]] = {}
     for r in records:
         sub = subject_to_sub[r["subject_raw"]]
@@ -349,7 +338,6 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
         if r["acq_sig"] not in group_sigs[key]:
             group_sigs[key].append(r["acq_sig"])
 
-    # stable ordering
     for key in group_sigs:
         group_sigs[key] = sorted(group_sigs[key], key=lambda x: str(x))
 
@@ -361,8 +349,7 @@ def organize_sourcedata(input_root: Path, sourcedata_dir: Path, workers: int = 8
         acq_num = group_sigs[key3].index(r["acq_sig"]) + 1
         return (sub, r["ses"], r["sample"], acq_num, r["src"].name)
 
-    # optional: small report on session sources
-    print("[INFO] Session sources summary (first 30 files):")
+    print("[INFO] Session sources summary (first 30 usable files):")
     for rr in sorted(records, key=lambda x: x["src"].name)[:30]:
         print(f"  - {rr['src'].name}: {rr['ses']} ({rr['ses_src']})")
 
