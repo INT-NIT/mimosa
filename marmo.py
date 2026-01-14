@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import re
 
-CZI_PATH = Path("/DATA/mimosa/original-dataset/6-Marmot-MJO16052401/MJO16052401_Cx_200_202.czi")
+CZI_PATH = Path("/DATA/mimosa/original-dataset/1-Fenouil-MTO10092101/MTO10092101_Cx_200-208.czi")
 OUT_JSON = Path("./marmot_metadata_full.json")  # export complet (optionnel)
 
 
