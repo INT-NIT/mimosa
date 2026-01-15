@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
-from collections import Counter, defaultdict
-import re
+from collections import Counter
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,16 +11,17 @@ from pylibCZIrw import czi as czirw
 
 
 # -----------------------
-# Config (change this)
+# Config
 # -----------------------
-INPUT_ROOT = Path("/DATA/mimosa/original-dataset")   # folder that contains the 7 subject folders
+INPUT_ROOT = Path("/DATA/mimosa/original-dataset")   # folder containing the 7 subject folders
 OUTPUT_DIR = Path("/DATA/mimosa/metadata_audit_out") # where to save csv + plots
 
 
 # -----------------------
-# Generic helpers
+# Helpers
 # -----------------------
 def as_text(v: Any) -> Optional[str]:
+    """Normalize metadata values to a usable string."""
     if v is None:
         return None
     if isinstance(v, str):
@@ -41,6 +41,7 @@ def as_text(v: Any) -> Optional[str]:
 
 
 def walk_all(obj: Any, path: str = ""):
+    """Yield (path, value) for every node in nested dict/list metadata."""
     if isinstance(obj, dict):
         for k, v in obj.items():
             p = f"{path}/{k}" if path else str(k)
@@ -54,6 +55,7 @@ def walk_all(obj: Any, path: str = ""):
 
 
 def get_czi_metadata(czi_path: Path) -> dict:
+    """Read and return CZI metadata as a Python dictionary using pylibCZIrw."""
     with czirw.open_czi(str(czi_path)) as doc:
         return doc.metadata
 
@@ -82,7 +84,7 @@ def sample_from_filename(stem: str) -> Optional[str]:
 
 
 # -----------------------
-# Target fields to audit
+# Field finders (by suffix)
 # -----------------------
 FIELD_SUFFIXES = {
     "AcquisitionDateAndTime": ("/acquisitiondateandtime",),
@@ -91,6 +93,7 @@ FIELD_SUFFIXES = {
     "CreationDate": ("/creationdate",),
     "ImageName": ("/imagename", "/@imagename"),
 }
+
 
 def find_first_by_suffix(meta: dict, suffixes: Tuple[str, ...]) -> Tuple[Optional[str], Optional[str]]:
     """Return (value, path) for the first match found."""
@@ -103,11 +106,25 @@ def find_first_by_suffix(meta: dict, suffixes: Tuple[str, ...]) -> Tuple[Optiona
     return None, None
 
 
+def extract_session_best(meta: dict) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Return (value, source_field_path) using a strict priority:
+      1) AcquisitionDateAndTime
+      2) StartTime
+      3) SessionName
+      4) CreationDate
+      5) ImageName
+    """
+    order = ["AcquisitionDateAndTime", "StartTime", "SessionName", "CreationDate", "ImageName"]
+    for key in order:
+        val, path = find_first_by_suffix(meta, FIELD_SUFFIXES[key])
+        if val is not None:
+            return val, path
+    return None, None
+
+
 def extract_microscope(meta: dict) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Find microscope name like: a dict with Id='Microscope' and Name='...'
-    Return (value, path_to_dict)
-    """
+    """Find microscope: a dict with Id='Microscope' and Name='...'."""
     for p, v in walk_all(meta):
         if isinstance(v, dict):
             dev_id = as_text(v.get("@Id") or v.get("Id"))
@@ -135,9 +152,9 @@ def extract_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float], O
 
         val_txt = as_text(v.get("Value") or v.get("@Value") or v.get("#text") or v.get("text"))
         unit_txt = as_text(v.get("Unit") or v.get("@Unit"))
-
         if val_txt is None:
             continue
+
         try:
             fval = float(val_txt)
         except Exception:
@@ -153,7 +170,6 @@ def extract_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float], O
             v_um = fval
 
         v_um = round(v_um, 6)
-
         if dist_id == "X":
             px, path_x = v_um, p
         else:
@@ -163,25 +179,20 @@ def extract_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float], O
 
 
 def extract_channel_names(meta: dict) -> Tuple[List[str], List[str]]:
-    """
-    Extract channel names by searching dicts that look like channels and have @Name/Name.
-    Return (unique_names, paths_used_for_names)
-    """
+    """Extract channel names + the paths used."""
     names: List[str] = []
     paths: List[str] = []
     for p, v in walk_all(meta):
-        if isinstance(v, dict):
+        if isinstance(v, dict) and ("channel" in p.lower()):
             nm = as_text(v.get("@Name") or v.get("Name"))
-            if nm and 1 <= len(nm) <= 32:
-                # heuristic: keep only likely channel nodes
-                if ("channel" in p.lower()) and (nm not in names):
-                    names.append(nm)
-                    paths.append(p + ("/@Name" if "@Name" in v else "/Name"))
+            if nm and 1 <= len(nm) <= 32 and nm not in names:
+                names.append(nm)
+                paths.append(p + ("/@Name" if "@Name" in v else "/Name"))
     return names, paths
 
 
 # -----------------------
-# Main audit per file
+# Audit per file
 # -----------------------
 def audit_one_file(czi_path: Path) -> Dict[str, Any]:
     meta = get_czi_metadata(czi_path)
@@ -189,89 +200,94 @@ def audit_one_file(czi_path: Path) -> Dict[str, Any]:
     subj = subject_from_filename(czi_path.stem)
     samp = sample_from_filename(czi_path.stem)
 
-    out: Dict[str, Any] = {
+    sess_val, sess_path = extract_session_best(meta)
+
+    mic, mic_path = extract_microscope(meta)
+    px, py, px_path, py_path = extract_pixel_xy_um(meta)
+    chans, chan_paths = extract_channel_names(meta)
+
+    return {
         "file": str(czi_path),
         "filename": czi_path.name,
+
         "subject_from_filename": subj,
         "sample_from_filename": samp,
+
+        "Session_present": sess_val is not None,
+        "Session_value": sess_val,
+        "Session_path": sess_path,
+
+        "Microscope_present": mic is not None,
+        "Microscope_value": mic,
+        "Microscope_path": mic_path,
+
+        "PixelSize_present": (px is not None) and (py is not None),
+        "PixelSizeX_um": px,
+        "PixelSizeY_um": py,
+        "PixelSizeX_path": px_path,
+        "PixelSizeY_path": py_path,
+
+        "Channels_present": len(chans) > 0,
+        "Channels_count": len(chans),
+        "Channels_names": ",".join(chans) if chans else None,
+        "Channels_paths": ";".join(chan_paths) if chan_paths else None,
     }
 
-    # Date/session-related fields
-    for field, suffixes in FIELD_SUFFIXES.items():
-        val, path = find_first_by_suffix(meta, suffixes)
-        out[f"{field}_present"] = val is not None
-        out[f"{field}_path"] = path
-        out[f"{field}_value"] = val
-
-    # Microscope
-    mic, mic_path = extract_microscope(meta)
-    out["Microscope_present"] = mic is not None
-    out["Microscope_path"] = mic_path
-    out["Microscope_value"] = mic
-
-    # Pixel size
-    px, py, px_path, py_path = extract_pixel_xy_um(meta)
-    out["PixelSizeX_present"] = px is not None
-    out["PixelSizeY_present"] = py is not None
-    out["PixelSizeX_um"] = px
-    out["PixelSizeY_um"] = py
-    out["PixelSizeX_path"] = px_path
-    out["PixelSizeY_path"] = py_path
-
-    # Channels
-    chans, chan_paths = extract_channel_names(meta)
-    out["Channels_present"] = len(chans) > 0
-    out["Channels_count"] = len(chans)
-    out["Channels_names"] = ",".join(chans) if chans else None
-    out["Channels_paths"] = ";".join(chan_paths) if chan_paths else None
-
-    return out
-
 
 # -----------------------
-# Reporting + plots
+# Plots
 # -----------------------
-def save_plots(df: pd.DataFrame, outdir: Path) -> None:
+def save_two_plots(df: pd.DataFrame, outdir: Path) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Presence bar chart for key fields
-    presence_cols = [c for c in df.columns if c.endswith("_present")]
-    pres = df[presence_cols].sum().sort_values(ascending=False)
+    # ---- Plot 1: similarity / coverage of needed fields
+    needed = {
+        "Subject (from filename)": df["subject_from_filename"].notna().sum(),
+        "Sample (from filename)": df["sample_from_filename"].notna().sum(),
+        "Session (best of meta)": df["Session_present"].sum(),
+        "Microscope": df["Microscope_present"].sum(),
+        "PixelSize (X+Y)": df["PixelSize_present"].sum(),
+        "Channels": df["Channels_present"].sum(),
+    }
+    total = len(df)
 
     plt.figure()
-    pres.plot(kind="bar")
-    plt.title("How many files contain each field (presence)")
-    plt.ylabel("Number of files")
+    pd.Series({k: v for k, v in needed.items()}).sort_values(ascending=False).plot(kind="bar")
+    plt.title(f"Similarity / coverage of needed fields (N={total} files)")
+    plt.ylabel("Number of files where field is present")
     plt.tight_layout()
-    plt.savefig(outdir / "presence_counts.png", dpi=150)
+    plt.savefig(outdir / "similarity_needed_fields.png", dpi=150)
     plt.close()
 
-    # 2) Channels count distribution
-    if "Channels_count" in df.columns:
-        plt.figure()
-        df["Channels_count"].fillna(0).astype(int).value_counts().sort_index().plot(kind="bar")
-        plt.title("Distribution of number of channels per file")
-        plt.xlabel("Channels_count")
-        plt.ylabel("Number of files")
-        plt.tight_layout()
-        plt.savefig(outdir / "channels_count_distribution.png", dpi=150)
-        plt.close()
+    # ---- Plot 2: differences = how many different PATHS were used to find each field
+    # (more unique paths => less consistent across datasets)
+    path_variability: Dict[str, int] = {}
 
-    # 3) Session-like values distribution (AcquisitionDateAndTime / StartTime / SessionName)
-    for key in ["AcquisitionDateAndTime_value", "StartTime_value", "SessionName_value", "CreationDate_value"]:
-        if key in df.columns:
-            vc = df[key].dropna().astype(str).value_counts().head(20)
-            if len(vc) > 0:
-                plt.figure()
-                vc.plot(kind="bar")
-                plt.title(f"Top values: {key} (top 20)")
-                plt.ylabel("Number of files")
-                plt.tight_layout()
-                plt.savefig(outdir / f"top_values_{key}.png", dpi=150)
-                plt.close()
+    def n_unique(series: pd.Series) -> int:
+        vals = series.dropna().astype(str).unique().tolist()
+        return len(vals)
+
+    path_variability["Session_path"] = n_unique(df["Session_path"])
+    path_variability["Microscope_path"] = n_unique(df["Microscope_path"])
+    path_variability["PixelSizeX_path"] = n_unique(df["PixelSizeX_path"])
+    path_variability["PixelSizeY_path"] = n_unique(df["PixelSizeY_path"])
+
+    # Channels_paths can contain multiple paths separated by ';'
+    ch_paths = []
+    for v in df["Channels_paths"].dropna().astype(str):
+        ch_paths.extend([x.strip() for x in v.split(";") if x.strip()])
+    path_variability["Channels_paths"] = len(set(ch_paths))
+
+    plt.figure()
+    pd.Series(path_variability).sort_values(ascending=False).plot(kind="bar")
+    plt.title("Differences / inconsistency: number of unique metadata paths used")
+    plt.ylabel("Unique paths count (higher = more inconsistent)")
+    plt.tight_layout()
+    plt.savefig(outdir / "differences_paths.png", dpi=150)
+    plt.close()
 
 
-def main():
+def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     czis = sorted(INPUT_ROOT.rglob("*.czi"))
@@ -280,48 +296,32 @@ def main():
         return
 
     rows: List[Dict[str, Any]] = []
+    skipped = 0
+
     for czi in czis:
         try:
             rows.append(audit_one_file(czi))
         except Exception as e:
+            skipped += 1
             rows.append({"file": str(czi), "filename": czi.name, "error": str(e)})
 
     df = pd.DataFrame(rows)
     df.to_csv(OUTPUT_DIR / "summary_files.csv", index=False)
 
-    # Frequency of paths (where fields are located)
-    path_cols = [c for c in df.columns if c.endswith("_path") or c.endswith("_paths")]
-    path_counter = Counter()
-    for col in path_cols:
-        for v in df[col].dropna().astype(str):
-            # Channels_paths is ; separated
-            for part in v.split(";"):
-                part = part.strip()
-                if part:
-                    path_counter[(col, part)] += 1
-    paths_df = pd.DataFrame(
-        [{"column": k[0], "path": k[1], "count": c} for k, c in path_counter.items()]
-    ).sort_values(["column", "count"], ascending=[True, False])
-    paths_df.to_csv(OUTPUT_DIR / "paths_frequency.csv", index=False)
+    # Keep only rows without errors for plotting
+    df_ok = df[df.get("error").isna()] if "error" in df.columns else df
+    if len(df_ok) == 0:
+        print(f"[INFO] No usable files for plots. Skipped: {skipped}")
+        return
 
-    # Frequency of values (sessions, microscope, etc.)
-    value_cols = [c for c in df.columns if c.endswith("_value") or c in ["PixelSizeX_um", "PixelSizeY_um", "Channels_names"]]
-    val_counter = Counter()
-    for col in value_cols:
-        for v in df[col].dropna().astype(str):
-            val_counter[(col, v)] += 1
-    vals_df = pd.DataFrame(
-        [{"column": k[0], "value": k[1], "count": c} for k, c in val_counter.items()]
-    ).sort_values(["column", "count"], ascending=[True, False])
-    vals_df.to_csv(OUTPUT_DIR / "values_frequency.csv", index=False)
-
-    save_plots(df, OUTPUT_DIR)
+    save_two_plots(df_ok, OUTPUT_DIR)
 
     print("[OK] Audit done.")
-    print(f"  - {OUTPUT_DIR / 'summary_files.csv'}")
-    print(f"  - {OUTPUT_DIR / 'paths_frequency.csv'}")
-    print(f"  - {OUTPUT_DIR / 'values_frequency.csv'}")
-    print(f"  - plots: {OUTPUT_DIR}/*.png")
+    print(f"  - CSV: {OUTPUT_DIR / 'summary_files.csv'}")
+    print(f"  - Plot1: {OUTPUT_DIR / 'similarity_needed_fields.png'}")
+    print(f"  - Plot2: {OUTPUT_DIR / 'differences_paths.png'}")
+    if skipped:
+        print(f"  - Skipped (errors): {skipped}")
 
 
 if __name__ == "__main__":
