@@ -1,0 +1,93 @@
+column,value,count
+AcquisitionDateAndTime_value,2023-04-17T20:04:08.058798Z,1
+AcquisitionDateAndTime_value,2023-04-17T20:33:00.5436817Z,1
+AcquisitionDateAndTime_value,2023-04-17T21:57:37.9755492Z,1
+AcquisitionDateAndTime_value,2023-04-17T22:51:42.4370544Z,1
+AcquisitionDateAndTime_value,2023-04-17T23:47:45.4012504Z,1
+AcquisitionDateAndTime_value,2023-04-18T00:48:32.833944Z,1
+AcquisitionDateAndTime_value,2023-04-18T02:40:09.7623648Z,1
+AcquisitionDateAndTime_value,2024-07-27T10:37:13.425298Z,1
+AcquisitionDateAndTime_value,2024-07-27T11:29:08.9004911Z,1
+AcquisitionDateAndTime_value,2024-07-27T12:23:23.4250481Z,1
+AcquisitionDateAndTime_value,2024-07-27T13:18:35.6925722Z,1
+AcquisitionDateAndTime_value,2024-07-27T14:11:30.1666968Z,1
+AcquisitionDateAndTime_value,2024-07-27T15:06:24.9131389Z,1
+AcquisitionDateAndTime_value,2024-07-27T16:02:02.715959Z,1
+AcquisitionDateAndTime_value,2024-07-27T16:57:34.9232688Z,1
+AcquisitionDateAndTime_value,2024-07-27T17:56:37.2181445Z,1
+AcquisitionDateAndTime_value,2024-07-27T18:56:46.7213278Z,1
+AcquisitionDateAndTime_value,2024-07-27T19:57:48.8941485Z,1
+AcquisitionDateAndTime_value,2024-07-27T20:58:16.5701133Z,1
+AcquisitionDateAndTime_value,2024-05-24T11:22:38.9128293Z,1
+Channels_names,"DAPI,EGFP,DsRed",19
+Channels_names,"DAPI,EGFP",1
+CreationDate_value,2023-04-17T22:04:08.0787856+02:00,1
+CreationDate_value,2023-04-17T22:33:00.5686676+02:00,1
+CreationDate_value,2023-04-17T23:57:37.9915396+02:00,1
+CreationDate_value,2023-04-18T00:51:42.4530452+02:00,1
+CreationDate_value,2023-04-18T01:47:45.4192403+02:00,1
+CreationDate_value,2023-04-18T02:48:32.8519334+02:00,1
+CreationDate_value,2023-04-18T04:40:09.7783548+02:00,1
+CreationDate_value,2024-07-27T12:37:13.4402897+02:00,1
+CreationDate_value,2024-07-27T13:29:08.9164812+02:00,1
+CreationDate_value,2024-07-27T14:23:23.4410389+02:00,1
+CreationDate_value,2024-07-27T15:18:35.7075635+02:00,1
+CreationDate_value,2024-07-27T16:11:30.1826882+02:00,1
+CreationDate_value,2024-07-27T17:06:24.9301294+02:00,1
+CreationDate_value,2024-07-27T18:02:02.7329488+02:00,1
+CreationDate_value,2024-07-27T18:57:34.93826+02:00,1
+CreationDate_value,2024-07-27T19:56:37.2331354+02:00,1
+CreationDate_value,2024-07-27T20:56:46.740317+02:00,1
+CreationDate_value,2024-07-27T21:57:48.9111385+02:00,1
+CreationDate_value,2024-07-27T22:58:16.586104+02:00,1
+CreationDate_value,2024-05-24T13:22:39.2626295+02:00,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_760.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_761.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_763.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_764.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_765.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_766.czi,1
+ImageName_value,D:\Acq_post_15-dec-2022\Eq_Exterieur\IBOS\17-04-2023\20230417_768.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3804.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3805.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3806.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3807.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3808.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3809.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3810.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3811.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3812.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3813.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3814.czi,1
+ImageName_value,D:\EXTERIEUR\Acquisition à partir du 25 juin 2024\IBOS\20240726_3815.czi,1
+ImageName_value,D:\Acquisition à partir du 29 novembre 2023\Equipe  Michel Puceat\240523_Stephanie\2024_05_24__0229.czi,1
+Microscope_value,Axio Scan.Z1,20
+PixelSizeX_um,0.324763,12
+PixelSizeX_um,0.3247,7
+PixelSizeX_um,0.324864,1
+PixelSizeY_um,0.324763,12
+PixelSizeY_um,0.3247,7
+PixelSizeY_um,0.324864,1
+SessionName_value,LM - 20240726_102649,12
+SessionName_value,LM - 20230417_101016,7
+SessionName_value,LM - 20240524_102004,1
+StartTime_value,2023-04-17T20:04:08.058798Z,1
+StartTime_value,2023-04-17T20:33:00.5436817Z,1
+StartTime_value,2023-04-17T21:57:37.9755492Z,1
+StartTime_value,2023-04-17T22:51:42.4370544Z,1
+StartTime_value,2023-04-17T23:47:45.4012504Z,1
+StartTime_value,2023-04-18T00:48:32.833944Z,1
+StartTime_value,2023-04-18T02:40:09.7623648Z,1
+StartTime_value,2024-07-27T10:37:13.425298Z,1
+StartTime_value,2024-07-27T11:29:08.9004911Z,1
+StartTime_value,2024-07-27T12:23:23.4250481Z,1
+StartTime_value,2024-07-27T13:18:35.6925722Z,1
+StartTime_value,2024-07-27T14:11:30.1666968Z,1
+StartTime_value,2024-07-27T15:06:24.9131389Z,1
+StartTime_value,2024-07-27T16:02:02.715959Z,1
+StartTime_value,2024-07-27T16:57:34.9232688Z,1
+StartTime_value,2024-07-27T17:56:37.2181445Z,1
+StartTime_value,2024-07-27T18:56:46.7213278Z,1
+StartTime_value,2024-07-27T19:57:48.8941485Z,1
+StartTime_value,2024-07-27T20:58:16.5701133Z,1
+StartTime_value,2024-05-24T11:22:38.9128293Z,1
