@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Optional, Dict, List, Tuple
-from collections import Counter
+import re
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ from pylibCZIrw import czi as czirw
 # Config
 # -----------------------
 INPUT_ROOT = Path("/DATA/mimosa/original-dataset")   # folder containing the 7 subject folders
-OUTPUT_DIR = Path("/DATA/mimosa/metadata_audit_out") # where to save csv + plots
+OUTPUT_DIR = Path("/DATA/mimosa/mimosa/metadata_audit_out") # where to save csv + plots
 
 
 # -----------------------
@@ -52,6 +52,19 @@ def walk_all(obj: Any, path: str = ""):
             p = f"{path}[{i}]"
             yield (p, it)
             yield from walk_all(it, p)
+
+
+def normalize_path(p: Optional[str]) -> Optional[str]:
+    """
+    Make paths comparable across files by removing numeric indexes:
+      Track[0] -> Track[*]
+      Channel[12] -> Channel[*]
+    """
+    if p is None:
+        return None
+    # replace [123] by [*]
+    p = re.sub(r"\[\d+\]", "[*]", p)
+    return p
 
 
 def get_czi_metadata(czi_path: Path) -> dict:
@@ -106,9 +119,9 @@ def find_first_by_suffix(meta: dict, suffixes: Tuple[str, ...]) -> Tuple[Optiona
     return None, None
 
 
-def extract_session_best(meta: dict) -> Tuple[Optional[str], Optional[str]]:
+def extract_session_best(meta: dict) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
-    Return (value, source_field_path) using a strict priority:
+    Return (value, path, source_key) using strict priority:
       1) AcquisitionDateAndTime
       2) StartTime
       3) SessionName
@@ -119,8 +132,17 @@ def extract_session_best(meta: dict) -> Tuple[Optional[str], Optional[str]]:
     for key in order:
         val, path = find_first_by_suffix(meta, FIELD_SUFFIXES[key])
         if val is not None:
-            return val, path
-    return None, None
+            return val, path, key
+    return None, None, None
+
+
+def extract_sessionname_anywhere(meta: dict) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Return (SessionName_value, path) even if it is not selected as best session.
+    Useful to know if SessionName exists at all.
+    """
+    val, path = find_first_by_suffix(meta, FIELD_SUFFIXES["SessionName"])
+    return val, path
 
 
 def extract_microscope(meta: dict) -> Tuple[Optional[str], Optional[str]]:
@@ -179,7 +201,10 @@ def extract_pixel_xy_um(meta: dict) -> Tuple[Optional[float], Optional[float], O
 
 
 def extract_channel_names(meta: dict) -> Tuple[List[str], List[str]]:
-    """Extract channel names + the paths used."""
+    """
+    Extract channel names + the paths used.
+    Paths are normalized later (Track[0] -> Track[*]).
+    """
     names: List[str] = []
     paths: List[str] = []
     for p, v in walk_all(meta):
@@ -200,11 +225,22 @@ def audit_one_file(czi_path: Path) -> Dict[str, Any]:
     subj = subject_from_filename(czi_path.stem)
     samp = sample_from_filename(czi_path.stem)
 
-    sess_val, sess_path = extract_session_best(meta)
+    sess_val, sess_path, sess_src = extract_session_best(meta)
+    sessname_val, sessname_path = extract_sessionname_anywhere(meta)
 
     mic, mic_path = extract_microscope(meta)
     px, py, px_path, py_path = extract_pixel_xy_um(meta)
     chans, chan_paths = extract_channel_names(meta)
+
+    # normalize paths to ignore Track[0]/Track[1]/...
+    sess_path_n = normalize_path(sess_path)
+    mic_path_n = normalize_path(mic_path)
+    px_path_n = normalize_path(px_path)
+    py_path_n = normalize_path(py_path)
+
+    chan_paths_n = [normalize_path(x) for x in chan_paths if x]
+    chan_paths_n = [x for x in chan_paths_n if x]  # drop None
+    chans_paths_joined = ";".join(sorted(set(chan_paths_n))) if chan_paths_n else None
 
     return {
         "file": str(czi_path),
@@ -216,74 +252,67 @@ def audit_one_file(czi_path: Path) -> Dict[str, Any]:
         "Session_present": sess_val is not None,
         "Session_value": sess_val,
         "Session_path": sess_path,
+        "Session_path_norm": sess_path_n,
+        "Session_source": sess_src,
+
+        "SessionName_present": sessname_val is not None,
+        "SessionName_value": sessname_val,
+        "SessionName_path": sessname_path,
+        "SessionName_path_norm": normalize_path(sessname_path),
 
         "Microscope_present": mic is not None,
         "Microscope_value": mic,
-        "Microscope_path": mic_path,
+        "Microscope_path_norm": mic_path_n,
 
         "PixelSize_present": (px is not None) and (py is not None),
         "PixelSizeX_um": px,
         "PixelSizeY_um": py,
-        "PixelSizeX_path": px_path,
-        "PixelSizeY_path": py_path,
+        "PixelSizeX_path_norm": px_path_n,
+        "PixelSizeY_path_norm": py_path_n,
 
         "Channels_present": len(chans) > 0,
         "Channels_count": len(chans),
         "Channels_names": ",".join(chans) if chans else None,
-        "Channels_paths": ";".join(chan_paths) if chan_paths else None,
+        "Channels_paths_norm": chans_paths_joined,
     }
 
 
 # -----------------------
-# Plots
+# Plots (2 only)
 # -----------------------
 def save_two_plots(df: pd.DataFrame, outdir: Path) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
+    total = len(df)
 
-    # ---- Plot 1: similarity / coverage of needed fields
+    # ---- Plot 1: coverage of needed fields
     needed = {
         "Subject (from filename)": df["subject_from_filename"].notna().sum(),
         "Sample (from filename)": df["sample_from_filename"].notna().sum(),
         "Session (best of meta)": df["Session_present"].sum(),
+        "SessionName exists": df["SessionName_present"].sum(),
         "Microscope": df["Microscope_present"].sum(),
         "PixelSize (X+Y)": df["PixelSize_present"].sum(),
         "Channels": df["Channels_present"].sum(),
     }
-    total = len(df)
 
     plt.figure()
-    pd.Series({k: v for k, v in needed.items()}).sort_values(ascending=False).plot(kind="bar")
-    plt.title(f"Similarity / coverage of needed fields (N={total} files)")
+    pd.Series(needed).sort_values(ascending=False).plot(kind="bar")
+    plt.title(f"Coverage of needed fields (N={total} files)")
     plt.ylabel("Number of files where field is present")
     plt.tight_layout()
-    plt.savefig(outdir / "similarity_needed_fields.png", dpi=150)
+    plt.savefig(outdir / "coverage_needed_fields.png", dpi=150)
     plt.close()
 
-    # ---- Plot 2: differences = how many different PATHS were used to find each field
-    # (more unique paths => less consistent across datasets)
-    path_variability: Dict[str, int] = {}
-
-    def n_unique(series: pd.Series) -> int:
-        vals = series.dropna().astype(str).unique().tolist()
-        return len(vals)
-
-    path_variability["Session_path"] = n_unique(df["Session_path"])
-    path_variability["Microscope_path"] = n_unique(df["Microscope_path"])
-    path_variability["PixelSizeX_path"] = n_unique(df["PixelSizeX_path"])
-    path_variability["PixelSizeY_path"] = n_unique(df["PixelSizeY_path"])
-
-    # Channels_paths can contain multiple paths separated by ';'
-    ch_paths = []
-    for v in df["Channels_paths"].dropna().astype(str):
-        ch_paths.extend([x.strip() for x in v.split(";") if x.strip()])
-    path_variability["Channels_paths"] = len(set(ch_paths))
+    # ---- Plot 2: differences = session SOURCE variability (not Track index paths)
+    # This tells you: are sessions usually extracted from AcquisitionDateAndTime? StartTime? SessionName?
+    vc = df["Session_source"].fillna("NONE").value_counts()
 
     plt.figure()
-    pd.Series(path_variability).sort_values(ascending=False).plot(kind="bar")
-    plt.title("Differences / inconsistency: number of unique metadata paths used")
-    plt.ylabel("Unique paths count (higher = more inconsistent)")
+    vc.plot(kind="bar")
+    plt.title("Session inconsistency: which metadata field provides the session?")
+    plt.ylabel("Number of files")
     plt.tight_layout()
-    plt.savefig(outdir / "differences_paths.png", dpi=150)
+    plt.savefig(outdir / "session_source_distribution.png", dpi=150)
     plt.close()
 
 
@@ -308,7 +337,6 @@ def main() -> None:
     df = pd.DataFrame(rows)
     df.to_csv(OUTPUT_DIR / "summary_files.csv", index=False)
 
-    # Keep only rows without errors for plotting
     df_ok = df[df.get("error").isna()] if "error" in df.columns else df
     if len(df_ok) == 0:
         print(f"[INFO] No usable files for plots. Skipped: {skipped}")
@@ -316,10 +344,19 @@ def main() -> None:
 
     save_two_plots(df_ok, OUTPUT_DIR)
 
+    # Quick debug: how many different normalized channel paths?
+    ch_unique = set()
+    for v in df_ok["Channels_paths_norm"].dropna().astype(str):
+        for part in v.split(";"):
+            part = part.strip()
+            if part:
+                ch_unique.add(part)
+
     print("[OK] Audit done.")
     print(f"  - CSV: {OUTPUT_DIR / 'summary_files.csv'}")
-    print(f"  - Plot1: {OUTPUT_DIR / 'similarity_needed_fields.png'}")
-    print(f"  - Plot2: {OUTPUT_DIR / 'differences_paths.png'}")
+    print(f"  - Plot1: {OUTPUT_DIR / 'coverage_needed_fields.png'}")
+    print(f"  - Plot2: {OUTPUT_DIR / 'session_source_distribution.png'}")
+    print(f"  - Unique normalized channel paths: {len(ch_unique)}")
     if skipped:
         print(f"  - Skipped (errors): {skipped}")
 
