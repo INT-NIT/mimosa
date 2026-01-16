@@ -14,7 +14,7 @@ from pylibCZIrw import czi as czirw
 # Config
 # -----------------------
 INPUT_ROOT = Path("/DATA/mimosa/original-dataset")   # folder containing the 7 subject folders
-OUTPUT_DIR = Path("/DATA/mimosa/mimosa/metadata_audit_out") # where to save csv + plots
+OUTPUT_DIR = Path("/DATA/mimosa/mimosa/data_analysis") # where to save csv + plots
 
 
 # -----------------------

@@ -14,7 +14,7 @@ def save_czi_metadata_json(czi_path: Path, out_json: Path) -> None:
 
 
 def main() -> None:
-    czi_path = Path("/envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/1-Fenouil-original/20230413_695.czi")
+    czi_path = Path("/DATA/mimosa/original-dataset/1-Fenouil-MTO10092101/MTO10092101_Cx_200-208.czi")
 
     # output JSON next to the CZI (same folder), with "_metadata.json"
     out_json = czi_path.with_suffix("").with_name(czi_path.stem + "_metadata.json")
