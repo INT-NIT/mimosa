@@ -1,155 +1,81 @@
-import json
-import csv
+import ancpbids
 from pathlib import Path
-
 from czi_reader import MimosaReader
 
-
-class MimosaBidsRootBuilder:
-    """
-    Génère les fichiers BIDS à la racine:
-    - dataset_description.json (obligatoire)
-    - participants.tsv (obligatoire)
-    - participants.json (recommandé)
-    """
-
-    def __init__(self, source_dir: str, bids_root: str):
-        self.source_dir = Path(source_dir)
+class MimosaBidsBuilder:
+    def __init__(self, bids_root):
         self.bids_root = Path(bids_root)
         self.bids_root.mkdir(parents=True, exist_ok=True)
+        
+        # 1. On charge le dataset (Fonction de ta liste API)
+        self.dataset = ancpbids.load_dataset(str(self.bids_root))
+        
+        # 2. Configuration de la description (API : dataset_description)
+        # On s'assure que l'objet existe avant de le remplir
+        if not self.dataset.dataset_description:
+            # Si None, on laisse ancpbids initialiser par défaut lors du save
+            pass
+        
+        self.acq_map = {}
+        self.run_counts = {}
 
-        # sub_id (ex: "sub-01") -> {"species":..., "age":..., "sex":...}
-        self.participants = {}
+    def add_file(self, info):
+        # 3. Création des structures (API : create_subject / create_session)
+        # Ces fonctions préparent les dossiers dans l'objet dataset
+        sub_id = info['sub']
+        ses_id = info['ses']
+        
+        subject = self.dataset.create_subject(label=sub_id)
+        session = subject.create_session(label=ses_id)
 
-    # -------------------------
-    # Normalisation (alias simple)
-    # -------------------------
-    def _norm_sub_id(self, sub: str) -> str:
-        """
-        Force le format 'sub-XX' si sub est numérique, sinon 'sub-<label>'.
-        Ton MimosaReader peut renvoyer autre chose, donc on sécurise.
-        """
-        s = (sub or "").strip()
-        s = s.replace("sub-", "").replace("sub_", "")
-        if s.isdigit():
-            return f"sub-{int(s):02d}"
-        return f"sub-{s}" if s else "sub-01"
+        # 4. Remplissage des métadonnées (Ce qui a créé tes fichiers participants !)
+        subject.species = info['animal'].get('species', 'n/a')
+        subject.age = info['animal'].get('age', 'n/a')
+        subject.sex = info['animal'].get('sex', 'n/a')
 
-    def _norm_sex(self, sex: str) -> str:
-        s = (sex or "").strip().lower()
-        if s in {"m", "male", "man", "masculin", "masculine"}:
-            return "M"
-        if s in {"f", "female", "woman", "feminin", "feminine"}:
-            return "F"
-        if s in {"n/a", "na", "unknown", ""}:
-            return "n/a"
-        # parfois "M/F" ou autres trucs => on reste safe
-        if "m" in s and "f" not in s:
-            return "M"
-        if "f" in s and "m" not in s:
-            return "F"
-        return "n/a"
+        # 5. Calcul Acquisition / Run
+        key = (sub_id, ses_id)
+        if key not in self.acq_map: self.acq_map[key] = []
+        if info['acq_sig'] not in self.acq_map[key]: self.acq_map[key].append(info['acq_sig'])
+        acq_id = self.acq_map[key].index(info['acq_sig']) + 1
+        
+        run_key = (sub_id, ses_id, acq_id)
+        self.run_counts[run_key] = self.run_counts.get(run_key, 0) + 1
+        run_label = f"{self.run_counts[run_key]:02d}"
 
-    def _norm_species(self, species: str) -> str:
-        s = (species or "").strip().lower()
-        if not s or s in {"n/a", "na", "unknown"}:
-            return "n/a"
-        # mini alias utiles
-        if s in {"mouse", "mice"}:
-            return "mus musculus"
-        if s == "human":
-            return "homo sapiens"
-        return s
+        # 6. Création de l'Artifact (C'est ça qui crée les dossiers sub-XX/ses-XX/micr/)
+        artifact = session.create_artifact()
+        artifact.add_entity("sample", "Cx")
+        artifact.add_entity("acq", str(acq_id))
+        artifact.add_entity("run", run_label)
+        artifact.suffix = "microscopy"
+        artifact.extension = ".czi"
 
-    def _norm_age(self, age: str) -> str:
-        s = (age or "").strip()
-        if not s or s.lower() in {"n/a", "na", "unknown"}:
-            return "n/a"
-        # si c’est déjà un chiffre en texte => ok
-        # sinon tu peux laisser tel quel (BIDS tolère string/number)
-        return s
+        print(f"✅ Planifié : sub-{sub_id} | ses-{ses_id} | run-{run_label}")
 
-    # -------------------------
-    # Collecte
-    # -------------------------
-    def scan(self):
-        """
-        Parcourt les .czi, utilise MimosaReader.get_summary()
-        et construit self.participants
-        """
-        print(f"--- Scanning {self.source_dir} for .czi ---")
-        for czi_path in self.source_dir.rglob("*.czi"):
-            with MimosaReader(czi_path) as reader:
-                if not reader or not reader.metadata:
-                    continue
+    def save(self):
+        # 7. Sauvegarde (Fonction de ta liste API : save_dataset)
+        # Cette fonction transforme tout l'objet "dataset" en dossiers réels
+        ancpbids.save_dataset(self.dataset, str(self.bids_root))
 
-                summary = reader.get_summary()
-                sub_id = self._norm_sub_id(summary.get("sub"))
+def main():
+    SOURCE_DIR = "/envau/work/nit/users/boudlal.h/original-dataset"
+    BIDS_ROOT = "/envau/work/nit/users/boudlal.h/BIDS_dataset"
 
-                # init si nouveau
-                if sub_id not in self.participants:
-                    self.participants[sub_id] = {"species": "n/a", "age": "n/a", "sex": "n/a"}
+    builder = MimosaBidsBuilder(BIDS_ROOT)
 
-                # on remplit seulement si on n'a pas encore l'info
-                animal = summary.get("animal", {}) or {}
+    print(f"--- Analyse des fichiers dans {SOURCE_DIR} ---")
+    files = list(Path(SOURCE_DIR).rglob("*.czi"))
+    
+    for czi_file in files:
+        with MimosaReader(czi_file) as reader:
+            if reader and reader.metadata:
+                data = reader.get_summary() 
+                builder.add_file(data)
 
-                if self.participants[sub_id]["species"] == "n/a":
-                    self.participants[sub_id]["species"] = self._norm_species(animal.get("species"))
-                if self.participants[sub_id]["age"] == "n/a":
-                    self.participants[sub_id]["age"] = self._norm_age(animal.get("age"))
-                if self.participants[sub_id]["sex"] == "n/a":
-                    self.participants[sub_id]["sex"] = self._norm_sex(animal.get("sex"))
-
-        print(f"--- Found {len(self.participants)} participants ---")
-
-    # -------------------------
-    # Écriture fichiers racine
-    # -------------------------
-    def write_dataset_description(self):
-        file_path = self.bids_root / "dataset_description.json"
-        content = {
-            "Name": "Mimosa Axioscan Project",
-            "BIDSVersion": "1.10.0",
-            "DatasetType": "raw",
-            "Authors": ["Your Name"],
-            "GeneratedBy": [{"Name": "Mimosa BIDS Builder", "Version": "1.0.0"}],
-        }
-        file_path.write_text(json.dumps(content, indent=4, ensure_ascii=False), encoding="utf-8")
-
-    def write_participants_tsv(self):
-        file_path = self.bids_root / "participants.tsv"
-        fieldnames = ["participant_id", "species", "age", "sex"]  # participant_id en 1er
-
-        with file_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
-            writer.writeheader()
-            for sub_id in sorted(self.participants.keys()):
-                row = {"participant_id": sub_id, **self.participants[sub_id]}
-                writer.writerow(row)
-
-    def write_participants_json(self):
-        file_path = self.bids_root / "participants.json"
-        sidecar = {
-            "species": {"Description": "NCBI Taxonomy binomial name"},
-            "age": {"Description": "Age of the participant", "Units": "n/a"},
-            "sex": {
-                "Description": "Biological sex of the participant",
-                "Levels": {"M": "male", "F": "female"},
-            },
-        }
-        file_path.write_text(json.dumps(sidecar, indent=4, ensure_ascii=False), encoding="utf-8")
-
-    def build(self):
-        self.scan()
-        print("--- Writing BIDS root files ---")
-        self.write_dataset_description()
-        self.write_participants_tsv()
-        self.write_participants_json()
-        print(f"\n✅ SUCCESS: Root BIDS files written in: {self.bids_root}")
-
+    print("\n--- Génération de l'arborescence BIDS ---")
+    builder.save()
+    print(f"🏁 Terminé ! Vérifie le dossier : {BIDS_ROOT}")
 
 if __name__ == "__main__":
-    ORIGINAL_DATA = "/envau/work/nit/users/boudlal.h/original-dataset"
-    BIDS_DIR = "/envau/work/nit/users/boudlal.h/BIDS_dataset"
-
-    MimosaBidsRootBuilder(ORIGINAL_DATA, BIDS_DIR).build()
+    main()
