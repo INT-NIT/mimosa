@@ -3,7 +3,7 @@ import re
 import shutil
 from pathlib import Path
 from pylibCZIrw import czi as czirw
-
+import os 
 # =========================================================
 # HELPERS
 # =========================================================
@@ -122,9 +122,12 @@ def organize_files(src, dst):
         czi_dest = folder / f"{base_name}.czi"
         if not czi_dest.exists():
             try:
-                czi_dest.symlink_to(f.resolve())
-            except:
-                shutil.copy2(f, czi_dest)
+                os.link(str(f), str(czi_dest)) # Tente un Hard Link
+            except Exception as e:
+                # Instead of copying, we print a clear error and stop for this file
+                print(f"ERROR: Could not create symlink for {f.name}.")
+                print(f"Reason: {e}")
+                print("Check your permissions or if the filesystem supports symlinks.")
 
         # Handle .json metadata
         json_dest = folder / f"{base_name}_metadata.json"
@@ -134,6 +137,7 @@ def organize_files(src, dst):
         print(f"Processed: {base_name}")
 
 if __name__ == "__main__":
-    SOURCE_DIR = "/DATA/mimosa/original-dataset"
-    OUTPUT_DIR = "/DATA/mimosa/BIDS_dataset/sourcedata"
+    SOURCE_DIR = "/envau/work/nit/users/boudlal.h/original-dataset"
+    OUTPUT_DIR = "/envau/work/nit/users/boudlal.h/BIDS_dataset/sourcedata"
     organize_files(SOURCE_DIR, OUTPUT_DIR)
+     #"/envau/work/nit/users/boudlal.h/BIDS_dataset"
