@@ -73,6 +73,25 @@ class MimosaReader:
             "age": self._to_string(self._find_key(self.metadata, "Age") or "n/a"),
             "sex": "M" if "m" in self._to_string(self._find_key(self.metadata, "Sex")).lower() else "F"
         }
+    def get_illumination_type(self) -> str:
+        """
+        Return illumination/contrast mode using ONLY:
+        - IlluminationType
+        - ContrastMethod
+        """
+        raw = self._find_key(self.metadata, "IlluminationType")
+        if raw:
+            val = self._to_string(raw)
+            if val:
+                return val
+
+        raw = self._find_key(self.metadata, "ContrastMethod")
+        if raw:
+            val = self._to_string(raw)
+            if val:
+                return val
+
+        return "Unknown"
 
     def get_summary(self):
         return {
@@ -80,6 +99,7 @@ class MimosaReader:
             "ses": self.get_session(),
             "acq_sig": self.get_acq_signature(),
             "sample": "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Sam",
+            "illumination": self.get_illumination_type(),  # <-- ajouté
             "animal": self.get_animal_info(),
             "full_meta": self.metadata
         }
