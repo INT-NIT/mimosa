@@ -1,0 +1,14 @@
+{
+  "Manufacturer": "Axio Scan.Z1",
+  "ManufacturersModelName": "Axio Scan.Z1_{'Metadata': None, 'AutoScalin",
+  "IlluminationType": "Fluorescence",
+  "Species": "n/a",
+  "Age": "n/a",
+  "Sex": "F",
+  "SampleFixation": "n/a",
+  "SampleStaining": "C0",
+  "ChannelIndex": 0,
+  "ChannelName": "C0",
+  "Fluorophore": "Unknown",
+  "SourceFile": "MIO21100401_Cx_104_112_120_128.czi"
+}
