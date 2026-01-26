@@ -13,24 +13,23 @@ def initialize_dataset(bids_root_path):
     options = DatasetOptions(infer_artifact_datatype=True, lazy_loading=True)
     
     try:
+        # On tente de charger si le dataset existe déjà
         dataset = ancpbids.load_dataset(bids_root_path, options=options)
         layout = BIDSLayout(bids_root_path)
         print(f"Dataset chargé depuis {bids_root_path}")
     except Exception:
         print("Initialisation dynamique d'un nouveau dataset BIDS...")
         
-        schema = ancpbids.load_schema(bids_root_path)
-        
-        layout = BIDSLayout(bids_root_path)
-        dataset = layout.get_dataset()
-        
-        dataset.description.Name = os.path.basename(bids_root_path)
+        # Création d'un nouveau schéma
+        dataset = ancpbids.create_dataset(name=os.path.basename(bids_root_path))
         dataset.description.BIDSVersion = "1.8.0" 
         dataset.description.DatasetType = "raw"
         
         ancpbids.save_dataset(dataset, bids_root_path)
+        layout = BIDSLayout(bids_root_path)
 
     return layout, dataset
+
 def get_bids_path(layout, summary_meta):
     """
     Calcule uniquement la racine BIDS (Sujet, Session, Sample, Acq, Stain, Run).
@@ -43,18 +42,22 @@ def get_bids_path(layout, summary_meta):
 
     existing_entities = layout.get_entities()
     runs = existing_entities.get('run', [])
+    
     if not runs:
         run_idx = "01"
     else:
-        numeric_runs = [int(r) for r in runs if r.isdigit()]
+        # Filtrage pour ne garder que les runs numériques
+        numeric_runs = [int(r) for r in runs if str(r).isdigit()]
         run_idx = f"{max(numeric_runs) + 1:02d}" if numeric_runs else "01"
 
-    # On construit le dossier BIDS
-    folder_path = os.path.join(layout.dataset_path, f"sub-{sub}", f"ses-{ses}", "micr")
+    # --- CORRECTION ICI : layout.root au lieu de layout.dataset_path ---
+    # Si layout.root plante aussi, on peut utiliser layout.folder ou layout.path selon la version
+    # Mais layout.root est le standard PyBIDS/ancpbids
+    folder_path = os.path.join(layout.root, f"sub-{sub}", f"ses-{ses}", "micr")
+    
     if not os.path.exists(folder_path):
         os.makedirs(folder_path, exist_ok=True)
 
-    # ON RENVOIE LA RACINE SANS EXTENSION NI CHUNK
     root_name = f"sub-{sub}_ses-{ses}_sample-{sample}_acq-{acq}_stain-{stain}_run-{run_idx}"
     
     return folder_path, root_name
