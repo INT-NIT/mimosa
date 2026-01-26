@@ -27,42 +27,53 @@ def main():
 
     args = parser.parse_args()
 
-    # 1. Initialisation BIDS (Dossier des Alias)
-    layout, dataset = initialize_dataset(args.output_path)
+    # 1. Initialisation BIDS
+    # Astuce : enlève le slash final s'il existe pour éviter les chemins bizarres
+    clean_output_path = args.output_path.rstrip("/")
+    layout, dataset = initialize_dataset(clean_output_path)
     
-    # 2. Gestion du stockage physique (Fichiers lourds)
-    # Si non précisé, on crée un dossier "raw_data" à côté de l'output BIDS
-    raw_output_path = args.raw_path if args.raw_path else args.output_path + "_raw_data"
+    # 2. Gestion du stockage physique
+    raw_output_path = args.raw_path if args.raw_path else clean_output_path + "_raw_data"
     if not os.path.exists(raw_output_path):
         os.makedirs(raw_output_path)
         print(f"Dossier Raw créé : {raw_output_path}")
 
     downsampling_factor = 2 ** (args.downsampling_factor)
     
-    # Liste des fichiers CZI
-    czifilelist = [f for f in os.listdir(args.input_path) if f.endswith('.czi')]
-    print(f"Nombre de fichiers trouvés : {len(czifilelist)}")
+    # --- CORRECTION ICI : Recherche récursive (os.walk) ---
+    files_to_process = []
+    for root, dirs, files in os.walk(args.input_path):
+        for file in files:
+            if file.endswith('.czi'):
+                # On garde le dossier parent (root) et le nom du fichier
+                files_to_process.append((root, file))
 
-    for filename in czifilelist:
-        full_input_path = os.path.join(args.input_path, filename)
+    print(f"Nombre de fichiers trouvés : {len(files_to_process)}")
+
+    if len(files_to_process) == 0:
+        print("ATTENTION : Aucun fichier .czi trouvé. Vérifiez le chemin d'entrée.")
+        return
+
+    # On boucle sur la liste des tuples (dossier, fichier)
+    for input_dir, filename in files_to_process:
+        full_input_path = os.path.join(input_dir, filename)
         
-        # 3. Extraction des métadonnées avec MimosaReader
+        # 3. Extraction métadonnées
         with MimosaReader(full_input_path) as reader:
             if reader is None: 
                 continue
             summary = reader.get_summary()
             
-            # 4. Calcul du chemin BIDS pour l'alias
-            # get_bids_path renvoie (folder_path, root_name)
+            # 4. Calcul chemin BIDS
             bids_folder, bids_root = get_bids_path(layout, summary)
             
             print(f"\n>>> Traitement de : {filename}")
-            print(f"    Sujet : {summary['sub']} | Session : {summary['ses']}")
-
-            # 5. Conversion et création des alias simultanée
-            # On passe bids_folder et bids_root pour que czi2bitmapHPC fasse les symlinks
+            
+            # 5. Conversion
+            # IMPORTANT : On passe 'input_dir' (le sous-dossier où est le fichier)
+            # et non 'args.input_path' (la racine globale)
             czi.czi2bitmapHPC(
-                args.input_path, 
+                input_dir,        # <-- Modifié ici
                 filename, 
                 raw_output_path, 
                 downsampling_factor, 
@@ -71,13 +82,11 @@ def main():
                 bids_root=bids_root
             )
 
-            # 6. Écriture du sidecar JSON (obligatoire BIDS)
-            # On le lie au premier chunk de l'alias pour la validation
+            # 6. Sidecar JSON
             sample_json_path = os.path.join(bids_folder, bids_root + "_chunk-00_FLUO")
             write_bids_sidecar(sample_json_path, summary)
 
-        # 7. Rafraîchissement du Layout
-        # Crucial pour que le prochain fichier voie les runs précédents et s'incrémente
+        # 7. Indexation
         layout.index()
 
     print("\n[SUCCESS] Conversion et création des alias terminées.")
