@@ -23,6 +23,14 @@ def main():
     parser.add_argument('-raw', '--raw_path', type=str, help='Path pour le stockage des fichiers lourds')
     args = parser.parse_args()
     
+    # Charger la table de correspondance automatiquement
+    csv_path = 'subjects_correspondence.csv'
+    if os.path.exists(csv_path):
+        MimosaReader.load_correspondence_table(csv_path)
+        print(f"Table de correspondance chargee depuis {csv_path}")
+    else:
+        print(f"Attention: {csv_path} introuvable, utilisation methode par defaut")
+    
     clean_output_path = args.output_path.rstrip("/")
     
     # FIX: Récupérer bids_root_path depuis initialize_dataset
