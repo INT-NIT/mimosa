@@ -168,7 +168,11 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                         alias_path = os.path.join(bids_folder, alias_filename)
                         
                         if not os.path.exists(alias_path):
-                            os.symlink(os.path.abspath(filename), alias_path)
+                            try:
+                                os.link(os.path.abspath(filename), alias_path)
+                            except OSError:
+                                import shutil
+                                shutil.copy2(os.path.abspath(filename), alias_path)
                             print(f"  -> Alias créé : {alias_filename}")
                 bar()
 """
