@@ -6,7 +6,8 @@ import sys
 sys.path.append(os.path.abspath("/BIDS"))
 
 # Imports des modules locaux
-import czi_convert as czi
+from python_scripts import czi_convert2 as czi
+sys.path.append(os.path.abspath("BIDS"))
 from czi_reader import MimosaReader
 from bids_manager import initialize_dataset, get_bids_path, write_bids_sidecar
 
