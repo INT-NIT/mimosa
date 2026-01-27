@@ -7,6 +7,7 @@ from python_scripts import czi_convert2 as czi
 sys.path.append(os.path.abspath("BIDS"))
 from czi_reader import MimosaReader
 from bids_manager import initialize_dataset, get_bids_info, get_channel_path, write_bids_sidecar, create_sourcedata_links
+from ancpbids import BIDSLayout
 
 def dir_path(path):
     if os.path.isdir(path):
@@ -66,10 +67,13 @@ def main():
         # 1. Créer lien sourcedata
         create_sourcedata_links(full_input_path, summary['sub'], bids_root_path)
         
-        # 2. Calculer infos BIDS une seule fois
+        # 2. RECHARGER le layout pour voir les fichiers déjà créés
+        layout = BIDSLayout(bids_root_path)
+        
+        # 3. Calculer infos BIDS (run s'incrémente maintenant)
         bids_info = get_bids_info(layout, summary, bids_root_path)
         
-        # 3. Conversion
+        # 4. Conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename, 
@@ -79,8 +83,8 @@ def main():
             bids_info=bids_info
         )
         
-        # 4. JSON sidecar (un seul pour le premier canal)
-        bids_folder, bids_root = get_channel_path(bids_info, channel_id=0)
+        # 5. JSON sidecar (pour le premier canal uniquement)
+        bids_folder, bids_root = get_channel_path(bids_info, channel_name="C0")
         sample_json_path = os.path.join(bids_folder, bids_root + "_chunk-00")
         write_bids_sidecar(sample_json_path, summary)
     

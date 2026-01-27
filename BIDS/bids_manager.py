@@ -69,7 +69,7 @@ def get_bids_info(layout, summary_meta, bids_root_path):
         'bids_root_path': bids_root_path
     }
 
-def get_channel_path(bids_info, channel_id):
+def get_channel_path(bids_info, channel_name):
     """Génère le chemin et nom pour un canal spécifique"""
     folder_path = os.path.join(
         bids_info['bids_root_path'], 
@@ -80,7 +80,10 @@ def get_channel_path(bids_info, channel_id):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path, exist_ok=True)
     
-    stain = f"C{channel_id}"
+    # Nettoyer le nom du canal
+    import re
+    stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
+    
     root_name = f"sub-{bids_info['sub']}_ses-{bids_info['ses']}_sample-{bids_info['sample']}_acq-{bids_info['acq']}_stain-{stain}_run-{bids_info['run']}"
     
     return folder_path, root_name
