@@ -1,3 +1,4 @@
+import sys 
 import os
 from pylibCZIrw import czi as pyczi # lecture des .czi 
 import json # souvent pour la lecture des metadonnées s
