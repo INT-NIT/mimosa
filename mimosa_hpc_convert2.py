@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath("/BIDS"))
 from python_scripts import czi_convert2 as czi
 sys.path.append(os.path.abspath("BIDS"))
 from czi_reader import MimosaReader
-from bids_manager import initialize_dataset, get_bids_path, write_bids_sidecar
+from bids_manager import initialize_dataset, get_bids_info, get_channel_path, write_bids_sidecar, create_sourcedata_links
 
 def dir_path(path):
     if os.path.isdir(path):
@@ -15,31 +15,29 @@ def dir_path(path):
         raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
 
 def main():
-    parser = argparse.ArgumentParser(description='Process for CZI conversion to BIDS with Aliases')
+    parser = argparse.ArgumentParser(description='Process for CZI conversion to BIDS')
     parser.add_argument('-i', '--input_path', type=dir_path, required=True, help='Path contenant les .czi')
     parser.add_argument('-f', '--output_format', type=str, required=True, help='tiff ou nii')
     parser.add_argument('-df', '--downsampling_factor', type=int, required=True, help='Facteur 2^N')
-    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root du Dataset BIDS (Alias)')
+    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root du Dataset BIDS')
     parser.add_argument('-raw', '--raw_path', type=str, help='Path pour le stockage des fichiers lourds')
     args = parser.parse_args()
     
-    # Charger la table de correspondance automatiquement
+    # Charger la table de correspondance
     csv_path = 'subjects_correspondence.csv'
     if os.path.exists(csv_path):
         MimosaReader.load_correspondence_table(csv_path)
         print(f"Table de correspondance chargee depuis {csv_path}")
     else:
-        print(f"Attention: {csv_path} introuvable, utilisation methode par defaut")
+        print(f"Attention: {csv_path} introuvable")
     
     clean_output_path = args.output_path.rstrip("/")
-    
-    # FIX: Récupérer bids_root_path depuis initialize_dataset
     layout, dataset, bids_root_path = initialize_dataset(clean_output_path)
     
     raw_output_path = args.raw_path if args.raw_path else clean_output_path + "_raw_data"
     if not os.path.exists(raw_output_path):
         os.makedirs(raw_output_path)
-        print(f"Dossier Raw cree : {raw_output_path}")
+        print(f"Dossier raw_data cree: {raw_output_path}")
     
     downsampling_factor = 2 ** (args.downsampling_factor)
     
@@ -49,9 +47,9 @@ def main():
             if file.endswith('.czi'):
                 files_to_process.append((root, file))
     
-    print(f"Nombre de fichiers trouves : {len(files_to_process)}")
+    print(f"Nombre de fichiers trouves: {len(files_to_process)}")
     if len(files_to_process) == 0:
-        print("ATTENTION : Aucun fichier .czi trouve. Verifiez le chemin d'entree.")
+        print("ATTENTION: Aucun fichier .czi trouve")
         return
     
     for input_dir, filename in files_to_process:
@@ -62,25 +60,31 @@ def main():
                 continue
             summary = reader.get_summary()
         
-        # FIX: Passer bids_root_path en paramètre
-        bids_folder, bids_root = get_bids_path(layout, summary, bids_root_path)
+        print(f"\n>>> Traitement de: {filename}")
+        print(f"    Sujet: {summary['sub']}, Session: {summary['ses']}, Sample: {summary['sample']}")
         
-        print(f"\n>>> Traitement de : {filename}")
+        # 1. Créer lien sourcedata
+        create_sourcedata_links(full_input_path, summary['sub'], bids_root_path)
         
+        # 2. Calculer infos BIDS une seule fois
+        bids_info = get_bids_info(layout, summary, bids_root_path)
+        
+        # 3. Conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename, 
             raw_output_path, 
             downsampling_factor, 
             args.output_format,
-            bids_folder=bids_folder,
-            bids_root=bids_root
+            bids_info=bids_info
         )
         
-        sample_json_path = os.path.join(bids_folder, bids_root + "_chunk-00_FLUO")
+        # 4. JSON sidecar (un seul pour le premier canal)
+        bids_folder, bids_root = get_channel_path(bids_info, channel_id=0)
+        sample_json_path = os.path.join(bids_folder, bids_root + "_chunk-00")
         write_bids_sidecar(sample_json_path, summary)
     
-    print("\n[SUCCESS] Conversion et creation des alias terminees.")
+    print("\n[SUCCESS] Conversion terminee")
 
 if __name__ == "__main__":
     main()

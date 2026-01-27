@@ -5,17 +5,17 @@ from pylibCZIrw import czi as czirw
 
 class MimosaReader:
     # Variable de classe pour stocker la table
-    _correspondence_table = None
+    correspondence_table = None
     
     @classmethod
-    def load_correspondence_table(cls, csv_path):
+    def loadcorrespondence_table(cls, csv_path):
         """Charge la table de correspondance une seule fois"""
-        if cls._correspondence_table is None:
-            cls._correspondence_table = {}
+        if cls.correspondence_table is None:
+            cls.correspondence_table = {}
             with open(csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    cls._correspondence_table[row['Path']] = {
+                    cls.correspondence_table[row['Path']] = {
                         'subject': row['SubjectName'],
                         'sample': row['Sample']
                     }
@@ -61,11 +61,13 @@ class MimosaReader:
         return str(value).strip()
     
     def get_subject(self):
-        # Chercher d'abord dans la table de correspondance
-        if self._correspondence_table:
-            for path_key, info in self._correspondence_table.items():
-                if path_key in str(self.path.parent):
-                    return info['subject']
+        # Chercher dans la table en remontant les dossiers parents
+        if self.correspondence_table:
+            current = self.path.parent
+            while current != current.parent:
+                if str(current) in self.correspondence_table:
+                    return self.correspondence_table[str(current)]['subject']
+                current = current.parent
         
         folder_name = self.path.parent.name
         parts = re.split(r'[-_]', folder_name)
@@ -75,11 +77,13 @@ class MimosaReader:
         return folder_name
     
     def get_sample(self):
-        # Chercher d'abord dans la table de correspondance
-        if self._correspondence_table:
-            for path_key, info in self._correspondence_table.items():
-                if path_key in str(self.path.parent):
-                    return info['sample']
+        # Chercher dans la table en remontant les dossiers parents
+        if self.correspondence_table:
+            current = self.path.parent
+            while current != current.parent:
+                if str(current) in self.correspondence_table:
+                    return self.correspondence_table[str(current)]['sample']
+                current = current.parent
         
         return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Sam"
     
