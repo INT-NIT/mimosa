@@ -12,7 +12,8 @@ from skimage import img_as_ubyte
 import xml.etree.ElementTree as ET
 from alive_progress import alive_bar # barre de progression jolie en console 
 sys.path.append(os.path.abspath("BIDS"))
-from bids_manager import get_channel_path
+import bids_manager as bm 
+
 #This function returns the largest multiple of the number a smaller than b
 def multiple(a, b):
     m = 0
@@ -78,9 +79,12 @@ def get_channels_info(czidoc):
             channels_dict[i] = f"C{i}"
     
     return channels_dict
-def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_format, bids_info=None):
-    czifile_scenes = os.path.join(pathin, czifilename)
 
+
+def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_format, 
+                  layout=None, bids_info=None, bids_root_path=None):    
+    czifile_scenes = os.path.join(pathin, czifilename)
+    bids_infos_per_channel = {} 
     with pyczi.open_czi(czifile_scenes) as czidoc:
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
         channels_info = get_channels_info(czidoc)  # {0: 'DAPI', 1: 'GFP', ...}
@@ -102,9 +106,13 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                 cziname = os.path.splitext(czifilename)[0]
                 
                 for c in range(nb_channels):
+                    channel_images[c] = czidoc.read(roi=my_real_roi, plane={'C':c}, scene=i, zoom=zoom_factor)
+
+                cziname = os.path.splitext(czifilename)[0]
+                
+                for c in range(nb_channels):
                     ext = ".tiff" if ouput_format == "tiff" else ".nii.gz"
                     
-                    # 1. Fichier physique dans raw_data
                     filename = os.path.join(pathout, f"{cziname}_ds{downsampling_factor}_S{str(i).zfill(2)}_C{c}{ext}")
                     
                     if (ouput_format == "tiff"):
@@ -113,9 +121,18 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                         array_img = nib.Nifti1Image(np.swapaxes(channel_images[c], 0, 1), np.eye(4))
                         nib.save(array_img, filename)
 
-                    # 2. Lien BIDS avec le vrai nom du canal
-                    if bids_info:
-                        bids_folder, bids_root = get_channel_path(bids_info, channel_name=channels_info[c])
+                    if layout and bids_info and bids_root_path:
+                        channel_bids_info = bm.get_bids_info(
+                            layout, 
+                            bids_info, 
+                            bids_root_path, 
+                            channel_name=channels_info[c]
+                        )
+                        
+                        if c not in bids_infos_per_channel:
+                            bids_infos_per_channel[c] = channel_bids_info
+                        
+                        bids_folder, bids_root = bm.get_channel_path(channel_bids_info, channel_name=channels_info[c])
                         
                         alias_filename = f"{bids_root}_chunk-{i:02d}{ext}"
                         alias_path = os.path.join(bids_folder, alias_filename)
@@ -123,7 +140,23 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                         if not os.path.exists(alias_path):
                             os.link(os.path.abspath(filename), alias_path)
                             print(f"  -> Lien BIDS: {alias_filename}")
+                        
+                        if ouput_format == "nii":
+                            deriv_folder, deriv_root = bm.get_derivative_path(
+                                channel_bids_info,
+                                channel_name=channels_info[c],
+                                resolution=f"ds{downsampling_factor}"
+                            )
+                            
+                            deriv_filename = f"{deriv_root}.nii.gz"
+                            deriv_path = os.path.join(deriv_folder, deriv_filename)
+                            
+                            if not os.path.exists(deriv_path):
+                                os.link(os.path.abspath(filename), deriv_path)
+                                print(f"  -> Lien derivatives: {deriv_filename}")
                 bar()
+    
+    return channels_info, bids_infos_per_channel
 """
 def main():
     pathin = "/DATA/mimosa/dataset/1-Fenouil-MTO10092101/"
