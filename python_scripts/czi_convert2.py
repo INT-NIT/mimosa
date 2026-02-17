@@ -26,10 +26,6 @@ def get_nb_channels(czidoc) -> int:
     return n
 
 
-def safe_mkdir(p: str):
-    os.makedirs(p, exist_ok=True)
-
-
 def czi2bitmapHPC(
     pathin: str,
     czifilename: str,
@@ -40,7 +36,15 @@ def czi2bitmapHPC(
     output_format: str,
     pipeline_name: str = "downsampled",
 ):
-   
+    """
+    Convertit un .czi en fichiers TIFF (raw/micr) ou NIfTI (derivatives).
+    - TIFF : écrit dans <bids_root_path>/sub-*/ses-*/micr/
+    - NIfTI : écrit dans <bids_root_path>/derivatives/<pipeline>/sub-*/ses-*/micr/
+    """
+
+    if output_format not in ("tiff", "nii"):
+        raise ValueError("output_format must be 'tiff' or 'nii'")
+
     czifile_path = os.path.join(pathin, czifilename)
 
     # assure dataset_description + derivatives/.. description
@@ -65,14 +69,19 @@ def czi2bitmapHPC(
             # lecture de toutes les channels pour cette scene
             channel_images = {}
             for c in range(nb_channels):
-                channel_images[c] = czidoc.read(roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor)
+                channel_images[c] = czidoc.read(
+                    roi=roi,
+                    plane={"C": c},
+                    scene=scene_idx,
+                    zoom=zoom_factor
+                )
 
             with alive_bar(nb_channels, force_tty=True, title=f"Scene {scene_idx}") as bar:
                 for c in range(nb_channels):
-                    channel_name = f"C{c}"   # simple et stable
+                    channel_name = f"C{c}"   # stable
                     stain = channel_name
 
-                    # run: incrémente pour éviter collisions
+                    # run: incrémente globalement pour éviter collisions
                     run_counter["run"] = run_counter.get("run", 0) + 1
                     run = f"{run_counter['run']:02d}"
 
@@ -88,19 +97,22 @@ def czi2bitmapHPC(
                         out_path = os.path.join(raw_folder, base + ".tiff")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
 
-                        # sidecar JSON raw
-                        md = bm.prepare_bids_metadata(bids_info.get("summary_for_json", {}), channel_name, c, scene_idx)
+                        md = bm.prepare_bids_metadata(
+                            bids_info.get("summary_for_json", {}),
+                            channel_name,
+                            c,
+                            scene_idx
+                        )
                         bm.write_bids_sidecar(out_path, md)
 
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
 
-                    elif output_format == "nii":
+                    else:  # "nii"
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
                         nib.save(img, out_path)
 
-                        # sidecar JSON derivative
                         md = bm.prepare_derivative_metadata(
                             bids_info.get("summary_for_json", {}),
                             channel_name,
@@ -110,9 +122,6 @@ def czi2bitmapHPC(
                         bm.write_bids_sidecar(out_path, md)
 
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")
-
-                    else:
-                        raise ValueError("output_format must be 'tiff' or 'nii'")
 
                     bar()
 
