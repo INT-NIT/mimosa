@@ -1,22 +1,17 @@
 import argparse
 import os
-import sys
-
-# Ajouter le dossier BIDS au PYTHONPATH correctement
-sys.path.append(os.path.abspath("BIDS"))
 
 from python_scripts import czi_convert2 as czi
 from czi_reader import MimosaReader
 from ancpbids import BIDSLayout
 import bids_manager as bm
-from pylibCZIrw import czi as pyczi  # lecture des .czi
 
 
 def dir_path(path):
     if os.path.isdir(path):
         return path
     else:
-        raise argparse.ArgumentTypeError(f"{path} is not a valid directory path")
+        raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
 
 
 def main():
@@ -39,13 +34,9 @@ def main():
     clean_output_path = args.output_path.rstrip("/")
     layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path)
 
-    derivatives_path = bm.initialize_derivatives(
-        bids_root_path,
-        pipeline_name="downsampled"
-    )
+    bm.initialize_derivatives(bids_root_path, pipeline_name="downsampled")
 
     raw_output_path = args.raw_path if args.raw_path else clean_output_path + "_raw_data"
-
     if not os.path.exists(raw_output_path):
         os.makedirs(raw_output_path)
         print(f"Dossier raw_data cree: {raw_output_path}")
@@ -55,7 +46,7 @@ def main():
     files_to_process = []
     for root, dirs, files in os.walk(args.input_path):
         for file in files:
-            if file.lower().endswith('.czi'):
+            if file.endswith('.czi'):
                 files_to_process.append((root, file))
 
     print(f"Nombre de fichiers trouves: {len(files_to_process)}")
@@ -75,21 +66,13 @@ def main():
         print(f"    Sujet: {summary['sub']}, Session: {summary['ses']}, Sample: {summary['sample']}")
 
         # 1. Créer lien sourcedata
-        bm.create_sourcedata_links(
-            full_input_path,
-            summary['sub'],
-            bids_root_path
-        )
+        bm.create_sourcedata_links(full_input_path, summary['sub'], bids_root_path)
 
         # 2. Recharger le layout pour voir les fichiers déjà créés
         layout = BIDSLayout(bids_root_path)
 
-        # 3. Calculer infos BIDS (run s'incrémente)
-        bids_info = bm.get_bids_info(
-            layout,
-            summary,
-            bids_root_path
-        )
+        # 3. Calculer infos BIDS (run s'incrémente maintenant)
+        bids_info = bm.get_bids_info(layout, summary, bids_root_path)
 
         # 4. Conversion
         czi.czi2bitmapHPC(
