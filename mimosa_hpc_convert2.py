@@ -21,7 +21,7 @@ def main():
     parser.add_argument('-i', '--input_path', type=dir_path, required=True, help='Path contenant les .czi')
     parser.add_argument('-f', '--output_format', type=str, required=False, help='tiff ou nii (ignoré: on fait toujours les deux)')
     parser.add_argument('-df', '--downsampling_factor', type=int, required=True, help='Facteur 2^N')
-    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root du Dataset BIDS')
+    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root of Dataset BIDS')
     parser.add_argument('-raw', '--raw_path', type=str, help='Path pour le stockage des fichiers lourds')
     args = parser.parse_args()
     

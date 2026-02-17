@@ -89,11 +89,12 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
         scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
         channels_info = get_channels_info(czidoc)  # {0: 'DAPI', 1: 'GFP', ...}
         nb_channels = len(channels_info)
-        
-        for i in range(0, len(scenes_bounding_rectangle)):
+        nb_scenes = len(scenes_bounding_rectangle) 
+
+        for i in range(0, nb_scenes):
             zoom_factor = float(1.0 / downsampling_factor)
             
-            with alive_bar(len(scenes_bounding_rectangle), force_tty=True, title=f"Scene {i}") as bar:
+            with alive_bar(nb_scenes, force_tty=True, title=f"Scene {i}") as bar:
                 my_real_roi = (
                     scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], 
                     scenes_bounding_rectangle[i][2], scenes_bounding_rectangle[i][3]
@@ -155,8 +156,8 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                                 os.link(os.path.abspath(filename), deriv_path)
                                 print(f"  -> Lien derivatives: {deriv_filename}")
                 bar()
-    
-    return channels_info, bids_infos_per_channel
+      
+    return channels_info, nb_scenes, bids_infos_per_channel  
 """
 def main():
     pathin = "/DATA/mimosa/dataset/1-Fenouil-MTO10092101/"
