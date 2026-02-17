@@ -1,4 +1,3 @@
-# czi_convert2.py
 from __future__ import annotations
 
 import os
@@ -16,7 +15,6 @@ def get_nb_channels(czidoc) -> int:
     md = czidoc.metadata
     n = int(md["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
     if n == 0:
-        # fallback
         while True:
             try:
                 _ = czidoc.read(roi=(0, 0, 10, 10), plane={"C": n})
@@ -37,27 +35,22 @@ def czi2bitmapHPC(
     pipeline_name: str = "downsampled",
 ):
     """
-    Convertit un .czi en fichiers TIFF (raw/micr) ou NIfTI (derivatives).
-    - TIFF : écrit dans <bids_root_path>/sub-*/ses-*/micr/
-    - NIfTI : écrit dans <bids_root_path>/derivatives/<pipeline>/sub-*/ses-*/micr/
+    - output_format == "tiff" : écrit dans <bids_root_path>/sub-*/ses-*/micr/
+    - output_format == "nii"  : écrit dans <bids_root_path>/derivatives/<pipeline>/sub-*/ses-*/micr/
     """
 
+    output_format = output_format.strip().lower()
     if output_format not in ("tiff", "nii"):
         raise ValueError("output_format must be 'tiff' or 'nii'")
 
     czifile_path = os.path.join(pathin, czifilename)
 
-    # assure dataset_description + derivatives/.. description
-    bm.ensure_dataset_description(bids_root_path)
+    # derivatives ok (dataset_description raw déjà fait dans initialize_dataset)
     bm.initialize_derivatives(bids_root_path, pipeline_name=pipeline_name)
 
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
         nb_channels = get_nb_channels(czidoc)
-
-        # dossiers cibles
-        raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
-        deriv_folder = bm.get_deriv_micr_folder(bids_root_path, pipeline_name, bids_info)
 
         zoom_factor = float(1.0 / downsampling_factor)
 
@@ -66,14 +59,14 @@ def czi2bitmapHPC(
             rect = scenes[scene_idx]
             roi = (rect[0], rect[1], rect[2], rect[3])
 
-            # lecture de toutes les channels pour cette scene
+            # lire chaque channel de cette scene
             channel_images = {}
             for c in range(nb_channels):
                 channel_images[c] = czidoc.read(
                     roi=roi,
                     plane={"C": c},
                     scene=scene_idx,
-                    zoom=zoom_factor
+                    zoom=zoom_factor,
                 )
 
             with alive_bar(nb_channels, force_tty=True, title=f"Scene {scene_idx}") as bar:
@@ -81,19 +74,31 @@ def czi2bitmapHPC(
                     channel_name = f"C{c}"   # stable
                     stain = channel_name
 
-                    # run: incrémente globalement pour éviter collisions
+                    # run global: évite collisions (comme tu faisais)
                     run_counter["run"] = run_counter.get("run", 0) + 1
                     run = f"{run_counter['run']:02d}"
 
-                    base = bm.build_bids_basename(
-                        bids_info=bids_info,
-                        stain=stain,
-                        run=run,
-                        chunk=chunk,
-                        suffix="micr",
-                    )
-
+                    # ---------- RAW TIFF ----------
                     if output_format == "tiff":
+                        raw_folder = os.path.join(
+                            bids_root_path,
+                            f"sub-{bids_info['sub']}",
+                            f"ses-{bids_info['ses']}",
+                            "micr",
+                        )
+                        os.makedirs(raw_folder, exist_ok=True)
+
+                        base = (
+                            f"sub-{bids_info['sub']}"
+                            f"_ses-{bids_info['ses']}"
+                            f"_sample-{bids_info['sample']}"
+                            f"_acq-{bids_info['acq']}"
+                            f"_stain-{stain}"
+                            f"_run-{run}"
+                            f"_chunk-{chunk}"
+                            f"_micr"
+                        )
+
                         out_path = os.path.join(raw_folder, base + ".tiff")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
 
@@ -105,9 +110,33 @@ def czi2bitmapHPC(
                         )
                         bm.write_bids_sidecar(out_path, md)
 
-                        print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
+                        print(f"  -> BIDS: {os.path.relpath(out_path, bids_root_path)}")
 
-                    else:  # "nii"
+                    # ---------- DERIV NIfTI ----------
+                    else:
+                        deriv_folder = os.path.join(
+                            bids_root_path,
+                            "derivatives",
+                            pipeline_name,
+                            f"sub-{bids_info['sub']}",
+                            f"ses-{bids_info['ses']}",
+                            "micr",
+                        )
+                        os.makedirs(deriv_folder, exist_ok=True)
+
+                        resolution = f"ds{downsampling_factor}"
+                        base = (
+                            f"sub-{bids_info['sub']}"
+                            f"_ses-{bids_info['ses']}"
+                            f"_sample-{bids_info['sample']}"
+                            f"_acq-{bids_info['acq']}"
+                            f"_stain-{stain}"
+                            f"_run-{run}"
+                            f"_chunk-{chunk}"
+                            f"_res-{resolution}"
+                            f"_micr"
+                        )
+
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
