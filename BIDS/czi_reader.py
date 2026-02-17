@@ -8,7 +8,7 @@ class MimosaReader:
     correspondence_table = None
     
     @classmethod
-    def loadcorrespondence_table(cls, csv_path):
+    def load_correspondence_table(cls, csv_path):
         """Charge la table de correspondance une seule fois"""
         if cls.correspondence_table is None:
             cls.correspondence_table = {}

@@ -5,6 +5,9 @@ import ancpbids.utils
 from ancpbids import BIDSLayout, DatasetOptions
 import re
 
+
+acq_signature_mapping = {}
+run_context_mapping = {} 
 def initialize_dataset(bids_root_path):
     bids_root_path = os.path.abspath(bids_root_path)
     bids_dataset_path = os.path.join(bids_root_path, "bids_dataset")
@@ -52,8 +55,7 @@ def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
         channel_name: Nom du canal (optionnel). Si fourni, calcule aussi le run.
     
     """
-    acq_signature_mapping = {}
-    run_context_mapping = {}
+    
     sub = summary_meta.get('sub') 
     ses = summary_meta.get('ses') 
     sample = summary_meta.get('sample')
