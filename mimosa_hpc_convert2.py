@@ -1,6 +1,7 @@
 import argparse
 import os
-
+import sys
+sys.path.insert(0, "BIDS")
 from python_scripts import czi_convert2 as czi
 from czi_reader import MimosaReader
 from ancpbids import BIDSLayout
