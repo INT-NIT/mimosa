@@ -1,214 +1,127 @@
-import os
-import ancpbids
-from pathlib import Path
-import ancpbids.utils
-from ancpbids import BIDSLayout, DatasetOptions
-import re
-
-
-acq_signature_mapping = {}
-run_context_mapping = {}
-def initialize_dataset(bids_root_path):
-    bids_root_path = os.path.abspath(bids_root_path)
-    bids_dataset_path = os.path.join(bids_root_path, "bids_dataset")
-    
-    if not os.path.exists(bids_dataset_path):
-        os.makedirs(bids_dataset_path)
-    
-    desc_file = os.path.join(bids_dataset_path, "dataset_description.json")
-    if not os.path.exists(desc_file):
-        desc = {
-            "Name": "bids_dataset",
-            "BIDSVersion": "1.8.0",
-            "DatasetType": "raw"
-        }
-        ancpbids.utils.write_contents(desc_file, desc)
-    
-    options = DatasetOptions(infer_artifact_datatype=True, lazy_loading=True)
-    dataset = ancpbids.load_dataset(bids_dataset_path, options=options)
-    layout = BIDSLayout(bids_dataset_path)
-    
-    print(f"Dataset charge depuis {bids_dataset_path}")
-    return layout, dataset, bids_dataset_path
-
-def create_sourcedata_links(czi_file_path, subject, bids_root_path):
-    """Crée des liens durs vers les CZI originaux dans sourcedata/"""
-    sourcedata_dir = os.path.join(bids_root_path, "sourcedata", f"sub-{subject}")
-    os.makedirs(sourcedata_dir, exist_ok=True)
-    
-    link_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
-    if not os.path.exists(link_path):
-        os.link(os.path.abspath(czi_file_path), link_path)
-        print(f"Lien sourcedata cree: {os.path.basename(link_path)}")
 # bids_manager.py
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+import ancpbids
 
 
+def ensure_dataset_description(bids_root: str, name: str = "MIMOSA microscopy dataset", bids_version: str = "1.8.0"):
+    """Crée dataset_description.json à la racine si absent."""
+    bids_root = Path(bids_root)
+    bids_root.mkdir(parents=True, exist_ok=True)
 
-def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
-    """
-    Calcule toutes les infos BIDS
-    
-    Args:
-        layout: BIDSLayout du dataset
-        summary_meta: Métadonnées extraites du CZI (dict avec sub, ses, sample, acq_sig, etc.)
-        bids_root_path: Chemin racine du dataset BIDS
-        channel_name: Nom du canal (optionnel). Si fourni, calcule aussi le run.
-    
-    """
-    
-    sub = summary_meta.get('sub') 
-    ses = summary_meta.get('ses') 
-    sample = summary_meta.get('sample')
-    acq_sig = summary_meta.get('acq_sig', 'Unknown')
-    
-    existing_entities = layout.get_entities()
-    
-    # 1. ACQ basé sur la signature d'acquisition
-    if acq_sig not in acq_signature_mapping:
-        acqs = existing_entities.get('acq', [])
-        if not acqs:
-            acq_idx = "1"
-        else:
-            numeric_acqs = [int(a) for a in acqs if str(a).isdigit()]
-            acq_idx = str(max(numeric_acqs) + 1) if numeric_acqs else "1"
-        acq_signature_mapping[acq_sig] = acq_idx
-    else:
-        acq_idx = acq_signature_mapping[acq_sig]
-    
-    # 2. RUN basé sur le contexte (seulement si channel_name fourni)
-    run_idx = None
-    if channel_name:
-        import re
-        stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
-        
-        context_key = (sub, ses, sample, acq_idx, stain)
-        
-        if context_key not in run_context_mapping:
-            runs = existing_entities.get('run', [])
-            if not runs:
-                run_idx = "01"
-            else:
-                numeric_runs = [int(r) for r in runs if str(r).isdigit()]
-                run_idx = f"{max(numeric_runs) + 1:02d}" if numeric_runs else "01"
-            run_context_mapping[context_key] = run_idx
-        else:
-            current_run = int(run_context_mapping[context_key])
-            run_idx = f"{current_run + 1:02d}"
-            run_context_mapping[context_key] = run_idx
-    
-    # Construire le résultat
-    result = {
-        'sub': sub,
-        'ses': ses,
-        'sample': sample,
-        'acq': acq_idx,
-        'acq_sig': acq_sig,
-        'bids_root_path': bids_root_path
-    }
-    
-    if run_idx is not None:
-        result['run'] = run_idx
-    
-    return result
-def get_bids_filename(bids_info, channel_name):
-    """Génère le nom de fichier BIDS (nomenclature uniquement)"""
-    stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
-    return f"sub-{bids_info['sub']}_ses-{bids_info['ses']}_sample-{bids_info['sample']}_acq-{bids_info['acq']}_stain-{stain}_run-{bids_info['run']}"
+    desc_path = bids_root / "dataset_description.json"
+    if not desc_path.exists():
+        desc = {
+            "Name": name,
+            "BIDSVersion": bids_version,
+            "DatasetType": "raw",
+        }
+        ancpbids.utils.write_contents(str(desc_path), desc)
 
-def get_channel_path(bids_info, channel_name):
-    """Crée les dossiers et retourne chemin + nom"""
-    folder_path = os.path.join(
-        bids_info['bids_root_path'], 
-        f"sub-{bids_info['sub']}", 
-        f"ses-{bids_info['ses']}", 
-        "micr"
-    )
-    os.makedirs(folder_path, exist_ok=True)
-    
-    root_name = get_bids_filename(bids_info, channel_name)  # Réutilise
-    return folder_path, root_name
 
-def write_bids_sidecar(target_path, metadata):
-    """Crée le fichier .json correspondant"""
+def write_bids_sidecar(target_path: str, metadata: dict):
+    """Crée le fichier .json correspondant (sidecar) à côté du fichier data."""
     json_path = os.path.splitext(target_path)[0] + ".json"
     ancpbids.utils.write_contents(json_path, metadata)
-    print(f"Sidecar JSON cree: {os.path.basename(json_path)}")
 
 
+def initialize_derivatives(bids_root: str, pipeline_name: str = "downsampled", bids_version: str = "1.8.0") -> str:
+    """Crée derivatives/<pipeline_name>/dataset_description.json si absent."""
+    bids_root = Path(bids_root)
+    derivatives_path = bids_root / "derivatives" / pipeline_name
+    derivatives_path.mkdir(parents=True, exist_ok=True)
 
-
-def initialize_derivatives(bids_root_path, pipeline_name="downsampled"):
-    """Initialise le dossier derivatives avec dataset_description.json"""
-    derivatives_path = os.path.join(bids_root_path, "derivatives", pipeline_name)
-    
-    if not os.path.exists(derivatives_path):
-        os.makedirs(derivatives_path)
-        print(f"Dossier derivatives cree: {derivatives_path}")
-    
-    # Créer dataset_description.json pour le pipeline
-    desc_file = os.path.join(derivatives_path, "dataset_description.json")
-    if not os.path.exists(desc_file):
+    desc_file = derivatives_path / "dataset_description.json"
+    if not desc_file.exists():
         desc = {
-            "Name": f"{pipeline_name.capitalize()} microscopy images",
-            "BIDSVersion": "1.8.0",
+            "Name": f"{pipeline_name} microscopy images",
+            "BIDSVersion": bids_version,
             "DatasetType": "derivative",
             "GeneratedBy": [
                 {
                     "Name": "mimosa_hpc_convert",
                     "Version": "1.0",
-                    "Description": f"{pipeline_name} of CZI microscopy images"
+                    "Description": f"{pipeline_name} outputs of CZI microscopy images",
                 }
             ],
-            "SourceDatasets": [
-                {
-                    "URL": "../..",
-                    "Version": "1.0"
-                }
-            ]
+            "SourceDatasets": [{"URL": "../.."}],
         }
-        ancpbids.utils.write_contents(desc_file, desc)
-        print(f"dataset_description.json cree pour {pipeline_name}")
-    
-    return derivatives_path
+        ancpbids.utils.write_contents(str(desc_file), desc)
+
+    return str(derivatives_path)
 
 
-def get_derivative_path(bids_info, channel_name, resolution, pipeline_name="downsampled"):
-    """Génère le chemin pour un fichier dérivé (downsampled)"""
-    derivatives_root = os.path.join(bids_info['bids_root_path'], "derivatives", pipeline_name)
-    
-    folder_path = os.path.join(
-        derivatives_root,
+def sanitize_label(x: str) -> str:
+    """Garde seulement [a-zA-Z0-9], pratique pour stain/acq."""
+    return re.sub(r"[^a-zA-Z0-9]", "", x)
+
+
+def get_raw_micr_folder(bids_root: str, bids_info: dict) -> str:
+    """
+    Raw BIDS (TIFF) :
+    <bids_root>/sub-XX/ses-YYYYMMDD/micr/
+    """
+    folder = Path(bids_root) / f"sub-{bids_info['sub']}" / f"ses-{bids_info['ses']}" / "micr"
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder)
+
+
+def get_deriv_micr_folder(bids_root: str, pipeline_name: str, bids_info: dict) -> str:
+    """
+    Derivatives (NIfTI) :
+    <bids_root>/derivatives/<pipeline>/sub-XX/ses-YYYYMMDD/micr/
+    """
+    folder = Path(bids_root) / "derivatives" / pipeline_name / f"sub-{bids_info['sub']}" / f"ses-{bids_info['ses']}" / "micr"
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder)
+
+
+def build_bids_basename(
+    bids_info: dict,
+    stain: str,
+    run: str,
+    chunk: str,
+    extra_entities: dict | None = None,
+    suffix: str = "micr",
+) -> str:
+    """
+    Construit le nom BIDS de base (sans extension) en respectant l’ordre demandé:
+    sub, ses, sample, acq, stain, run, chunk, (extras), suffix
+    """
+    parts = [
         f"sub-{bids_info['sub']}",
         f"ses-{bids_info['ses']}",
-        "micr"  
-    )
-    
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path, exist_ok=True)
-    
-    import re
-    stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
-    
-    root_name = f"sub-{bids_info['sub']}_ses-{bids_info['ses']}_sample-{bids_info['sample']}_acq-{bids_info['acq']}_stain-{stain}_run-{bids_info['run']}_res-{resolution}_micr"
-    
-    return folder_path, root_name
+        f"sample-{bids_info['sample']}",
+        f"acq-{bids_info['acq']}",
+        f"stain-{sanitize_label(stain)}",
+        f"run-{run}",
+        f"chunk-{chunk}",
+    ]
 
-def prepare_bids_metadata(summary, channel_name, channel_idx, scene_idx):
-    """Prépare les métadonnées pour un fichier BIDS principal"""
-    metadata = summary.copy()
-    metadata['channel_name'] = channel_name
-    metadata['channel_index'] = channel_idx
-    metadata['scene_index'] = scene_idx
-    return metadata
+    if extra_entities:
+        for k, v in extra_entities.items():
+            parts.append(f"{k}-{v}")
+
+    return "_".join(parts) + f"_{suffix}"
 
 
-def prepare_derivative_metadata(summary, channel_name, channel_idx, downsampling_factor):
-    """Prépare les métadonnées pour un fichier derivative"""
-    metadata = summary.copy()
-    metadata['channel_name'] = channel_name
-    metadata['channel_index'] = channel_idx
-    metadata['Resolution'] = f"Downsampled by factor {downsampling_factor}"
-    metadata['DownsamplingFactor'] = downsampling_factor
-    metadata['OriginalResolution'] = summary.get('acq_sig', 'Unknown')
-    metadata['ProcessingPipeline'] = 'downsampled'
-    return metadata
+def prepare_bids_metadata(summary: dict, channel_name: str, channel_idx: int, scene_idx: int) -> dict:
+    """Métadonnées sidecar pour le raw TIFF."""
+    md = dict(summary)
+    md["ChannelName"] = channel_name
+    md["ChannelIndex"] = channel_idx
+    md["SceneIndex"] = scene_idx
+    return md
+
+
+def prepare_derivative_metadata(summary: dict, channel_name: str, channel_idx: int, downsampling_factor: int) -> dict:
+    """Métadonnées sidecar pour les derivatives (NIfTI)."""
+    md = dict(summary)
+    md["ChannelName"] = channel_name
+    md["ChannelIndex"] = channel_idx
+    md["DownsamplingFactor"] = downsampling_factor
+    md["Pipeline"] = "downsampled"
+    return md
