@@ -25,7 +25,6 @@ def main():
     parser.add_argument('-raw', '--raw_path', type=str, help='Path pour le stockage des fichiers lourds')
     args = parser.parse_args()
     
-    # Charger la table de correspondance
     csv_path = 'subjects_correspondence.csv'
     if os.path.exists(csv_path):
         MimosaReader.load_correspondence_table(csv_path)
@@ -67,16 +66,10 @@ def main():
         print(f"\n>>> Traitement de: {filename}")
         print(f"    Sujet: {summary['sub']}, Session: {summary['ses']}, Sample: {summary['sample']}")
         
-        # 1. Créer lien sourcedata
         bm.create_sourcedata_links(full_input_path, summary['sub'], bids_root_path)
         
-        # 2. Recharger le layout pour voir les fichiers déjà créés
         layout = BIDSLayout(bids_root_path)
-
-        # 3. Calculer infos BIDS de base (sans run, sans canal)
-        bids_info = bm.get_bids_info(layout, summary, bids_root_path)
         
-        # 4a. Conversion TIFF (pour BIDS principal - fichiers légers à visualiser)
         channels_info, nb_scenes, bids_infos_per_channel = czi.czi2bitmapHPC(
             input_dir,
             filename, 
@@ -84,11 +77,11 @@ def main():
             downsampling_factor, 
             "tiff",
             layout=layout,
-            bids_info=bids_info,
+            bids_info=summary,           
             bids_root_path=bids_root_path
         )
         
-        # 4b. Conversion NIfTI (pour derivatives - format analyse)
+        
         czi.czi2bitmapHPC(
             input_dir,
             filename, 
@@ -96,7 +89,7 @@ def main():
             downsampling_factor, 
             "nii",
             layout=layout,
-            bids_info=bids_info,
+            bids_info=summary,           
             bids_root_path=bids_root_path
         )
         

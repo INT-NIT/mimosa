@@ -91,6 +91,17 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
         nb_channels = len(channels_info)
         nb_scenes = len(scenes_bounding_rectangle) 
 
+        # Calculer bids_info UNE FOIS par canal, AVANT la boucle des scènes
+        # Ainsi le run est le même pour tous les chunks du même fichier
+        if layout and bids_info and bids_root_path:
+            for c in range(nb_channels):
+                bids_infos_per_channel[c] = bm.get_bids_info(
+                    layout,
+                    bids_info,
+                    bids_root_path,
+                    channel_name=channels_info[c]
+                )
+
         for i in range(0, nb_scenes):
             zoom_factor = float(1.0 / downsampling_factor)
             
@@ -123,15 +134,7 @@ def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor, ouput_forma
                         nib.save(array_img, filename)
 
                     if layout and bids_info and bids_root_path:
-                        channel_bids_info = bm.get_bids_info(
-                            layout, 
-                            bids_info, 
-                            bids_root_path, 
-                            channel_name=channels_info[c]
-                        )
-                        
-                        if c not in bids_infos_per_channel:
-                            bids_infos_per_channel[c] = channel_bids_info
+                        channel_bids_info = bids_infos_per_channel[c]  # Déjà calculé avant la boucle
                         
                         bids_folder, bids_root = bm.get_channel_path(channel_bids_info, channel_name=channels_info[c])
                         

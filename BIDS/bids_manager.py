@@ -45,16 +45,9 @@ def create_sourcedata_links(czi_file_path, subject, bids_root_path):
 
 def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
     """
-    Calcule toutes les infos BIDS
-    
-    Args:
-        layout: BIDSLayout du dataset
-        summary_meta: Métadonnées extraites du CZI (dict avec sub, ses, sample, acq_sig, etc.)
-        bids_root_path: Chemin racine du dataset BIDS
-        channel_name: Nom du canal (optionnel). Si fourni, calcule aussi le run.
-    
+    Calcule les infos BIDS (sub, ses, sample, acq).
+    Si channel_name fourni, calcule aussi run via get_run_for_file().
     """
-    
     sub = summary_meta.get('sub') 
     ses = summary_meta.get('ses') 
     sample = summary_meta.get('sample')
@@ -62,7 +55,7 @@ def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
     
     existing_entities = layout.get_entities()
     
-    # 1. ACQ basé sur la signature d'acquisition
+    # ACQ basé sur la signature d'acquisition
     if acq_sig not in acq_signature_mapping:
         acqs = existing_entities.get('acq', [])
         if not acqs:
@@ -74,28 +67,6 @@ def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
     else:
         acq_idx = acq_signature_mapping[acq_sig]
     
-    # 2. RUN basé sur le contexte (seulement si channel_name fourni)
-    run_idx = None
-    if channel_name:
-        import re
-        stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
-        
-        context_key = (sub, ses, sample, acq_idx, stain)
-        
-        if context_key not in run_context_mapping:
-            runs = existing_entities.get('run', [])
-            if not runs:
-                run_idx = "01"
-            else:
-                numeric_runs = [int(r) for r in runs if str(r).isdigit()]
-                run_idx = f"{max(numeric_runs) + 1:02d}" if numeric_runs else "01"
-            run_context_mapping[context_key] = run_idx
-        else:
-            current_run = int(run_context_mapping[context_key])
-            run_idx = f"{current_run + 1:02d}"
-            run_context_mapping[context_key] = run_idx
-    
-    # Construire le résultat
     result = {
         'sub': sub,
         'ses': ses,
@@ -105,11 +76,30 @@ def get_bids_info(layout, summary_meta, bids_root_path, channel_name=None):
         'bids_root_path': bids_root_path
     }
     
-    if run_idx is not None:
-        result['run'] = run_idx
+    # Run calculé seulement si canal fourni
+    if channel_name:
+        result['run'] = get_run_for_file(sub, ses, sample, acq_idx, channel_name)
     
     return result
-def get_bids_filename(bids_info, channel_name):
+def get_run_for_file(sub, ses, sample, acq_idx, channel_name):
+    """
+    Calcule et mémorise le run pour un fichier CZI + canal donné.
+    A appeler UNE SEULE FOIS par fichier CZI, avant la boucle des scènes.
+    Le même run sera utilisé pour tous les chunks et les deux formats (tiff + nii).
+    """
+    stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
+    context_key = (sub, ses, sample, acq_idx, stain)
+    
+    if context_key not in run_context_mapping:
+        # Première fois pour ce contexte → run-01
+        run_context_mapping[context_key] = 1
+    else:
+        # Fichier suivant avec la même config → incrémenter
+        run_context_mapping[context_key] += 1
+    
+    return f"{run_context_mapping[context_key]:02d}"
+
+
     """Génère le nom de fichier BIDS (nomenclature uniquement)"""
     stain = re.sub(r'[^a-zA-Z0-9]', '', channel_name)
     return f"sub-{bids_info['sub']}_ses-{bids_info['ses']}_sample-{bids_info['sample']}_acq-{bids_info['acq']}_stain-{stain}_run-{bids_info['run']}"
