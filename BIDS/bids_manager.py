@@ -7,14 +7,15 @@ import re
 
 
 acq_signature_mapping = {}
-run_context_mapping = {} 
+run_context_mapping = {}
 def initialize_dataset(bids_root_path):
     bids_root_path = os.path.abspath(bids_root_path)
+    bids_dataset_path = os.path.join(bids_root_path, "bids_dataset")
     
-    if not os.path.exists(bids_root_path):
-        os.makedirs(bids_root_path)
+    if not os.path.exists(bids_dataset_path):
+        os.makedirs(bids_dataset_path)
     
-    desc_file = os.path.join(bids_root_path, "dataset_description.json")
+    desc_file = os.path.join(bids_dataset_path, "dataset_description.json")
     if not os.path.exists(desc_file):
         desc = {
             "Name": "bids_dataset",
@@ -24,11 +25,11 @@ def initialize_dataset(bids_root_path):
         ancpbids.utils.write_contents(desc_file, desc)
     
     options = DatasetOptions(infer_artifact_datatype=True, lazy_loading=True)
-    dataset = ancpbids.load_dataset(bids_root_path, options=options)
-    layout = BIDSLayout(bids_root_path)
+    dataset = ancpbids.load_dataset(bids_dataset_path, options=options)
+    layout = BIDSLayout(bids_dataset_path)
     
-    print(f"Dataset charge depuis {bids_root_path}")
-    return layout, dataset, bids_root_path
+    print(f"Dataset charge depuis {bids_dataset_path}")
+    return layout, dataset, bids_dataset_path
 
 def create_sourcedata_links(czi_file_path, subject, bids_root_path):
     """Crée des liens durs vers les CZI originaux dans sourcedata/"""

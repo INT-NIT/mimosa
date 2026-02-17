@@ -19,9 +19,9 @@ def dir_path(path):
 def main():
     parser = argparse.ArgumentParser(description='Process for CZI conversion to BIDS')
     parser.add_argument('-i', '--input_path', type=dir_path, required=True, help='Path contenant les .czi')
-    parser.add_argument('-f', '--output_format', type=str, required=False, help='tiff ou nii (ignoré: on fait toujours les deux)')
+    parser.add_argument('-f', '--output_format', type=str, required=True, help='tiff ou nii')
     parser.add_argument('-df', '--downsampling_factor', type=int, required=True, help='Facteur 2^N')
-    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root of  Dataset BIDS')
+    parser.add_argument('-o', '--output_path', type=str, required=True, help='Root du Dataset BIDS')
     parser.add_argument('-raw', '--raw_path', type=str, help='Path pour le stockage des fichiers lourds')
     args = parser.parse_args()
     
@@ -70,36 +70,23 @@ def main():
         # 1. Créer lien sourcedata
         bm.create_sourcedata_links(full_input_path, summary['sub'], bids_root_path)
         
-        # 2. Recharger le layout pour voir les fichiers déjà créés
+        # 2. RECHARGER le layout pour voir les fichiers déjà créés
         layout = BIDSLayout(bids_root_path)
 
-        # 3. Calculer infos BIDS de base (sans run, sans canal)
+        # 3. Calculer infos BIDS (run s'incrémente maintenant)
         bids_info = bm.get_bids_info(layout, summary, bids_root_path)
         
-        # 4a. Conversion TIFF (pour BIDS principal - fichiers légers à visualiser)
-        channels_info, nb_scenes, bids_infos_per_channel = czi.czi2bitmapHPC(
-            input_dir,
-            filename, 
-            raw_output_path, 
-            downsampling_factor, 
-            "tiff",
-            layout=layout,
-            bids_info=bids_info,
-            bids_root_path=bids_root_path
-        )
-        
-        # 4b. Conversion NIfTI (pour derivatives - format analyse)
+        # 4. Conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename, 
             raw_output_path, 
             downsampling_factor, 
-            "nii",
-            layout=layout,
-            bids_info=bids_info,
-            bids_root_path=bids_root_path
+            args.output_format,
+            layout=layout,              
+            bids_info=bids_info ,   
+            bids_root_path=bids_root_path 
         )
-        
         
     
     
