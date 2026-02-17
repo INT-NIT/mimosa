@@ -29,23 +29,17 @@ def czi2bitmapHPC(
     czifilename: str,
     bids_root_path: str,
     bids_info: dict,
-    run_counter: dict,
     downsampling_factor: int,
     output_format: str,
     pipeline_name: str = "downsampled",
+    summary_for_json: dict | None = None,
 ):
-    """
-    - output_format == "tiff" : écrit dans <bids_root_path>/sub-*/ses-*/micr/
-    - output_format == "nii"  : écrit dans <bids_root_path>/derivatives/<pipeline>/sub-*/ses-*/micr/
-    """
-
-    output_format = output_format.strip().lower()
-    if output_format not in ("tiff", "nii"):
-        raise ValueError("output_format must be 'tiff' or 'nii'")
+    
+    if summary_for_json is None:
+        summary_for_json = {}
 
     czifile_path = os.path.join(pathin, czifilename)
 
-    # derivatives ok (dataset_description raw déjà fait dans initialize_dataset)
     bm.initialize_derivatives(bids_root_path, pipeline_name=pipeline_name)
 
     with pyczi.open_czi(czifile_path) as czidoc:
@@ -54,100 +48,53 @@ def czi2bitmapHPC(
 
         zoom_factor = float(1.0 / downsampling_factor)
 
+        # dossier cible selon format
+        if output_format == "tiff":
+            out_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
+        elif output_format == "nii":
+            out_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info)
+        else:
+            raise ValueError("output_format must be 'tiff' or 'nii'")
+
         for scene_idx in range(len(scenes)):
             chunk = f"{scene_idx:02d}"
             rect = scenes[scene_idx]
             roi = (rect[0], rect[1], rect[2], rect[3])
 
-            # lire chaque channel de cette scene
             channel_images = {}
             for c in range(nb_channels):
                 channel_images[c] = czidoc.read(
-                    roi=roi,
-                    plane={"C": c},
-                    scene=scene_idx,
-                    zoom=zoom_factor,
+                    roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor
                 )
 
             with alive_bar(nb_channels, force_tty=True, title=f"Scene {scene_idx}") as bar:
                 for c in range(nb_channels):
-                    channel_name = f"C{c}"   # stable
+                    channel_name = f"C{c}"   
                     stain = channel_name
 
-                    # run global: évite collisions (comme tu faisais)
-                    run_counter["run"] = run_counter.get("run", 0) + 1
-                    run = f"{run_counter['run']:02d}"
+                    base = bm.build_bids_basename(
+                        bids_info=bids_info,
+                        stain=stain,
+                        chunk=chunk,
+                        suffix="FLUO",   
+                    )
 
-                    # ---------- RAW TIFF ----------
                     if output_format == "tiff":
-                        raw_folder = os.path.join(
-                            bids_root_path,
-                            f"sub-{bids_info['sub']}",
-                            f"ses-{bids_info['ses']}",
-                            "micr",
-                        )
-                        os.makedirs(raw_folder, exist_ok=True)
-
-                        base = (
-                            f"sub-{bids_info['sub']}"
-                            f"_ses-{bids_info['ses']}"
-                            f"_sample-{bids_info['sample']}"
-                            f"_acq-{bids_info['acq']}"
-                            f"_stain-{stain}"
-                            f"_run-{run}"
-                            f"_chunk-{chunk}"
-                            f"_micr"
-                        )
-
-                        out_path = os.path.join(raw_folder, base + ".tiff")
+                        out_path = os.path.join(out_folder, base + ".tiff")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
 
-                        md = bm.prepare_bids_metadata(
-                            bids_info.get("summary_for_json", {}),
-                            channel_name,
-                            c,
-                            scene_idx
-                        )
+                        md = bm.prepare_bids_metadata(summary_for_json, channel_name, c, scene_idx)
                         bm.write_bids_sidecar(out_path, md)
 
                         print(f"  -> BIDS: {os.path.relpath(out_path, bids_root_path)}")
 
-                    # ---------- DERIV NIfTI ----------
-                    else:
-                        deriv_folder = os.path.join(
-                            bids_root_path,
-                            "derivatives",
-                            pipeline_name,
-                            f"sub-{bids_info['sub']}",
-                            f"ses-{bids_info['ses']}",
-                            "micr",
-                        )
-                        os.makedirs(deriv_folder, exist_ok=True)
-
-                        resolution = f"ds{downsampling_factor}"
-                        base = (
-                            f"sub-{bids_info['sub']}"
-                            f"_ses-{bids_info['ses']}"
-                            f"_sample-{bids_info['sample']}"
-                            f"_acq-{bids_info['acq']}"
-                            f"_stain-{stain}"
-                            f"_run-{run}"
-                            f"_chunk-{chunk}"
-                            f"_res-{resolution}"
-                            f"_micr"
-                        )
-
-                        out_path = os.path.join(deriv_folder, base + ".nii.gz")
+                    else:  # nii => derivatives
+                        out_path = os.path.join(out_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
                         nib.save(img, out_path)
 
-                        md = bm.prepare_derivative_metadata(
-                            bids_info.get("summary_for_json", {}),
-                            channel_name,
-                            c,
-                            downsampling_factor,
-                        )
+                        md = bm.prepare_derivative_metadata(summary_for_json, channel_name, c, downsampling_factor)
                         bm.write_bids_sidecar(out_path, md)
 
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")

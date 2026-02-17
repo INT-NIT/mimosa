@@ -24,10 +24,6 @@ def main():
     parser.add_argument("-o", "--output_path", type=str, required=True, help="Root du Dataset BIDS")
     args = parser.parse_args()
 
-    output_format = args.output_format.strip().lower()
-    if output_format not in ("tiff", "nii"):
-        raise ValueError("output_format doit être 'tiff' ou 'nii'")
-
     # Charger la table de correspondance
     csv_path = "subjects_correspondence.csv"
     if os.path.exists(csv_path):
@@ -39,7 +35,9 @@ def main():
     clean_output_path = args.output_path.rstrip("/")
     layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path)
 
-    bm.initialize_derivatives(bids_root_path, pipeline_name="downsampled")
+    output_format = args.output_format.lower().strip()
+    if output_format not in ("tiff", "nii"):
+        raise ValueError("output_format doit etre 'tiff' ou 'nii'")
 
     downsampling_factor = 2 ** args.downsampling_factor
 
@@ -54,8 +52,6 @@ def main():
         print("ATTENTION: Aucun fichier .czi trouve")
         return
 
-    run_counter = {}  # compteur global pour run
-
     for input_dir, filename in files_to_process:
         full_input_path = os.path.join(input_dir, filename)
 
@@ -67,26 +63,26 @@ def main():
         print(f"\n>>> Traitement de: {filename}")
         print(f"    Sujet: {summary['sub']}, Session: {summary['ses']}, Sample: {summary['sample']}")
 
-        # 1) lien sourcedata
+        # 1) sourcedata
         bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
 
-        # 2) recharger layout (si tu relies run/acq à ce qui existe déjà)
+        # 2) reload layout (voir ce qui existe déjà)
         layout = BIDSLayout(bids_root_path)
 
-        # 3) infos BIDS
-        bids_info = bm.get_bids_info(layout, summary, bids_root_path)
-        bids_info["summary_for_json"] = summary  # pour tes sidecars
+        # 3) bids_info + RUN (1 fois par CZI)
+        czi_id = os.path.splitext(filename)[0]  # id du fichier
+        bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
 
-        # 4) conversion (appel avec la bonne signature)
+        # 4) conversion
         czi.czi2bitmapHPC(
-            pathin=input_dir,
-            czifilename=filename,
-            bids_root_path=bids_root_path,
-            bids_info=bids_info,
-            run_counter=run_counter,
-            downsampling_factor=downsampling_factor,
-            output_format=output_format,
+            input_dir,
+            filename,
+            bids_root_path,          
+            bids_info,
+            downsampling_factor,
+            output_format,
             pipeline_name="downsampled",
+            summary_for_json=summary,
         )
 
     print("\n[SUCCESS] Conversion terminee")
