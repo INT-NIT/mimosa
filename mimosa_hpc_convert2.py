@@ -100,15 +100,7 @@ def main():
             bids_root_path=bids_root_path
         )
         
-        # 5. Créer les JSON sidecars (utilise les bids_infos calculés pendant la conversion)
-        bm.create_channel_sidecars(
-            bids_infos_per_channel,
-            summary,
-            channels_info,
-            nb_scenes,
-            downsampling_factor
-        )
-        
+       
     
     
     
