@@ -56,6 +56,8 @@ def main():
     if len(files_to_process) == 0:
         print("ATTENTION: Aucun fichier .czi trouve")
         return
+    
+    samples_rows = []
 
     for input_dir, filename in files_to_process:
         full_input_path = os.path.join(input_dir, filename)
@@ -74,6 +76,12 @@ def main():
 
         czi_id = os.path.splitext(filename)[0]
         bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
+        sample_id = f"sample-{bids_info['sample']}"
+        participant_id = f"sub-{bids_info['sub']}"
+        samples_rows.append({
+            "sample_id": sample_id,
+            "participant_id": participant_id
+        })
 
         sub = bids_info["sub"]
         ses_id = f"ses-{bids_info['ses']}"
@@ -97,7 +105,7 @@ def main():
         for ses_id in sorted(d.keys()):  
             rows.append({"session_id": ses_id, "acq_time": d[ses_id]})
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
-
+        bmeta.write_samples_tsv(bids_root_path, samples_rows)
     print("\n[SUCCESS] Conversion terminee")
 
 

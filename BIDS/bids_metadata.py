@@ -105,6 +105,43 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
     print(f"sessions.tsv cree: sub-{subject}/sessions.tsv")
 
+def write_samples_tsv(bids_root: str, rows: list[dict]) -> None:
+   
+    path = os.path.join(bids_root, "samples.tsv")
+
+    # éviter doublons si déjà écrit
+    existing = set()
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f.readlines()[1:]:
+                parts = line.strip().split("\t")
+                if len(parts) >= 2:
+                    existing.add((parts[0], parts[1]))
+
+    lines = []
+    if not os.path.exists(path):
+        lines.append("sample_id\tparticipant_id\tsample_type\tsample_info\tsample_preparation")
+
+    for r in rows:
+        key = (r["sample_id"], r["participant_id"])
+        if key in existing:
+            continue
+
+        line = (
+            f"{r['sample_id']}\t"
+            f"{r['participant_id']}\t"
+            f"n/a\t"
+            f"n/a\t"
+            f"n/a"
+        )
+        lines.append(line)
+
+    if lines:
+        mode = "a" if os.path.exists(path) else "w"
+        with open(path, mode, encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+        print("samples.tsv mis a jour") 
 
 def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
     json_path = os.path.splitext(image_path)[0] + ".json"
