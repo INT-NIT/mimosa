@@ -1,27 +1,20 @@
 import os
 import re
 import ancpbids
-import ancpbids.utils
 from ancpbids import BIDSLayout, DatasetOptions
 
 acq_signature_mapping = {}
+
 run_file_mapping = {}
 
+session_time_mapping = {}
+
+
 def initialize_dataset(bids_root_path):
+  
     bids_root_path = os.path.abspath(bids_root_path)
     bids_dataset_path = os.path.join(bids_root_path, "bids_dataset")
-
-    if not os.path.exists(bids_dataset_path):
-        os.makedirs(bids_dataset_path)
-
-    desc_file = os.path.join(bids_dataset_path, "dataset_description.json")
-    if not os.path.exists(desc_file):
-        desc = {
-            "Name": "bids_dataset",
-            "BIDSVersion": "1.8.0",
-            "DatasetType": "raw",
-        }
-        ancpbids.utils.write_contents(desc_file, desc)
+    os.makedirs(bids_dataset_path, exist_ok=True)
 
     options = DatasetOptions(infer_artifact_datatype=True, lazy_loading=True)
     dataset = ancpbids.load_dataset(bids_dataset_path, options=options)
@@ -42,49 +35,30 @@ def create_sourcedata_links(czi_file_path, subject, bids_root_path):
         print(f"Lien sourcedata cree: {os.path.basename(link_path)}")
 
 
-def initialize_derivatives(bids_root_path, pipeline_name="downsampled"):
-    """Initialise le dossier derivatives avec dataset_description.json"""
-    derivatives_path = os.path.join(bids_root_path, "derivatives", pipeline_name)
+def _session_index_for_time(sub: str, acq_time: str) -> str:
+ 
+    if sub not in session_time_mapping:
+        session_time_mapping[sub] = {}
 
-    if not os.path.exists(derivatives_path):
-        os.makedirs(derivatives_path)
-        print(f"Dossier derivatives cree: {derivatives_path}")
+    if acq_time not in session_time_mapping[sub]:
+        next_idx = len(session_time_mapping[sub]) + 1
+        session_time_mapping[sub][acq_time] = f"{next_idx:02d}"
 
-    desc_file = os.path.join(derivatives_path, "dataset_description.json")
-    if not os.path.exists(desc_file):
-        desc = {
-            "Name": f"{pipeline_name.capitalize()} microscopy images",
-            "BIDSVersion": "1.8.0",
-            "DatasetType": "derivative",
-            "GeneratedBy": [
-                {
-                    "Name": "mimosa_hpc_convert",
-                    "Version": "1.0",
-                    "Description": f"{pipeline_name} of CZI microscopy images",
-                }
-            ],
-            "SourceDatasets": [{"URL": "../..", "Version": "1.0"}],
-        }
-        ancpbids.utils.write_contents(desc_file, desc)
-        print(f"dataset_description.json cree pour {pipeline_name}")
-
-    return derivatives_path
+    return session_time_mapping[sub][acq_time]
 
 
 def get_bids_info(layout, summary_meta, bids_root_path, czi_id=None):
-    """
-    Calcule infos BIDS.
-    IMPORTANT: run est calculé UNE FOIS par fichier CZI (czi_id),
-    et reste identique pour toutes les scenes/channels/outputs issus de ce CZI.
-    """
+ 
     sub = summary_meta.get("sub")
-    ses = summary_meta.get("ses")
+    acq_time = summary_meta.get("ses")  # date réelle
     sample = summary_meta.get("sample")
     acq_sig = summary_meta.get("acq_sig", "Unknown")
 
+    ses_idx = _session_index_for_time(sub, acq_time)
+
     existing_entities = layout.get_entities()
 
-    # 1) ACQ index basé sur la signature microscope/scaling
+    # ACQ index (signature microscope/scaling)
     if acq_sig not in acq_signature_mapping:
         acqs = existing_entities.get("acq", [])
         if not acqs:
@@ -96,12 +70,11 @@ def get_bids_info(layout, summary_meta, bids_root_path, czi_id=None):
     else:
         acq_idx = acq_signature_mapping[acq_sig]
 
-    # 2) RUN index basé sur le fichier CZI (même CZI => même run)
-    # czi_id: idéalement le filename sans extension
+    # RUN index (1 fois par fichier CZI)
     if czi_id is None:
         czi_id = "UNKNOWN_CZI"
 
-    context_key = (sub, ses, sample, acq_idx, czi_id)
+    context_key = (sub, ses_idx, sample, acq_idx, czi_id)
 
     if context_key not in run_file_mapping:
         runs = existing_entities.get("run", [])
@@ -116,7 +89,8 @@ def get_bids_info(layout, summary_meta, bids_root_path, czi_id=None):
 
     return {
         "sub": sub,
-        "ses": ses,
+        "ses": ses_idx,        # ses-01, ses-02...
+        "acq_time": acq_time,  # date réelle
         "sample": sample,
         "acq": acq_idx,
         "acq_sig": acq_sig,
@@ -126,12 +100,8 @@ def get_bids_info(layout, summary_meta, bids_root_path, czi_id=None):
 
 
 def build_bids_basename(bids_info, stain, chunk, suffix="FLUO"):
-    """
-    Nom de base BIDS: ..._run-XX_chunk-YY_SUFFIX
-    suffix demandé = FLUO
-    """
+    """sub-..._ses-.._..._run-.._chunk-.._FLUO"""
     stain_clean = re.sub(r"[^a-zA-Z0-9]", "", stain)
-
     return (
         f"sub-{bids_info['sub']}"
         f"_ses-{bids_info['ses']}"
@@ -166,4 +136,3 @@ def get_derivative_folder(bids_root_path, pipeline_name, bids_info):
     )
     os.makedirs(folder_path, exist_ok=True)
     return folder_path
-

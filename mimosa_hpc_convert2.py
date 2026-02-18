@@ -8,6 +8,7 @@ from python_scripts import czi_convert2 as czi
 from czi_reader import MimosaReader
 from ancpbids import BIDSLayout
 import bids_manager as bm
+import bids_metadata as bmeta
 
 
 def dir_path(path):
@@ -22,9 +23,27 @@ def main():
     parser.add_argument("-f", "--output_format", type=str, required=True, help="tiff ou nii")
     parser.add_argument("-df", "--downsampling_factor", type=int, required=True, help="Facteur 2^N")
     parser.add_argument("-o", "--output_path", type=str, required=True, help="Root du Dataset BIDS")
+    parser.add_argument("-y", "--yaml", type=str, default="metadata.yml", help="Fichier YAML metadata")
     args = parser.parse_args()
 
-    # Charger la table de correspondance
+    output_format = args.output_format.lower().strip()
+    if output_format not in ("tiff", "nii"):
+        raise ValueError("output_format doit etre 'tiff' ou 'nii'")
+
+    # init dataset (dans output_path/bids_dataset)
+    clean_output_path = args.output_path.rstrip("/")
+    layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path)
+
+    # YAML -> fichiers globaux BIDS
+    if os.path.exists(args.yaml):
+        cfg = bmeta.load_metadata_config(args.yaml)
+        bmeta.create_dataset_description(bids_root_path, cfg)
+        bmeta.create_participants_files(bids_root_path, cfg)
+        bmeta.create_derivatives_descriptions(bids_root_path, cfg)
+    else:
+        print(f"Attention: YAML introuvable: {args.yaml}")
+
+    # table correspondence (si tu l’utilises toujours)
     csv_path = "subjects_correspondence.csv"
     if os.path.exists(csv_path):
         MimosaReader.load_correspondence_table(csv_path)
@@ -32,15 +51,12 @@ def main():
     else:
         print(f"Attention: {csv_path} introuvable")
 
-    clean_output_path = args.output_path.rstrip("/")
-    layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path)
-
-    output_format = args.output_format.lower().strip()
-    if output_format not in ("tiff", "nii"):
-        raise ValueError("output_format doit etre 'tiff' ou 'nii'")
-
     downsampling_factor = 2 ** args.downsampling_factor
 
+    # collect sessions pour écrire sessions.tsv à la fin
+    sessions_by_sub = {}  # sub -> dict(ses_idx -> acq_time)
+
+    # collect CZI
     files_to_process = []
     for root, dirs, files in os.walk(args.input_path):
         for file in files:
@@ -61,28 +77,43 @@ def main():
             summary = reader.get_summary()
 
         print(f"\n>>> Traitement de: {filename}")
-        print(f"    Sujet: {summary['sub']}, Session: {summary['ses']}, Sample: {summary['sample']}")
+        print(f"    Sujet: {summary['sub']}, Session(date): {summary['ses']}, Sample: {summary['sample']}")
 
-        # 1) sourcedata
+        # sourcedata
         bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
 
-        # 2) reload layout (voir ce qui existe déjà)
+        # reload layout
         layout = BIDSLayout(bids_root_path)
 
-        # 3) bids_info + RUN (1 fois par CZI)
-        czi_id = os.path.splitext(filename)[0]  # id du fichier
+        # run 1 fois par CZI
+        czi_id = os.path.splitext(filename)[0]
         bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
 
+        # stocker sessions
+        sub = bids_info["sub"]
+        ses_id = f"ses-{bids_info['ses']}"
+        acq_time = bids_info["acq_time"]
+        sessions_by_sub.setdefault(sub, {})
+        sessions_by_sub[sub][ses_id] = acq_time
+
+        # conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename,
-            bids_root_path,          
+            bids_root_path,
             bids_info,
             downsampling_factor,
             output_format,
             pipeline_name="downsampled",
             summary_for_json=summary,
         )
+
+    # écrire sessions.tsv par sujet
+    for sub, d in sessions_by_sub.items():
+        rows = []
+        for ses_id in sorted(d.keys()):  # ses-01, ses-02...
+            rows.append({"session_id": ses_id, "acq_time": d[ses_id]})
+        bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
 
     print("\n[SUCCESS] Conversion terminee")
 
