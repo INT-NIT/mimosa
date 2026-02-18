@@ -44,9 +44,7 @@ def czi2bitmapHPC(
     write_tif = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
-    # derivatives seulement si on écrit du nii
-    if write_nii:
-        bm.initialize_derivatives(bids_root_path, pipeline_name=pipeline_name)
+    
 
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
