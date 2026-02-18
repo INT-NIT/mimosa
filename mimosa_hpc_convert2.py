@@ -27,8 +27,8 @@ def main():
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
-    if output_format not in ("tiff", "nii","both"):
-        raise ValueError("output_format doit etre 'tiff' ou 'nii'")
+    if output_format not in ("tiff", "nii", "both"):
+        raise ValueError("output_format doit etre 'tiff', 'nii' ou 'both'")
 
     clean_output_path = args.output_path.rstrip("/")
 
@@ -86,9 +86,8 @@ def main():
             bids_info,
             downsampling_factor,
             output_format,
-            pipeline_name="downsampled",
-            summary_for_json=summary,
-        )
+            pipeline_name="downsampled"
+            )
 
     for sub, d in sessions_by_sub.items():
         rows = []
