@@ -2,6 +2,7 @@ import os
 import re
 import ancpbids
 from ancpbids import BIDSLayout, DatasetOptions
+import bids_metadata as bmeta
 
 acq_signature_mapping = {}
 
@@ -10,11 +11,19 @@ run_file_mapping = {}
 session_time_mapping = {}
 
 
-def initialize_dataset(bids_root_path):
-  
+def initialize_dataset(bids_root_path, yaml_path="metadata.yml"):
+   
     bids_root_path = os.path.abspath(bids_root_path)
     bids_dataset_path = os.path.join(bids_root_path, "bids_dataset")
     os.makedirs(bids_dataset_path, exist_ok=True)
+
+    if yaml_path and os.path.exists(yaml_path):
+        cfg = bmeta.load_metadata_config(yaml_path)
+        bmeta.create_dataset_description(bids_dataset_path, cfg)
+        bmeta.create_participants_files(bids_dataset_path, cfg)
+        bmeta.create_derivatives_descriptions(bids_dataset_path, cfg)
+    else:
+        print(f"Attention: YAML introuvable: {yaml_path}")
 
     options = DatasetOptions(infer_artifact_datatype=True, lazy_loading=True)
     dataset = ancpbids.load_dataset(bids_dataset_path, options=options)
@@ -25,14 +34,17 @@ def initialize_dataset(bids_root_path):
 
 
 def create_sourcedata_links(czi_file_path, subject, bids_root_path):
-    """Crée des liens durs vers les CZI originaux dans sourcedata/"""
+    
     sourcedata_dir = os.path.join(bids_root_path, "sourcedata", f"sub-{subject}")
     os.makedirs(sourcedata_dir, exist_ok=True)
 
-    link_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
-    if not os.path.exists(link_path):
-        os.link(os.path.abspath(czi_file_path), link_path)
-        print(f"Lien sourcedata cree: {os.path.basename(link_path)}")
+    placeholder_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
+
+    # crée ou écrase en fichier vide (0 octet)
+    with open(placeholder_path, "w"):
+        pass
+
+    print(f"Placeholder sourcedata cree (0 octet): {os.path.basename(placeholder_path)}")
 
 
 def _session_index_for_time(sub: str, acq_time: str) -> str:

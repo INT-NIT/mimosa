@@ -32,14 +32,16 @@ def czi2bitmapHPC(
     downsampling_factor: int,
     output_format: str,
     pipeline_name: str = "downsampled",
-    summary_for_json: dict | None = None,
 ):
    
     czifile_path = os.path.join(pathin, czifilename)
 
     output_format = output_format.lower().strip()
-    if output_format not in ("tiff", "nii"):
-        raise ValueError("output_format must be 'tiff' or 'nii'")
+    if output_format not in ("tiff", "nii", "both"):
+        raise ValueError("output_format must be 'tiff', 'nii' or 'both'")
+
+    write_tiff = output_format in ("tiff", "both")
+    write_nii = output_format in ("nii", "both")
 
     # derivatives seulement si on écrit du nii
     if output_format == "nii":
@@ -76,12 +78,12 @@ def czi2bitmapHPC(
                         suffix="FLUO",
                     )
 
-                    if output_format == "tiff":
+                    if write_tiff:
                         out_path = os.path.join(raw_folder, base + ".tiff")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
 
-                    else:  # nii
+                    if write_nii:
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))

@@ -30,21 +30,11 @@ def main():
     if output_format not in ("tiff", "nii"):
         raise ValueError("output_format doit etre 'tiff' ou 'nii'")
 
-    # init dataset (dans output_path/bids_dataset)
     clean_output_path = args.output_path.rstrip("/")
-    layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path)
 
-    # YAML -> fichiers globaux BIDS
-    if os.path.exists(args.yaml):
-        cfg = bmeta.load_metadata_config(args.yaml)
-        bmeta.create_dataset_description(bids_root_path, cfg)
-        bmeta.create_participants_files(bids_root_path, cfg)
-        bmeta.create_derivatives_descriptions(bids_root_path, cfg)
-    else:
-        print(f"Attention: YAML introuvable: {args.yaml}")
+    layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml)
 
-    # table correspondence (si tu l’utilises toujours)
-    csv_path = "subjects_correspondence.csv"
+    csv_path = "/DATA/mimosa/mimosa/externe_metadata/subjects_correspondence.csv"
     if os.path.exists(csv_path):
         MimosaReader.load_correspondence_table(csv_path)
         print(f"Table de correspondance chargee depuis {csv_path}")
@@ -53,10 +43,7 @@ def main():
 
     downsampling_factor = 2 ** args.downsampling_factor
 
-    # collect sessions pour écrire sessions.tsv à la fin
-    sessions_by_sub = {}  # sub -> dict(ses_idx -> acq_time)
-
-    # collect CZI
+    sessions_by_sub = {}  
     files_to_process = []
     for root, dirs, files in os.walk(args.input_path):
         for file in files:
@@ -79,24 +66,19 @@ def main():
         print(f"\n>>> Traitement de: {filename}")
         print(f"    Sujet: {summary['sub']}, Session(date): {summary['ses']}, Sample: {summary['sample']}")
 
-        # sourcedata
         bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
 
-        # reload layout
         layout = BIDSLayout(bids_root_path)
 
-        # run 1 fois par CZI
         czi_id = os.path.splitext(filename)[0]
         bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
 
-        # stocker sessions
         sub = bids_info["sub"]
         ses_id = f"ses-{bids_info['ses']}"
         acq_time = bids_info["acq_time"]
         sessions_by_sub.setdefault(sub, {})
         sessions_by_sub[sub][ses_id] = acq_time
 
-        # conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename,
@@ -108,7 +90,6 @@ def main():
             summary_for_json=summary,
         )
 
-    # écrire sessions.tsv par sujet
     for sub, d in sessions_by_sub.items():
         rows = []
         for ses_id in sorted(d.keys()):  # ses-01, ses-02...
