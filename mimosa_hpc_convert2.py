@@ -46,6 +46,8 @@ def main():
     sessions_by_sub = {}  
     files_to_process = []
     for root, dirs, files in os.walk(args.input_path):
+        if  "sourcedata" in root or "derivatives" in root:
+            continue
         for file in files:
             if file.endswith(".czi"):
                 files_to_process.append((root, file))
