@@ -34,18 +34,21 @@ def initialize_dataset(bids_root_path, yaml_path="metadata.yml"):
 
 
 def create_sourcedata_links(czi_file_path, subject, bids_root_path):
-    
+    """Crée un fichier placeholder vide dans sourcedata/"""
     sourcedata_dir = os.path.join(bids_root_path, "sourcedata", f"sub-{subject}")
     os.makedirs(sourcedata_dir, exist_ok=True)
 
     placeholder_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
-
-    # crée ou écrase en fichier vide (0 octet)
+    
+    # Ne rien faire si le fichier existe déjà
+    if os.path.exists(placeholder_path):
+        return
+    
+    # Créer le placeholder vide
     with open(placeholder_path, "w"):
         pass
-
-    print(f"Placeholder sourcedata cree (0 octet): {os.path.basename(placeholder_path)}")
-
+    
+    print(f"    Placeholder: {os.path.basename(placeholder_path)}")
 
 def _session_index_for_time(sub: str, acq_time: str) -> str:
  
