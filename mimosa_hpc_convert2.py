@@ -24,6 +24,7 @@ def main():
     parser.add_argument("-df", "--downsampling_factor", type=int, required=True, help="Facteur 2^N")
     parser.add_argument("-o", "--output_path", type=str, required=True, help="Root du Dataset BIDS")
     parser.add_argument("-y", "--yaml", type=str, default="metadata.yml", help="Fichier YAML metadata")
+    parser.add_argument("-c", "--correspondence_csv",type=str,default="/DATA/mimosa/mimosa/externe_metadata/subjects_correspondence.csv",help="Chemin vers table de correspondance ")
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -34,12 +35,15 @@ def main():
 
     layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml)
 
-    csv_path = "/DATA/mimosa/mimosa/externe_metadata/subjects_correspondence.csv"
-    if os.path.exists(csv_path):
-        MimosaReader.load_correspondence_table(csv_path)
-        print(f"Table de correspondance chargee depuis {csv_path}")
+    if args.correspondence_csv:
+        csv_path = args.correspondence_csv
+        if os.path.exists(csv_path):
+            MimosaReader.load_correspondence_table(csv_path)
+            print(f"Table de correspondance chargee depuis {csv_path}")
+        else:
+            print(f"Attention: {csv_path} introuvable")
     else:
-        print(f"Attention: {csv_path} introuvable")
+        print("Table de correspondance non fournie (ok si pas necessaire)")
 
     downsampling_factor = 2 ** args.downsampling_factor
 
