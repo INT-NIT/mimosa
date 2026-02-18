@@ -79,7 +79,7 @@ def czi2bitmapHPC(
                     )
 
                     if write_tiff:
-                        out_path = os.path.join(raw_folder, base + ".tiff")
+                        out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
 
