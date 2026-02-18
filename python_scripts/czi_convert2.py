@@ -9,6 +9,7 @@ from pylibCZIrw import czi as pyczi
 from alive_progress import alive_bar
 
 import bids_manager as bm
+import bids_metadata as bmeta
 
 
 def get_nb_channels(czidoc) -> int:
@@ -83,19 +84,19 @@ def czi2bitmapHPC(
                         out_path = os.path.join(out_folder, base + ".tiff")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
 
-                        md = bm.prepare_bids_metadata(summary_for_json, channel_name, c, scene_idx)
+                        md = bmeta.prepare_bids_metadata(summary_for_json, channel_name, c, scene_idx)
                         bm.write_bids_sidecar(out_path, md)
 
                         print(f"  -> BIDS: {os.path.relpath(out_path, bids_root_path)}")
 
-                    else:  # nii => derivatives
+                    else:  
                         out_path = os.path.join(out_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
                         nib.save(img, out_path)
 
-                        md = bm.prepare_derivative_metadata(summary_for_json, channel_name, c, downsampling_factor)
-                        bm.write_bids_sidecar(out_path, md)
+                        md = bmeta.prepare_derivative_metadata(summary_for_json, channel_name, c, downsampling_factor)
+                        bmeta.write_bids_sidecar(out_path, md)
 
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")
 

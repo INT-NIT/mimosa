@@ -1,0 +1,60 @@
+dataset_description:
+  Name: "MIMOSA Microscopy Dataset"
+  BIDSVersion: "1.8.0"
+  DatasetType: "raw"
+
+participants_json:
+  participant_id:
+    Description: "Unique participant ID"
+
+  sex:
+    Description: "sex of the participant"
+    Levels:
+      M: "male"
+      F: "female"
+
+  species:
+    Description: "Binomial species name from the NCBI Taxonomy (https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi)"
+
+  strain:
+    Description: "string value indicating the strain of the species"
+
+  strain_rrid:
+    Description: "research resource identifier of the strain of the species from https://scicrunch.org/resources/Organisms/search"
+
+participants_tsv:
+  columns: ["participant_id", "sex", "species", "strain", "strain_rrid"]
+  rows:
+    - participant_id: "sub-Fenouil"
+      sex: "M"
+      species: "Mus musculus"
+      strain: "C57BL/6J"
+      strain_rrid: "RRID:IMSR_JAX:000664"
+
+    - participant_id: "sub-Nuphar"
+      sex: "F"
+      species: "Mus musculus"
+      strain: "BALB/c"
+      strain_rrid: "RRID:IMSR_JAX:000651"
+
+derivatives:
+  downsampled:
+    dataset_description:
+      Name: "Downsampled microscopy images"
+      BIDSVersion: "1.8.0"
+      DatasetType: "derivative"
+      GeneratedBy:
+        - Name: "mimosa_hpc_convert"
+          Version: "1.0"
+          Description: "Downsampled conversion of CZI microscopy images"
+      SourceDatasets:
+        - URL: "../.."
+          Version: "1.0"
+
+sessions_tsv:
+  columns: ["session_id", "description"]
+  rows:
+    - session_id: "ses-20230417"
+      description: "Acquisition day 1"
+    - session_id: "ses-20230418"
+      description: "Acquisition day 2"

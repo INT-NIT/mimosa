@@ -73,7 +73,6 @@ def main():
         czi_id = os.path.splitext(filename)[0]  # id du fichier
         bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
 
-        # 4) conversion
         czi.czi2bitmapHPC(
             input_dir,
             filename,

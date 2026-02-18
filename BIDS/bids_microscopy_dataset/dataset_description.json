@@ -1,9 +1,0 @@
-{
-  "Name": "Microscopy Dataset",
-  "BIDSVersion": "1.9.0",
-  "DatasetType": "raw",
-  "Authors": [
-    "Your Name"
-  ],
-  "License": "CC0"
-}
