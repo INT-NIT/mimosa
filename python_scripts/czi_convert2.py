@@ -37,10 +37,10 @@ def czi2bitmapHPC(
     czifile_path = os.path.join(pathin, czifilename)
 
     output_format = output_format.lower().strip()
-    if output_format not in ("tiff", "nii", "both"):
-        raise ValueError("output_format must be 'tiff', 'nii' or 'both'")
+    if output_format not in ("tif", "nii", "both"):
+        raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
-    write_tiff = output_format in ("tiff", "both")
+    write_tiff = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
     # derivatives seulement si on écrit du nii
