@@ -61,7 +61,6 @@ class MimosaReader:
         return str(value).strip()
     
     def get_subject(self):
-        # Chercher dans la table en remontant les dossiers parents
         if self.correspondence_table:
             current = self.path.parent
             while current != current.parent:
@@ -77,7 +76,6 @@ class MimosaReader:
         return folder_name
     
     def get_sample(self):
-        # Chercher dans la table en remontant les dossiers parents
         if self.correspondence_table:
             current = self.path.parent
             while current != current.parent:
@@ -94,7 +92,26 @@ class MimosaReader:
             if match: 
                 return "".join(match.groups())
         return "01"
-    
+    def get_pixel_size_um(self):
+       
+        scaling = self._find_key(self.metadata, "Scaling")
+        if not isinstance(scaling, dict):
+            return (1.0, 1.0, "um")
+
+        try:
+            items = scaling.get("Items", {})
+            dist = items.get("Distance", [])
+
+            vx = float(dist[0]["Value"])
+            vy = float(dist[1]["Value"]) if len(dist) > 1 else vx
+            if vx < 1e-3:
+                vx *= 1e6
+            if vy < 1e-3:
+                vy *= 1e6
+            return (vx, vy, "um")
+        except Exception:
+            return (1.0, 1.0, "um")
+        
     def get_acq_signature(self):
         scope = "Unknown"
         devices = self._find_key(self.metadata, "Device")
@@ -124,6 +141,70 @@ class MimosaReader:
                 return val
         return "Unknown"
     
+    def get_manufacturer(self) -> str:
+        val = self._find_key(self.metadata, "Manufacturer")
+        s = self._to_string(val)
+        return s if s else "Unknown"
+    
+    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor=1):
+        
+        px_um_x, px_um_y = pixel_size_um
+
+        out_px_um_x = px_um_x * downsampling_factor
+        out_px_um_y = px_um_y * downsampling_factor
+
+        try:
+            x_px = float(rect.x)
+            y_px = float(rect.y)
+        except Exception:
+            x_px = float(rect[0])
+            y_px = float(rect[1])
+
+        x_um = x_px * out_px_um_x
+        y_um = y_px * out_px_um_y
+
+        mat = [
+            [1.0, 0.0, x_um],
+            [0.0, 1.0, y_um],
+            [0.0, 0.0, 1.0],
+        ]
+        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um"
+    
+
+    def get_microscopy_metadata_for_file(
+        self,
+        rect,
+        stain: str,
+        downsampling_factor: int,
+        is_nifti: bool,
+        axis_swap: bool = False,
+    ):
+        manufacturer = self.get_manufacturer()
+        px_um_x, px_um_y, unit = self.get_pixel_size_um()
+
+        chunk_mat, axes, out_pix, out_unit = self.get_chunk_transform_matrix(
+            rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor
+        )
+
+        meta = {
+            "Manufacturer": manufacturer,
+            "PixelSize": out_pix,
+            "PixelSizeUnits": out_unit,
+            "SampleStaining": stain,
+            "ChunkTransformationMatrix": chunk_mat,
+            "ChunkTransformationMatrixAxis": axes,
+            "DownsamplingFactor": downsampling_factor,
+        }
+
+        if is_nifti:
+            meta["ConvertedTo"] = "NIfTI"
+            if axis_swap:
+                meta["AxisSwapApplied"] = "swapaxes(0,1)"
+        else:
+            meta["ConvertedTo"] = "TIFF"
+
+        return meta 
+
     def get_summary(self):
         return {
             "sub": self.get_subject(),

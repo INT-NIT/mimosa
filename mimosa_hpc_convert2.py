@@ -88,12 +88,13 @@ def main():
             bids_info,
             downsampling_factor,
             output_format,
-            pipeline_name="downsampled"
+            pipeline_name="downsampled",
+            reader=reader
             )
 
     for sub, d in sessions_by_sub.items():
         rows = []
-        for ses_id in sorted(d.keys()):  # ses-01, ses-02...
+        for ses_id in sorted(d.keys()):  
             rows.append({"session_id": ses_id, "acq_time": d[ses_id]})
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
 

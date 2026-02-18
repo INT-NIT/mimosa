@@ -94,9 +94,8 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
     sub_dir = os.path.join(bids_root, f"sub-{subject}")
     os.makedirs(sub_dir, exist_ok=True)
 
-    path = os.path.join(sub_dir, "sessions.tsv")
+    path = os.path.join(sub_dir, f"sub-{subject}_sessions.tsv")
 
-    # on écrase (simple)
     lines = ["session_id\tacq_time"]
     for r in ses_rows:
         lines.append(f"{r['session_id']}\t{r['acq_time']}")
@@ -105,3 +104,9 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
         f.write("\n".join(lines))
 
     print(f"sessions.tsv cree: sub-{subject}/sessions.tsv")
+
+
+def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
+    json_path = os.path.splitext(image_path)[0] + ".json"
+    ancpbids.utils.write_contents(json_path, meta)
+    print(f"sidecar cree: {os.path.basename(json_path)}")

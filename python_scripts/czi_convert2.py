@@ -9,7 +9,7 @@ from pylibCZIrw import czi as pyczi
 from alive_progress import alive_bar
 
 import bids_manager as bm
-
+import bids_metadata as bmeta
 
 def get_nb_channels(czidoc) -> int:
     md = czidoc.metadata
@@ -32,6 +32,7 @@ def czi2bitmapHPC(
     downsampling_factor: int,
     output_format: str,
     pipeline_name: str = "downsampled",
+    reader=None
 ):
    
     czifile_path = os.path.join(pathin, czifilename)
@@ -44,7 +45,7 @@ def czi2bitmapHPC(
     write_nii = output_format in ("nii", "both")
 
     # derivatives seulement si on écrit du nii
-    if output_format == "nii":
+    if write_nii:
         bm.initialize_derivatives(bids_root_path, pipeline_name=pipeline_name)
 
     with pyczi.open_czi(czifile_path) as czidoc:
@@ -81,6 +82,14 @@ def czi2bitmapHPC(
                     if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
+                        meta_tiff = reader.get_microscopy_metadata_for_file(
+                            rect=rect,
+                            stain=stain,
+                            downsampling_factor=downsampling_factor,
+                            is_nifti=False,
+                            axis_swap=False
+                        )
+                        bmeta.write_micr_sidecar_json(out_path, meta_tiff)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
 
                     if write_nii:
@@ -88,6 +97,14 @@ def czi2bitmapHPC(
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
                         nib.save(img, out_path)
+                        meta_nii = reader.get_microscopy_metadata_for_file(
+                            rect=rect,
+                            stain=stain,
+                            downsampling_factor=downsampling_factor,
+                            is_nifti=True,
+                            axis_swap=True
+                        )
+                        bmeta.write_micr_sidecar_json(out_path, meta_nii)
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")
 
                     bar()

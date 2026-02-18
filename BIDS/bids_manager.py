@@ -85,7 +85,6 @@ def get_bids_info(layout, summary_meta, bids_root_path, czi_id=None):
     else:
         acq_idx = acq_signature_mapping[acq_sig]
 
-    # RUN index (1 fois par fichier CZI)
     if czi_id is None:
         czi_id = "UNKNOWN_CZI"
 
