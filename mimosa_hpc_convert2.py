@@ -27,8 +27,8 @@ def main():
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
-    if output_format not in ("tiff", "nii", "both"):
-        raise ValueError("output_format doit etre 'tiff', 'nii' ou 'both'")
+    if output_format not in ("tif", "nii", "both"):
+        raise ValueError("output_format doit etre 'tif', 'nii' ou 'both'")
 
     clean_output_path = args.output_path.rstrip("/")
 

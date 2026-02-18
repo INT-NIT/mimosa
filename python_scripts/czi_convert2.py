@@ -40,7 +40,7 @@ def czi2bitmapHPC(
     if output_format not in ("tif", "nii", "both"):
         raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
-    write_tiff = output_format in ("tif", "both")
+    write_tif = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
     # derivatives seulement si on écrit du nii
@@ -78,7 +78,7 @@ def czi2bitmapHPC(
                         suffix="FLUO",
                     )
 
-                    if write_tiff:
+                    if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
