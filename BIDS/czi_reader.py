@@ -1,5 +1,4 @@
 import re
-import csv
 from pathlib import Path
 from pylibCZIrw import czi as czirw
 
@@ -8,17 +7,19 @@ class MimosaReader:
     correspondence_table = None
     
     @classmethod
-    def load_correspondence_table(cls, csv_path):
-        """Charge la table de correspondance une seule fois"""
-        if cls.correspondence_table is None:
-            cls.correspondence_table = {}
-            with open(csv_path, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    cls.correspondence_table[row['Path']] = {
-                        'subject': row['SubjectName'],
-                        'sample': row['Sample']
-                    }
+    def load_correspondence_from_yaml(cls, cfg: dict) -> None:
+        """loads subject/sample mapping from YAML — replaces CSV"""
+        cls.correspondence_table = {}
+        for entry in cfg.get("samples", {}).get("entries", []):
+            path    = entry["path"]
+            subject = entry["subject"]
+            # take first sample_id as default sample for this subject
+            samples = entry.get("samples", [])
+            sample  = samples[0]["sample_id"].replace("sample-", "") if samples else "Sam"
+            cls.correspondence_table[path] = {
+                "subject": subject,
+                "sample":  sample
+            }
     
     def __init__(self, file_path):
         self.path = Path(file_path)
@@ -85,13 +86,19 @@ class MimosaReader:
         
         return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Sam"
     
-    def get_session(self):
-        raw_date = self._find_key(self.metadata, "AcquisitionDateAndTime") or self._find_key(self.metadata, "CreationDate")
+    
+    def get_session(self) -> str:
+        raw_date = (
+            self._find_key(self.metadata, "AcquisitionDateAndTime") or
+            self._find_key(self.metadata, "CreationDate")
+        )
         if raw_date:
             match = re.search(r"(20\d{2})[-_]?(\d{2})[-_]?(\d{2})", self._to_string(raw_date))
-            if match: 
-                return "".join(match.groups())
-        return "01"
+            if match:
+                year, month, day = match.groups()
+                return f"{year}-{month}-{day}T00:00:00"  
+        return "01"  
+    
     def get_pixel_size_um(self):
        
         scaling = self._find_key(self.metadata, "Scaling")

@@ -14,28 +14,17 @@ participants_json:
       F: "female"
 
   species:
-    Description: "Binomial species name from the NCBI Taxonomy (https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi)"
-
-  strain:
-    Description: "string value indicating the strain of the species"
-
-  strain_rrid:
-    Description: "research resource identifier of the strain of the species from https://scicrunch.org/resources/Organisms/search"
+    Description: " "
 
 participants_tsv:
-  columns: ["participant_id", "sex", "species", "strain", "strain_rrid"]
+  columns: ["participant_id", "species"]
   rows:
     - participant_id: "sub-Fenouil"
-      sex: "M"
-      species: "Mus musculus"
-      strain: "C57BL/6J"
-      strain_rrid: "RRID:IMSR_JAX:000664"
+      species: "Marmouset"
 
     - participant_id: "sub-Nuphar"
-      sex: "F"
-      species: "Mus musculus"
-      strain: "BALB/c"
-      strain_rrid: "RRID:IMSR_JAX:000651"
+      species: "Marmouset"
+      
 
 derivatives:
   downsampled:
@@ -47,14 +36,19 @@ derivatives:
         - Name: "mimosa_hpc_convert"
           Version: "1.0"
           Description: "Downsampled conversion of CZI microscopy images"
-      SourceDatasets:
-        - URL: "../.."
-          Version: "1.0"
+      
+samples:
+  - path: "/envau/work/nit/users/boudlal.h/original-dataset/1-Fenouil-MTO10092101"
+    subject: "Fenouil"
+    samples:
+      - sample_id: "sample-Cx"
+        sample_type: "tissue"
+        sample_info: "cortex tissue "
+      
 
-sessions_tsv:
-  columns: ["session_id", "description"]
-  rows:
-    - session_id: "ses-20230417"
-      description: "Acquisition day 1"
-    - session_id: "ses-20230418"
-      description: "Acquisition day 2"
+  - path: "/envau/work/nit/users/boudlal.h/original-dataset/2-Nuphar-MJO17020301"
+    subject: "Nuphar"
+    samples:
+      - sample_id: "sample-Cx"
+        sample_type: "tissue"
+        sample_info: "cortex tissue "

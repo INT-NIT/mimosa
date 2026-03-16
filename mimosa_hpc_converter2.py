@@ -2,13 +2,11 @@ import argparse
 import os
 import sys
 
-sys.path.insert(0, "BIDS")
 
 from python_scripts import czi_convert2 as czi
-from czi_reader import MimosaReader
-from ancpbids import BIDSLayout
-import bids_manager as bm
-import bids_metadata as bmeta
+from BIDS.czi_reader import MimosaReader  
+from BIDS import bids_manager as bm
+from BIDS import bids_metadata as bmeta
 
 
 def dir_path(path):
@@ -19,98 +17,97 @@ def dir_path(path):
 
 def main():
     parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
-    parser.add_argument("-i", "--input_path", type=dir_path, required=True, help="Path contenant les .czi")
-    parser.add_argument("-f", "--output_format", type=str, required=True, help="tiff ou nii")
-    parser.add_argument("-df", "--downsampling_factor", type=int, required=True, help="Facteur 2^N")
-    parser.add_argument("-o", "--output_path", type=str, required=True, help="Root du Dataset BIDS")
-    parser.add_argument("-y", "--yaml", type=str, default="metadata.yml", help="Fichier YAML metadata")
-    parser.add_argument("-c", "--correspondence_csv",type=str,default="/DATA/mimosa/mimosa/externe_metadata/subjects_correspondence.csv",help="Chemin vers table de correspondance ")
+    parser.add_argument("-i", "--input_path",        type=dir_path, required=True,  help="folder containing .czi files")
+    parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
+    parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="factor 2^N")
+    parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
+    parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
-        raise ValueError("output_format doit etre 'tif', 'nii' ou 'both'")
+        raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
     clean_output_path = args.output_path.rstrip("/")
 
-    layout, dataset, bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml)
+    bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml)
 
-    if args.correspondence_csv:
-        csv_path = args.correspondence_csv
-        if os.path.exists(csv_path):
-            MimosaReader.load_correspondence_table(csv_path)
-            print(f"Table de correspondance chargee depuis {csv_path}")
-        else:
-            print(f"Attention: {csv_path} introuvable")
-    else:
-        print("Table de correspondance non fournie (ok si pas necessaire)")
+    cfg = bmeta.load_metadata_config(args.yaml)
+
+    MimosaReader.load_correspondence_from_yaml(cfg)
+
+    session = bm.BIDSSession(bids_root_path)
 
     downsampling_factor = 2 ** args.downsampling_factor
 
-    sessions_by_sub = {}  
     files_to_process = []
     for root, dirs, files in os.walk(args.input_path):
-        if  "sourcedata" in root or "derivatives" in root:
+        if "sourcedata" in root or "derivatives" in root:
             continue
         for file in files:
             if file.endswith(".czi"):
                 files_to_process.append((root, file))
 
-    print(f"Nombre de fichiers trouves: {len(files_to_process)}")
+    print(f"Files found: {len(files_to_process)}")
     if len(files_to_process) == 0:
-        print("ATTENTION: Aucun fichier .czi trouve")
+        print("WARNING: no .czi files found")
         return
-    
-    samples_rows = []
+
+    sessions_by_sub = {}
+    samples_rows    = []
 
     for input_dir, filename in files_to_process:
         full_input_path = os.path.join(input_dir, filename)
+        czi_id          = os.path.splitext(filename)[0]
 
-        with MimosaReader(full_input_path) as reader:
-            if reader is None:
-                continue
-            summary = reader.get_summary()
+        print(f"\n>>> Processing: {filename}")
 
-        print(f"\n>>> Traitement de: {filename}")
-        print(f"    Sujet: {summary['sub']}, Session(date): {summary['ses']}, Sample: {summary['sample']}")
+        try:
+            with MimosaReader(full_input_path) as reader:
+                summary = reader.get_summary()
 
-        bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
+                print(f"    Subject: {summary['sub']}, Date: {summary['acq_time']}, Sample: {summary['sample']}")
 
-        layout = BIDSLayout(bids_root_path)
+                bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
 
-        czi_id = os.path.splitext(filename)[0]
-        bids_info = bm.get_bids_info(layout, summary, bids_root_path, czi_id=czi_id)
-        sample_id = f"sample-{bids_info['sample']}"
-        participant_id = f"sub-{bids_info['sub']}"
-        samples_rows.append({
-            "sample_id": sample_id,
-            "participant_id": participant_id
-        })
+                bids_info = session.get_bids_info(
+                    summary_meta=summary,
+                    czi_id=czi_id,
+                    stain="C0"  
+                )
 
-        sub = bids_info["sub"]
-        ses_id = f"ses-{bids_info['ses']}"
-        acq_time = bids_info["acq_time"]
-        sessions_by_sub.setdefault(sub, {})
-        sessions_by_sub[sub][ses_id] = acq_time
+                samples_rows.append({
+                    "sample_id":      f"sample-{bids_info['sample']}",
+                    "participant_id": f"sub-{bids_info['sub']}"
+                })
 
-        czi.czi2bitmapHPC(
-            input_dir,
-            filename,
-            bids_root_path,
-            bids_info,
-            downsampling_factor,
-            output_format,
-            pipeline_name="downsampled",
-            reader=reader
-            )
+                sub     = bids_info["sub"]
+                ses_id  = f"ses-{bids_info['ses']}"
+                sessions_by_sub.setdefault(sub, {})
+                sessions_by_sub[sub][ses_id] = bids_info["acq_time"]
+
+                czi.czi2bitmapHPC(
+                    input_dir,
+                    filename,
+                    bids_root_path,
+                    bids_info,
+                    downsampling_factor,
+                    output_format,
+                    pipeline_name="downsampled",
+                    reader=reader        
+                )
+
+        except Exception as e:
+            print(f"    ERROR processing {filename}: {e}")
+            continue
 
     for sub, d in sessions_by_sub.items():
-        rows = []
-        for ses_id in sorted(d.keys()):  
-            rows.append({"session_id": ses_id, "acq_time": d[ses_id]})
+        rows = [{"session_id": ses_id, "acq_time": d[ses_id]} for ses_id in sorted(d.keys())]
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
-        bmeta.write_samples_tsv(bids_root_path, samples_rows)
-    print("\n[SUCCESS] Conversion terminee")
+
+    bmeta.write_samples_tsv(bids_root_path, cfg, samples_rows)
+
+    print("\n[SUCCESS] Conversion complete")
 
 
 if __name__ == "__main__":

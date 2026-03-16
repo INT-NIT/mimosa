@@ -8,8 +8,8 @@ import nibabel as nib
 from pylibCZIrw import czi as pyczi
 from alive_progress import alive_bar
 
-import bids_manager as bm
-import bids_metadata as bmeta
+from BIDS import bids_manager as bm
+from BIDS import bids_metadata as bmeta
 
 def get_nb_channels(czidoc) -> int:
     md = czidoc.metadata

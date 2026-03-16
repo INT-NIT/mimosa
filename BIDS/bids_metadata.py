@@ -83,7 +83,7 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
             json.dump(desc, f, indent=2, ensure_ascii=False)
 
         print(f"dataset_description.json created for derivative '{pipeline}'")
-        
+
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
    
     sub_dir = os.path.join(bids_root, f"sub-{subject}")
@@ -100,8 +100,27 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
     print(f"sessions.tsv cree: sub-{subject}/sessions.tsv")
 
-def write_samples_tsv(bids_root: str, rows: list[dict]) -> None:
+def write_samples_tsv(bids_root: str, cfg: dict, rows: list[dict]) -> None:
+    """
+    Writes samples.tsv , columns and sample details come from YAML.
+    Adding a column in YAML automatically adds it in the TSV.
+    """
     path = os.path.join(bids_root, "samples.tsv")
+
+    samples_section = cfg.get("samples")
+    if not samples_section:
+        raise ValueError("Key 'samples' missing in YAML")
+
+    cols = samples_section.get("columns")
+    if not cols:
+        raise ValueError("Key 'columns' missing in samples section of YAML")
+
+    samples_cfg = {}
+    for entry in samples_section.get("entries", []):
+        subject = entry["subject"]
+        for s in entry.get("samples", []):
+            key = (subject, s["sample_id"])
+            samples_cfg[key] = s
 
     existing = set()
     if os.path.exists(path):
@@ -109,11 +128,11 @@ def write_samples_tsv(bids_root: str, rows: list[dict]) -> None:
             for line in f.readlines()[1:]:
                 parts = line.strip().split("\t")
                 if len(parts) >= 2:
-                    existing.add((parts[0], parts[1]))  
+                    existing.add((parts[0], parts[1]))
 
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as f:
-            f.write("sample_id\tparticipant_id\tsample_type\tsample_info\tsample_preparation\n")
+            f.write("\t".join(cols) + "\n")
 
     new_lines = []
     for r in rows:
@@ -122,16 +141,23 @@ def write_samples_tsv(bids_root: str, rows: list[dict]) -> None:
             continue
         existing.add(key)
 
-        new_lines.append(
-            f"{r['sample_id']}\t{r['participant_id']}\t"
-            f"tissue\t\t"
-        )
+        subject_name = r["participant_id"].replace("sub-", "")
+        cfg_row = samples_cfg.get((subject_name, r["sample_id"]), {})
+
+        merged = {**r, **cfg_row}
+
+        line = "\t".join(str(merged.get(c, "n/a")) for c in cols)
+        new_lines.append(line)
 
     if new_lines:
         with open(path, "a", encoding="utf-8") as f:
             f.write("\n".join(new_lines) + "\n")
 
+    print("samples.tsv updated")
+
 def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
+    """writes the sidecar JSON file for a given image"""
     json_path = os.path.splitext(image_path)[0] + ".json"
-    ancpbids.utils.write_contents(json_path, meta)
-    print(f"sidecar cree: {os.path.basename(json_path)}")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, ensure_ascii=False)
+    print(f"sidecar created: {os.path.basename(json_path)}")
