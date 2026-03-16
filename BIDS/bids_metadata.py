@@ -1,6 +1,6 @@
 import os
 import yaml
-import ancpbids.utils
+import json  
 
 
 def load_metadata_config(config_path: str) -> dict:
@@ -8,60 +8,63 @@ def load_metadata_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+
 def create_dataset_description(bids_root: str, cfg: dict) -> None:
-   
+    
     path = os.path.join(bids_root, "dataset_description.json")
     if os.path.exists(path):
         return
 
-    dataset_cfg = cfg.get("dataset", {})
-    desc = {
-        "Name": dataset_cfg.get("name", "bids_dataset"),
-        "BIDSVersion": dataset_cfg.get("bids_version", "1.8.0"),
-        "DatasetType": "raw",
-    }
-    ancpbids.utils.write_contents(path, desc)
-    print("dataset_description.json cree")
+    # on prend directement ce qui est dans le YAML, pas besoin de reconstruire
+    desc = cfg.get("dataset_description", {})
+    
+    if not desc:
+        raise ValueError("Key dataset_description missing in YAML ")
 
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(desc, f, indent=2, ensure_ascii=False)
+    
+    print("dataset_description.json created")
 
 def create_participants_files(bids_root: str, cfg: dict) -> None:
-    
-    # 1) participants.json
+
+    # participants.json  dump directly from YAML
     json_path = os.path.join(bids_root, "participants.json")
     if not os.path.exists(json_path):
         participants_json = cfg.get("participants_json", {})
-        ancpbids.utils.write_contents(json_path, participants_json)
-        print("participants.json cree")
+        if not participants_json:
+            raise ValueError("Key participants_json missing in YAML")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(participants_json, f, indent=2, ensure_ascii=False)
+        print("participants.json created")
 
-    # 2) participants.tsv
+    # participants.tsv  columns and rows come directly from YAML
     tsv_path = os.path.join(bids_root, "participants.tsv")
     if os.path.exists(tsv_path):
         return
 
-    cols = cfg.get("participants_tsv_columns", [])
-    rows = cfg.get("participants", [])
+    participants_tsv = cfg.get("participants_tsv", {})
+    if not participants_tsv:
+        raise ValueError("Key participants_tsv missing in YAML")
 
-    if not cols:
-        # fallback minimal
-        cols = ["participant_id"]
+    cols = participants_tsv.get("columns", ["participant_id"])
+    rows = participants_tsv.get("rows", [])
 
     lines = ["\t".join(cols)]
     for r in rows:
-        line = []
-        for c in cols:
-            v = r.get(c, "n/a")
-            line.append(str(v))
+        line = [str(r.get(c, "n/a")) for c in cols]
         lines.append("\t".join(line))
 
     with open(tsv_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print("participants.tsv cree")
+    print("participants.tsv created")
 
 
 def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
-   
+
     derivs = cfg.get("derivatives", {})
-    bids_version = cfg.get("dataset", {}).get("bids_version", "1.8.0")
+    if not derivs:
+        raise ValueError("Key 'derivatives' missing in YAML")
 
     for pipeline, info in derivs.items():
         deriv_path = os.path.join(bids_root, "derivatives", pipeline)
@@ -71,24 +74,16 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
         if os.path.exists(desc_path):
             continue
 
-        desc = {
-            "Name": info.get("name", pipeline),
-            "BIDSVersion": bids_version,
-            "DatasetType": "derivative",
-            "GeneratedBy": [
-                {
-                    "Name": info.get("generated_by_name", pipeline),
-                    "Version": info.get("version", "1.0"),
-                    "Description": info.get("description", ""),
-                }
-            ],
-            "SourceDatasets": [{"URL": "../..", "Version": info.get("source_version", "1.0")}],
-        }
+        # dump directly from YAML — no reconstruction needed
+        desc = info.get("dataset_description", {})
+        if not desc:
+            raise ValueError(f"Key 'dataset_description' missing for derivative '{pipeline}' in YAML")
 
-        ancpbids.utils.write_contents(desc_path, desc)
-        print(f"dataset_description.json cree pour derivative {pipeline}")
+        with open(desc_path, "w", encoding="utf-8") as f:
+            json.dump(desc, f, indent=2, ensure_ascii=False)
 
-
+        print(f"dataset_description.json created for derivative '{pipeline}'")
+        
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
    
     sub_dir = os.path.join(bids_root, f"sub-{subject}")
