@@ -215,7 +215,7 @@ class MimosaReader:
     def get_summary(self):
         return {
             "sub": self.get_subject(),
-            "ses": self.get_session(),
+            "acq_time": self.get_session(),
             "acq_sig": self.get_acq_signature(),
             "sample": self.get_sample(),
             "illumination": self.get_illumination_type(),

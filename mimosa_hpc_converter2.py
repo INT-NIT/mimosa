@@ -64,6 +64,9 @@ def main():
 
         try:
             with MimosaReader(full_input_path) as reader:
+                if reader is None:
+                    print(f"    SKIP: cannot open {filename}")
+                    continue
                 summary = reader.get_summary()
 
                 print(f"    Subject: {summary['sub']}, Date: {summary['acq_time']}, Sample: {summary['sample']}")

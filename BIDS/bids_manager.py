@@ -1,7 +1,7 @@
 import os
 import re
 import glob
-import bids_metadata as bmeta
+from BIDS import bids_metadata as bmeta
 
 
 class BIDSSession:
