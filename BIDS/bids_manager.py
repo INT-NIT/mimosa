@@ -14,11 +14,12 @@ class BIDSSession:
         self.bids_root_path = bids_root_path
         self._ses_map = {}   
         self._acq_map = {}   
-        self._run_map = {}   
+        self._run_map = {} 
 
-    def _get_existing_numbers(self, entity: str) -> list[int]:
-        """scan folders of bids dataset to find existing acq or run numbers"""
-        pattern = os.path.join(self.bids_root_path, "**", f"*_{entity}-*")
+    def _get_last_index(self, entity: str, sub_path: str = None) -> int:
+        """scan folders to find existing entity numbers so we can calculate the next index for run and session"""
+        search_root = sub_path if sub_path else self.bids_root_path
+        pattern = os.path.join(search_root, "**", f"*_{entity}-*")
         files = glob.glob(pattern, recursive=True)
         numbers = []
         for f in files:
@@ -41,16 +42,17 @@ class BIDSSession:
     def _acq_index_for_signature(self, acq_sig: str) -> str:
         """returns acq number for a given microscope signature"""
         if acq_sig not in self._acq_map:
-            existing = self._get_existing_numbers("acq")
+            existing = self._get_last_index("acq")
             acq_idx = str(max(existing) + 1) if existing else "1"
             self._acq_map[acq_sig] = acq_idx
         return self._acq_map[acq_sig]
 
     def _run_index_for_context(self, sub: str, ses_idx: str, sample: str, acq_idx: str, czi_id: str, stain: str) -> str:
-        """returns run number for a given file context including channel"""
+        """returns run number for each czi file inside for a given subject """
         context_key = (sub, ses_idx, sample, acq_idx, czi_id, stain)
         if context_key not in self._run_map:
-            existing = self._get_existing_numbers("run")
+            sub_path = os.path.join(self.bids_root_path, f"sub-{sub}")
+            existing = self._get_last_index("run", sub_path=sub_path)
             run_idx = f"{max(existing) + 1:02d}" if existing else "01"
             self._run_map[context_key] = run_idx
         return self._run_map[context_key]

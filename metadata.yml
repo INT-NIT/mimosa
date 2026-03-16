@@ -1,6 +1,6 @@
 dataset_description:
   Name: "MIMOSA Microscopy Dataset"
-  BIDSVersion: "1.8.0"
+  BIDSVersion: "1.11.1"
   DatasetType: "raw"
 
 participants_json:
@@ -25,16 +25,15 @@ participants_tsv:
     - participant_id: "sub-Nuphar"
       species: "Marmouset"
       
-
+# est ce que on doit creer plusiuers pipelines ici ou pas ? 
 derivatives:
   downsampled:
     dataset_description:
       Name: "Downsampled microscopy images"
-      BIDSVersion: "1.8.0"
+      BIDSVersion: "1.11.1"
       DatasetType: "derivative"
       GeneratedBy:
         - Name: "mimosa_hpc_convert"
-          Version: "1.0"
           Description: "Downsampled conversion of CZI microscopy images"
       
 samples:          
