@@ -43,7 +43,7 @@ class BIDSSession:
         """returns acq number for a given microscope signature"""
         if acq_sig not in self._acq_map:
             existing = self._get_last_index("acq")
-            acq_idx = str(max(existing) + 1) if existing else "1"
+            acq_idx = f"{max(existing) + 1:02d}" if existing else "01"
             self._acq_map[acq_sig] = acq_idx
         return self._acq_map[acq_sig]
 

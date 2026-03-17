@@ -13,14 +13,21 @@ class MimosaReader:
         for entry in cfg.get("samples", {}).get("entries", []):
             path    = entry["path"]
             subject = entry["subject"]
-            # take first sample_id as default sample for this subject
             samples = entry.get("samples", [])
-            sample  = samples[0]["sample_id"].replace("sample-", "") if samples else "Sam"
-            cls.correspondence_table[path] = {
-                "subject": subject,
-                "sample":  sample
-            }
-    
+            
+            if not samples:
+                # fallback if sample isnt defined 
+                cls.correspondence_table[path] = {
+                    "subject": subject,
+                    "sample":  "cx",  # default sample name
+                }
+            else:
+                # stocker tous les samples pour ce sujet
+                cls.correspondence_table[path] = {
+                    "subject": subject,
+                    "sample":  samples[0]["sample_id"].replace("sample-", ""),
+                    "all_samples": [s["sample_id"].replace("sample-", "") for s in samples]
+                }
     def __init__(self, file_path):
         self.path = Path(file_path)
         self.metadata = None
@@ -150,13 +157,17 @@ class MimosaReader:
     
     def get_manufacturer(self) -> str:
         val = self._find_key(self.metadata, "Manufacturer")
+        if isinstance(val, dict):
+            model = val.get("Model", "")
+            if model:
+                return model
         s = self._to_string(val)
         return s if s else "Unknown"
     
     def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor=1):
-        
+        # in this case pixel is a relative unit cuz it depends on every microscope and acquisition settings, so we need frst to convert it into the right resolution(downsampled) then we convert the scene coordinates(pixels) into an absolute unit (micrometers) 
         px_um_x, px_um_y = pixel_size_um
-
+        # Adjust downsampled pixel size to maintain correct physical dimensions
         out_px_um_x = px_um_x * downsampling_factor
         out_px_um_y = px_um_y * downsampling_factor
 
@@ -166,7 +177,6 @@ class MimosaReader:
         except Exception:
             x_px = float(rect[0])
             y_px = float(rect[1])
-
         x_um = x_px * out_px_um_x
         y_um = y_px * out_px_um_y
 
@@ -188,7 +198,7 @@ class MimosaReader:
     ):
         manufacturer = self.get_manufacturer()
         px_um_x, px_um_y, unit = self.get_pixel_size_um()
-
+        acq_sig = self.get_acq_signature()
         chunk_mat, axes, out_pix, out_unit = self.get_chunk_transform_matrix(
             rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor
         )
@@ -198,6 +208,7 @@ class MimosaReader:
             "PixelSize": out_pix,
             "PixelSizeUnits": out_unit,
             "SampleStaining": stain,
+            "AcquisitionSignature": acq_sig,
             "ChunkTransformationMatrix": chunk_mat,
             "ChunkTransformationMatrixAxis": axes,
             "DownsamplingFactor": downsampling_factor,

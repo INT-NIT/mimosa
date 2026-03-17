@@ -8,7 +8,6 @@ def load_metadata_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-
 def create_dataset_description(bids_root: str, cfg: dict) -> None:
     
     path = os.path.join(bids_root, "dataset_description.json")

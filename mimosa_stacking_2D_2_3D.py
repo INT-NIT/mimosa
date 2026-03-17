@@ -28,6 +28,7 @@ def main():
     original_res = 0.0003249
     #original_thickness = 0.400
     original_thickness = 0.100
+    
     padding_size = 100
 
     input_path=dir_path(args.input_path)
