@@ -1,83 +1,49 @@
 dataset_description:
-  Name: "MIMOSA Microscopy Dataset"
-  BIDSVersion: "1.11.1"
-  DatasetType: "raw"
-
+  Name: MIMOSA Microscopy Dataset
+  BIDSVersion: 1.11.1
+  DatasetType: raw
 participants_json:
   participant_id:
-    Description: "Unique participant ID"
-
+    Description: Unique participant ID
   species:
-    Description: " "
-
+    Description: ' '
 participants_tsv:
-  columns: ["participant_id", "species"]
+  columns:
+  - participant_id
+  - species
   rows:
-    - participant_id: "sub-Fenouil"
-      species: "Marmouset"
-
-    - participant_id: "sub-Nuphar"
-      species: "Marmouset"
-      
-# est ce que on doit creer plusiuers pipelines ici ou pas ? 
+  - participant_id: sub-Fenouil
+    species: Marmouset
+  - participant_id: sub-Nuphar
+    species: Marmouset
 derivatives:
   downsampled:
     dataset_description:
-      Name: "Downsampled microscopy images"
-      BIDSVersion: "1.11.1"
-      DatasetType: "derivative"
+      Name: Downsampled microscopy images
+      BIDSVersion: 1.11.1
+      DatasetType: derivative
       GeneratedBy:
-        - Name: "mimosa_hpc_convert"
-          Description: "Downsampled conversion of CZI microscopy images"
-      
-samples:          
-  columns: ["sample_id", "participant_id", "sample_type", "sample_info"]
+      - Name: mimosa_hpc_convert
+        Description: Downsampled conversion of CZI microscopy images
+samples:
+  columns:
+  - sample_id
+  - participant
   entries:
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/1-Fenouil-MTO10092101"
-      subject: "Fenouil"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex"
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/2-Nuphar-MJO17020301"
-      subject: "Nuphar"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex"
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/3-kaki-MTO14052301"
-      subject: "kaki"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex"
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/4-Randy-MIO20120701"
-      subject: "Randy"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex"
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/5-Sully-MIO21100401"
-      subject: "Sully"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex "
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/6-Marmot-MJO16052401"
-      subject: "Marmot"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex "
-
-    - path: "/envau/work/nit/users/boudlal.h/original-dataset/7-Tommy-MIO22050201"
-      subject: "Tommy"
-      samples:
-        - sample_id: "Cx"
-          sample_type: "tissue"
-          sample_info: "cortex"
+  - path: /envau/work/nit/users/boudlal.h/renamed-dataset/Marmot/
+    subject: Marmot
+    samples:
+    - sample_id: Cx
+      participant: Fenouil
+      files:
+      - filename: MJO16052401_Cx_54_56_58_60_62_64_66_68_70.czi
+        slices:
+        - 54
+        - 56
+        - 58
+        - 60
+        - 62
+        - 64
+        - 66
+        - 68
+        - 70

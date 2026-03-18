@@ -80,12 +80,13 @@ def czi2bitmapHPC(
                     if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
-                        meta_tiff = reader.get_microscopy_metadata_for_file(
+                        meta_tiff = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
                             downsampling_factor=downsampling_factor,
                             is_nifti=False,
-                            axis_swap=False
+                            axis_swap=False,
+                            scene_idx=scene_idx
                         )
                         bmeta.write_micr_sidecar_json(out_path, meta_tiff)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
@@ -95,12 +96,13 @@ def czi2bitmapHPC(
                         arr = np.swapaxes(channel_images[c], 0, 1)
                         img = nib.Nifti1Image(arr, np.eye(4))
                         nib.save(img, out_path)
-                        meta_nii = reader.get_microscopy_metadata_for_file(
+                        meta_nii = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
                             downsampling_factor=downsampling_factor,
                             is_nifti=True,
-                            axis_swap=True
+                            axis_swap=True,
+                            scene_idx=scene_idx
                         )
                         bmeta.write_micr_sidecar_json(out_path, meta_nii)
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")

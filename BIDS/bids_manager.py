@@ -47,9 +47,12 @@ class BIDSSession:
             self._acq_map[acq_sig] = acq_idx
         return self._acq_map[acq_sig]
 
-    def _run_index_for_context(self, sub: str, ses_idx: str, sample: str, acq_idx: str, czi_id: str, stain: str) -> str:
-        """returns run number for each czi file inside for a given subject """
-        context_key = (sub, ses_idx, sample, acq_idx, czi_id, stain)
+    def _run_index_for_context(self, sub: str, ses_idx: str, sample: str, acq_idx: str, czi_id: str) -> str:
+        """
+        returns run number for a given czi file.
+        run changes when czi file changes — same run for all channels of the same file.
+        """
+        context_key = (sub, ses_idx, sample, acq_idx, czi_id)  # stain removed
         if context_key not in self._run_map:
             sub_path = os.path.join(self.bids_root_path, f"sub-{sub}")
             existing = self._get_last_index("run", sub_path=sub_path)
@@ -57,7 +60,7 @@ class BIDSSession:
             self._run_map[context_key] = run_idx
         return self._run_map[context_key]
 
-    def get_bids_info(self, summary_meta: dict, czi_id: str, stain: str) -> dict:
+    def get_bids_info(self, summary_meta: dict, czi_id: str) -> dict:
         sub      = summary_meta.get("sub")
         acq_time = summary_meta.get("acq_time")  # real date from CZI metadata
         sample   = summary_meta.get("sample")
@@ -65,12 +68,12 @@ class BIDSSession:
 
         ses_idx = self._session_index_for_time(sub, acq_time)
         acq_idx = self._acq_index_for_signature(acq_sig)
-        run_idx = self._run_index_for_context(sub, ses_idx, sample, acq_idx, czi_id, stain)
+        run_idx = self._run_index_for_context(sub, ses_idx, sample, acq_idx, czi_id)
 
         return {
             "sub":            sub,
-            "ses":            ses_idx,    # session index 
-            "acq_time":       acq_time,   # real date → for sessions.tsv
+            "ses":            ses_idx,    # session index
+            "acq_time":       acq_time,   # real date for sessions.tsv
             "sample":         sample,
             "acq":            acq_idx,
             "acq_sig":        acq_sig,

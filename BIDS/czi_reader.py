@@ -11,7 +11,7 @@ class MimosaReader:
         """loads subject/sample mapping from YAML — replaces CSV"""
         cls.correspondence_table = {}
         for entry in cfg.get("samples", {}).get("entries", []):
-            path    = entry["path"]
+            path    = entry["path"].rstrip("/")   
             subject = entry["subject"]
             samples = entry.get("samples", [])
             
@@ -19,14 +19,18 @@ class MimosaReader:
                 # fallback if sample isnt defined 
                 cls.correspondence_table[path] = {
                     "subject": subject,
-                    "sample":  "cx",  # default sample name
+                    "sample":  "cx",  
                 }
             else:
-                # stocker tous les samples pour ce sujet
                 cls.correspondence_table[path] = {
-                    "subject": subject,
-                    "sample":  samples[0]["sample_id"].replace("sample-", ""),
-                    "all_samples": [s["sample_id"].replace("sample-", "") for s in samples]
+                    "subject":     subject,
+                    "sample":      samples[0]["sample_id"].replace("sample-", ""),
+                    "all_samples": [s["sample_id"].replace("sample-", "") for s in samples],
+                    "files":       {        
+                        f["filename"]: f.get("slices", [])
+                        for s in samples
+                        for f in s.get("files", [])
+                    }
                 }
     def __init__(self, file_path):
         self.path = Path(file_path)
@@ -38,9 +42,8 @@ class MimosaReader:
                 self.metadata = doc.metadata
             return self
         except Exception as e:
-            print(f"Erreur d'ouverture {self.path.name}: {e}")
-            return None
-    
+            raise RuntimeError(f"Cannot open CZI file {self.path.name}: {e}")
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
     
@@ -65,7 +68,11 @@ class MimosaReader:
         if isinstance(value, list) and value: 
             return self._to_string(value[0])
         if isinstance(value, dict):
-            return self._to_string(value.get("#text") or value.get("Value") or value.get("@Value"))
+            for key in ("#text", "Value", "@Value", "Model", "@Name"):
+                v = value.get(key)
+                if v:
+                    return self._to_string(v)
+            return ""
         return str(value).strip()
     
     def get_subject(self):
@@ -90,10 +97,9 @@ class MimosaReader:
                 if str(current) in self.correspondence_table:
                     return self.correspondence_table[str(current)]['sample']
                 current = current.parent
-        
-        return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Sam"
-    
-    
+
+        return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Unknown"
+
     def get_session(self) -> str:
         raw_date = (
             self._find_key(self.metadata, "AcquisitionDateAndTime") or
@@ -126,14 +132,6 @@ class MimosaReader:
         except Exception:
             return (1.0, 1.0, "um")
         
-    def get_acq_signature(self):
-        scope = "Unknown"
-        devices = self._find_key(self.metadata, "Device")
-        for d in (devices if isinstance(devices, list) else [devices] if devices else []):
-            if self._to_string(d.get("@Id")) == "Microscope":
-                scope = self._to_string(d.get("@Name"))
-        scaling = self._find_key(self.metadata, "Scaling")
-        return f"{scope}_{str(scaling)[:30]}"
     
     def get_animal_info(self):
         return {
@@ -154,17 +152,31 @@ class MimosaReader:
             if val:
                 return val
         return "Unknown"
+    def get_acq_signature(self) -> str:
+        """
+        returns acquisition signature based on illumination type and pixel size.
+        acq changes when illumination type or pixel size changes.
+        """
+        illumination = self.get_illumination_type()
+
+        px_x, px_y, unit = self.get_pixel_size_um()
+
+        res = f"{px_x:.2f}x{px_y:.2f}"
+
+        return f"{illumination}-resolution{res}"
     
     def get_manufacturer(self) -> str:
-        val = self._find_key(self.metadata, "Manufacturer")
-        if isinstance(val, dict):
-            model = val.get("Model", "")
-            if model:
-                return model
-        s = self._to_string(val)
-        return s if s else "Unknown"
-    
-    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor=1):
+        """returns microscope name from metadata"""
+        microscope = self._find_key(self.metadata, "Microscope")
+        if isinstance(microscope, list):
+            microscope = microscope[0]
+        if microscope:
+            name = self._to_string(microscope.get("@Name", ""))
+            if name:
+                return name
+        return "Unknown"
+
+    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor=1, slice_index=None):
         # in this case pixel is a relative unit cuz it depends on every microscope and acquisition settings, so we need frst to convert it into the right resolution(downsampled) then we convert the scene coordinates(pixels) into an absolute unit (micrometers) 
         px_um_x, px_um_y = pixel_size_um
         # Adjust downsampled pixel size to maintain correct physical dimensions
@@ -177,30 +189,59 @@ class MimosaReader:
         except Exception:
             x_px = float(rect[0])
             y_px = float(rect[1])
+
         x_um = x_px * out_px_um_x
         y_um = y_px * out_px_um_y
 
-        mat = [
-            [1.0, 0.0, x_um],
-            [0.0, 1.0, y_um],
-            [0.0, 0.0, 1.0],
-        ]
-        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um"
+        if slice_index is not None:
+            # 3D matrix  Z= slice index 
+            mat = [
+                [1.0, 0.0, 0.0, x_um       ],
+                [0.0, 1.0, 0.0, y_um       ],
+                [0.0, 0.0, 1.0, slice_index],
+                [0.0, 0.0, 0.0, 1.0        ],
+            ]
+            return mat, ["X", "Y", "Z"], [out_px_um_x, out_px_um_y], "um"
+        else:
+            # 2D matrix no slice info available
+            mat = [
+                [1.0, 0.0, x_um],
+                [0.0, 1.0, y_um],
+                [0.0, 0.0, 1.0 ],
+            ]
+            return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um"
     
+    def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
+        """returns slice index for a given scene from YAML"""
+        
+        if self.correspondence_table:
+            current = self.path.parent
+            while current != current.parent:
+                if str(current) in self.correspondence_table:
+                    files  = self.correspondence_table[str(current)].get("files", {})
+                    slices = files.get(self.path.name, [])
+                    if scene_idx < len(slices):
+                        return slices[scene_idx]
+                    break
+                current = current.parent
+        return None
 
-    def get_microscopy_metadata_for_file(
+    def get_converted_file_metadata(
         self,
         rect,
         stain: str,
         downsampling_factor: int,
         is_nifti: bool,
         axis_swap: bool = False,
+        scene_idx: int = 0
     ):
+        slice_idx = self.get_slice_index_for_scene(scene_idx)
+
         manufacturer = self.get_manufacturer()
         px_um_x, px_um_y, unit = self.get_pixel_size_um()
         acq_sig = self.get_acq_signature()
         chunk_mat, axes, out_pix, out_unit = self.get_chunk_transform_matrix(
-            rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor
+            rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor,slice_index=slice_idx
         )
 
         meta = {
@@ -213,6 +254,9 @@ class MimosaReader:
             "ChunkTransformationMatrixAxis": axes,
             "DownsamplingFactor": downsampling_factor,
         }
+
+        if slice_idx is not None:
+            meta["SliceIndex"] = slice_idx   
 
         if is_nifti:
             meta["ConvertedTo"] = "NIfTI"

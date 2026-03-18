@@ -1,7 +1,7 @@
 import os
 import yaml
 import json  
-
+import re
 
 def load_metadata_config(config_path: str) -> dict:
     with open(config_path, "r") as f:
@@ -98,10 +98,10 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
         f.write("\n".join(lines))
 
     print(f"sessions.tsv cree: sub-{subject}/sessions.tsv")
-
-def write_samples_tsv(bids_root: str, cfg: dict, rows: list[dict]) -> None:
+    
+def write_samples_tsv(bids_root: str, cfg: dict) -> None:
     """
-    Writes samples.tsv , columns and sample details come from YAML.
+    Writes samples.tsv directly from YAML.
     Adding a column in YAML automatically adds it in the TSV.
     """
     path = os.path.join(bids_root, "samples.tsv")
@@ -114,45 +114,18 @@ def write_samples_tsv(bids_root: str, cfg: dict, rows: list[dict]) -> None:
     if not cols:
         raise ValueError("Key 'columns' missing in samples section of YAML")
 
-    samples_cfg = {}
+    lines = ["\t".join(cols)]
+
     for entry in samples_section.get("entries", []):
-        subject = entry["subject"]
         for s in entry.get("samples", []):
-            key = (subject, s["sample_id"])
-            samples_cfg[key] = s
+            # direct drag and drop from YAML
+            line = "\t".join(str(s.get(c, "n/a")) for c in cols)
+            lines.append(line)
 
-    existing = set()
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f.readlines()[1:]:
-                parts = line.strip().split("\t")
-                if len(parts) >= 2:
-                    existing.add((parts[0], parts[1]))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
-    if not os.path.exists(path):
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\t".join(cols) + "\n")
-
-    new_lines = []
-    for r in rows:
-        key = (r["sample_id"], r["participant_id"])
-        if key in existing:
-            continue
-        existing.add(key)
-
-        subject_name = r["participant_id"].replace("sub-", "")
-        cfg_row = samples_cfg.get((subject_name, r["sample_id"]), {})
-
-        merged = {**r, **cfg_row}
-
-        line = "\t".join(str(merged.get(c, "n/a")) for c in cols)
-        new_lines.append(line)
-
-    if new_lines:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write("\n".join(new_lines) + "\n")
-
-    print("samples.tsv updated")
+    print("samples.tsv created")
 
 def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
     """writes the sidecar JSON file for a given image"""
@@ -160,3 +133,52 @@ def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
     print(f"sidecar created: {os.path.basename(json_path)}")
+
+
+
+def extract_slices_from_filename(filename: str) -> list[int]:
+    """ex: MTO10092101_Cx_008-056.czi -> [8, 56]"""
+    match = re.search(r'_(\d+(?:[-_]\d+)+)\.czi$', filename)
+    if match:
+        return [int(n) for n in re.split(r'[-_]', match.group(1))]
+    return []
+
+
+def update_yaml_with_slices(yaml_path: str) -> None:
+    """
+    reads metadata.yml and adds files + slice indices for each subject/sample.
+    """
+    with open(yaml_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subject_path = entry["path"]
+        subject      = entry["subject"]
+
+        if not os.path.exists(subject_path):
+            print(f"WARNING: {subject} path not found: {subject_path}")
+            continue
+
+        for sample in entry.get("samples", []):
+            sample_id = sample["sample_id"]
+            files = []
+
+            for root, dirs, filenames in os.walk(subject_path):
+                for filename in sorted(filenames):
+                    if not filename.endswith(".czi"):
+                        continue
+                    if sample_id.lower() not in filename.lower():
+                        continue # skip files that don't match the sample_id
+                    file_entry = {"filename": filename}
+                    slices = extract_slices_from_filename(filename)
+                    if slices:
+                        file_entry["slices"] = slices
+                    files.append(file_entry)
+
+            sample["files"] = files
+            print(f"{subject} / {sample_id} → {len(files)} files added")
+
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+    return cfg

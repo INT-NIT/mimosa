@@ -17,7 +17,6 @@ def dir_path(path):
 
 def main():
     parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
-    parser.add_argument("-i", "--input_path",        type=dir_path, required=True,  help="folder containing .czi files")
     parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
     parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="factor 2^N")
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
@@ -34,6 +33,8 @@ def main():
 
     cfg = bmeta.load_metadata_config(args.yaml)
 
+    bmeta.update_yaml_with_slices(args.yaml)
+
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
@@ -41,21 +42,23 @@ def main():
     downsampling_factor = 2 ** args.downsampling_factor
 
     files_to_process = []
-    for root, dirs, files in os.walk(args.input_path):
-        if "sourcedata" in root or "derivatives" in root:
-            continue
-        for file in files:
-            if file.endswith(".czi"):
-                files_to_process.append((root, file))
-
-    print(f"Files found: {len(files_to_process)}")
-    if len(files_to_process) == 0:
-        print("WARNING: no .czi files found")
-        return
-
     sessions_by_sub = {}
     samples_rows    = []
 
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subject_path = entry["path"]   #  depuis le YAML
+        
+        if not os.path.exists(subject_path):
+            print(f"WARNING: path not found: {subject_path}")
+            continue
+        
+        for root, dirs, files in os.walk(subject_path):
+            if "sourcedata" in root or "derivatives" in root:
+                continue
+            for file in files:
+                if file.endswith(".czi"):
+                    files_to_process.append((root, file))
+        
     for input_dir, filename in files_to_process:
         full_input_path = os.path.join(input_dir, filename)
         czi_id          = os.path.splitext(filename)[0]
@@ -75,8 +78,7 @@ def main():
 
                 bids_info = session.get_bids_info(
                     summary_meta=summary,
-                    czi_id=czi_id,
-                    stain="C0"  
+                    czi_id=czi_id
                 )
 
                 samples_rows.append({
@@ -108,7 +110,7 @@ def main():
         rows = [{"session_id": ses_id, "acq_time": d[ses_id]} for ses_id in sorted(d.keys())]
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
 
-    bmeta.write_samples_tsv(bids_root_path, cfg, samples_rows)
+    bmeta.write_samples_tsv(bids_root_path, cfg)
 
     print("\n[SUCCESS] Conversion complete")
 
