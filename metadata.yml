@@ -28,22 +28,76 @@ derivatives:
 samples:
   columns:
   - sample_id
-  - participant
+  - participant_id
+  - sample_type
   entries:
-  - path: /envau/work/nit/users/boudlal.h/renamed-dataset/Marmot/
+  - path: /envau/work/nit/users/boudlal.h/original-dataset/1-Fenouil-MTO10092101
+    subject: Fenouil
+    samples:
+    - sample_id: sample-Cx
+      sample_type: tissue
+      participant_id: sub-Fenouil
+      files:
+      - filename: MTO10092101_Cx_280-288.czi
+        slices:
+        - 280
+        - 288
+      - filename: MTO10092101_Cx_296-304.czi
+        slices:
+        - 296
+        - 304
+  - path: /envau/work/nit/users/boudlal.h/original-dataset/6-Marmot-MJO16052401
     subject: Marmot
     samples:
-    - sample_id: Cx
-      participant: Fenouil
+    - sample_id: sample-Cx
+      participant_id: sub-Marmot
+      sample_type: tissue
       files:
-      - filename: MJO16052401_Cx_54_56_58_60_62_64_66_68_70.czi
+      - filename: MJO16052401_Cx_200_202.czi
         slices:
-        - 54
-        - 56
-        - 58
-        - 60
-        - 62
-        - 64
-        - 66
-        - 68
-        - 70
+        - 200
+        - 202
+      - filename: MJO16052401_Cx_204_206.czi
+        slices:
+        - 204
+        - 206
+      - filename: MJO16052401_Cx_208_210.czi
+        slices:
+        - 208
+        - 210
+      - filename: MJO16052401_Cx_212_214.czi
+        slices:
+        - 212
+        - 214
+      - filename: MJO16052401_Cx_216_218.czi
+        slices:
+        - 216
+        - 218
+      - filename: MJO16052401_Cx_220_222.czi
+        slices:
+        - 220
+        - 222
+      - filename: MJO16052401_Cx_224_226.czi
+        slices:
+        - 224
+        - 226
+      - filename: MJO16052401_Cx_228_230.czi
+        slices:
+        - 228
+        - 230
+      - filename: MJO16052401_Cx_232_234.czi
+        slices:
+        - 232
+        - 234
+      - filename: MJO16052401_Cx_236_238.czi
+        slices:
+        - 236
+        - 238
+      - filename: MJO16052401_Cx_240_242.czi
+        slices:
+        - 240
+        - 242
+      - filename: MJO16052401_Cx_244_246.czi
+        slices:
+        - 244
+        - 246

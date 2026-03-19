@@ -29,11 +29,11 @@ def main():
 
     clean_output_path = args.output_path.rstrip("/")
 
-    bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml)
+    bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml, output_format=output_format)
 
     cfg = bmeta.load_metadata_config(args.yaml)
 
-    bmeta.update_yaml_with_slices(args.yaml)
+    cfg = bmeta.update_yaml_with_slices(args.yaml)
 
     MimosaReader.load_correspondence_from_yaml(cfg)
 
@@ -109,7 +109,7 @@ def main():
     for sub, d in sessions_by_sub.items():
         rows = [{"session_id": ses_id, "acq_time": d[ses_id]} for ses_id in sorted(d.keys())]
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
-
+    
     bmeta.write_samples_tsv(bids_root_path, cfg)
 
     print("\n[SUCCESS] Conversion complete")

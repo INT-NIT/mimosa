@@ -167,8 +167,6 @@ def update_yaml_with_slices(yaml_path: str) -> None:
                 for filename in sorted(filenames):
                     if not filename.endswith(".czi"):
                         continue
-                    if sample_id.lower() not in filename.lower():
-                        continue # skip files that don't match the sample_id
                     file_entry = {"filename": filename}
                     slices = extract_slices_from_filename(filename)
                     if slices:

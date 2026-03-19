@@ -4,12 +4,12 @@ from pylibCZIrw import czi as czirw
 
 class MimosaReader:
     # Variable de classe pour stocker la table
-    correspondence_table = None
+    correspondence_subject_sample = None
     
     @classmethod
     def load_correspondence_from_yaml(cls, cfg: dict) -> None:
         """loads subject/sample mapping from YAML — replaces CSV"""
-        cls.correspondence_table = {}
+        cls.correspondence_subject_sample = {}
         for entry in cfg.get("samples", {}).get("entries", []):
             path    = entry["path"].rstrip("/")   
             subject = entry["subject"]
@@ -17,12 +17,12 @@ class MimosaReader:
             
             if not samples:
                 # fallback if sample isnt defined 
-                cls.correspondence_table[path] = {
+                cls.correspondence_subject_sample[path] = {
                     "subject": subject,
                     "sample":  "cx",  
                 }
             else:
-                cls.correspondence_table[path] = {
+                cls.correspondence_subject_sample[path] = {
                     "subject":     subject,
                     "sample":      samples[0]["sample_id"].replace("sample-", ""),
                     "all_samples": [s["sample_id"].replace("sample-", "") for s in samples],
@@ -76,11 +76,11 @@ class MimosaReader:
         return str(value).strip()
     
     def get_subject(self):
-        if self.correspondence_table:
+        if self.correspondence_subject_sample:
             current = self.path.parent
             while current != current.parent:
-                if str(current) in self.correspondence_table:
-                    return self.correspondence_table[str(current)]['subject']
+                if str(current) in self.correspondence_subject_sample:
+                    return self.correspondence_subject_sample[str(current)]['subject']
                 current = current.parent
         
         folder_name = self.path.parent.name
@@ -91,11 +91,11 @@ class MimosaReader:
         return folder_name
     
     def get_sample(self):
-        if self.correspondence_table:
+        if self.correspondence_subject_sample:
             current = self.path.parent
             while current != current.parent:
-                if str(current) in self.correspondence_table:
-                    return self.correspondence_table[str(current)]['sample']
+                if str(current) in self.correspondence_subject_sample:
+                    return self.correspondence_subject_sample[str(current)]['sample']
                 current = current.parent
 
         return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Unknown"
@@ -213,12 +213,12 @@ class MimosaReader:
     
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
-        
-        if self.correspondence_table:
+
+        if self.correspondence_subject_sample:
             current = self.path.parent
             while current != current.parent:
-                if str(current) in self.correspondence_table:
-                    files  = self.correspondence_table[str(current)].get("files", {})
+                if str(current) in self.correspondence_subject_sample:
+                    files  = self.correspondence_subject_sample[str(current)].get("files", {})
                     slices = files.get(self.path.name, [])
                     if scene_idx < len(slices):
                         return slices[scene_idx]
