@@ -10,18 +10,8 @@ from alive_progress import alive_bar
 
 from BIDS import bids_manager as bm
 from BIDS import bids_metadata as bmeta
+from BIDS.czi_reader import MimosaReader
 
-def get_nb_channels(czidoc) -> int:
-    md = czidoc.metadata
-    n = int(md["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
-    if n == 0:
-        while True:
-            try:
-                _ = czidoc.read(roi=(0, 0, 10, 10), plane={"C": n})
-                n += 1
-            except Exception:
-                break
-    return n
 
 
 def czi2bitmapHPC(
@@ -48,7 +38,7 @@ def czi2bitmapHPC(
 
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
-        nb_channels = get_nb_channels(czidoc)
+        nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
         deriv_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info) if write_nii else None

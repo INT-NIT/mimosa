@@ -2,6 +2,8 @@ dataset_description:
   Name: MIMOSA Microscopy Dataset
   BIDSVersion: 1.11.1
   DatasetType: raw
+  Authors:
+  - Name: ibos
 participants_json:
   participant_id:
     Description: Unique participant ID
@@ -46,58 +48,4 @@ samples:
         slices:
         - 296
         - 304
-  - path: /envau/work/nit/users/boudlal.h/original-dataset/6-Marmot-MJO16052401
-    subject: Marmot
-    samples:
-    - sample_id: sample-Cx
-      participant_id: sub-Marmot
-      sample_type: tissue
-      files:
-      - filename: MJO16052401_Cx_200_202.czi
-        slices:
-        - 200
-        - 202
-      - filename: MJO16052401_Cx_204_206.czi
-        slices:
-        - 204
-        - 206
-      - filename: MJO16052401_Cx_208_210.czi
-        slices:
-        - 208
-        - 210
-      - filename: MJO16052401_Cx_212_214.czi
-        slices:
-        - 212
-        - 214
-      - filename: MJO16052401_Cx_216_218.czi
-        slices:
-        - 216
-        - 218
-      - filename: MJO16052401_Cx_220_222.czi
-        slices:
-        - 220
-        - 222
-      - filename: MJO16052401_Cx_224_226.czi
-        slices:
-        - 224
-        - 226
-      - filename: MJO16052401_Cx_228_230.czi
-        slices:
-        - 228
-        - 230
-      - filename: MJO16052401_Cx_232_234.czi
-        slices:
-        - 232
-        - 234
-      - filename: MJO16052401_Cx_236_238.czi
-        slices:
-        - 236
-        - 238
-      - filename: MJO16052401_Cx_240_242.czi
-        slices:
-        - 240
-        - 242
-      - filename: MJO16052401_Cx_244_246.czi
-        slices:
-        - 244
-        - 246
+  

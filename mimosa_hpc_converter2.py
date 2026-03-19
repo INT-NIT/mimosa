@@ -112,7 +112,7 @@ def main():
     
     bmeta.write_samples_tsv(bids_root_path, cfg)
 
-    print("\n[SUCCESS] Conversion complete")
+    print("\n[SUCCESS] Conversion done.")
 
 
 if __name__ == "__main__":

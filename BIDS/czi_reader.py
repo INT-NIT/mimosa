@@ -100,6 +100,7 @@ class MimosaReader:
 
         return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Unknown"
 
+
     def get_session(self) -> str:
         raw_date = (
             self._find_key(self.metadata, "AcquisitionDateAndTime") or
@@ -133,12 +134,17 @@ class MimosaReader:
             return (1.0, 1.0, "um")
         
     
-    def get_animal_info(self):
-        return {
-            "species": self._to_string(self._find_key(self.metadata, "Species") or "n/a"),
-            "age": self._to_string(self._find_key(self.metadata, "Age") or "n/a"),
-            "sex": "M" if "m" in self._to_string(self._find_key(self.metadata, "Sex")).lower() else "F"
-        }
+    def get_nb_channels(czidoc) -> int:
+        md = czidoc.metadata
+        n = int(md["ImageDocument"]["Metadata"]["Information"]["Image"]["SizeC"])
+        if n == 0:
+            while True:
+                try:
+                    _ = czidoc.read(roi=(0, 0, 10, 10), plane={"C": n})
+                    n += 1
+                except Exception:
+                    break
+        return n
     
     def get_illumination_type(self) -> str:
         raw = self._find_key(self.metadata, "IlluminationType")
@@ -274,6 +280,5 @@ class MimosaReader:
             "acq_sig": self.get_acq_signature(),
             "sample": self.get_sample(),
             "illumination": self.get_illumination_type(),
-            "animal": self.get_animal_info(),
             "full_meta": self.metadata
         }
