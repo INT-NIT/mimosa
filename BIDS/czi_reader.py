@@ -182,41 +182,47 @@ class MimosaReader:
                 return name
         return "Unknown"
 
-    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor=1, slice_index=None):
+    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor, slice_index=None):
         # in this case pixel is a relative unit cuz it depends on every microscope and acquisition settings, so we need frst to convert it into the right resolution(downsampled) then we convert the scene coordinates(pixels) into an absolute unit (micrometers) 
         px_um_x, px_um_y = pixel_size_um
         # Adjust downsampled pixel size to maintain correct physical dimensions
-        out_px_um_x = px_um_x * downsampling_factor
-        out_px_um_y = px_um_y * downsampling_factor
+        out_px_um_x = px_um_x / downsampling_factor
+        out_px_um_y = px_um_y / downsampling_factor
 
         try:
             x_px = float(rect.x)
             y_px = float(rect.y)
+            w_px = float(rect.w)
+            h_px = float(rect.h)
         except Exception:
             x_px = float(rect[0])
             y_px = float(rect[1])
+            w_px = float(rect[2])
+            h_px = float(rect[3])
 
-        x_um = x_px * out_px_um_x
-        y_um = y_px * out_px_um_y
+        x_downsampled = x_px / downsampling_factor
+        y_downsampled = y_px / downsampling_factor
+        w_downsampled = w_px / downsampling_factor
+        h_downsampled = h_px / downsampling_factor
 
         if slice_index is not None:
-            # 3D matrix  Z= slice index 
             mat = [
-                [1.0, 0.0, 0.0, x_um       ],
-                [0.0, 1.0, 0.0, y_um       ],
-                [0.0, 0.0, 1.0, slice_index],
-                [0.0, 0.0, 0.0, 1.0        ],
+                [1.0, 0.0, 0.0, x_downsampled],
+                [0.0, 1.0, 0.0, y_downsampled],
+                [0.0, 0.0, 1.0, slice_index  ],
+                [0.0, 0.0, 0.0, w_downsampled],
+                [0.0, 0.0, 0.0, h_downsampled],
             ]
-            return mat, ["X", "Y", "Z"], [out_px_um_x, out_px_um_y], "um"
+            return mat, ["X", "Y", "Z" , "W" ,"H"], [out_px_um_x, out_px_um_y], "um"
         else:
-            # 2D matrix no slice info available
             mat = [
-                [1.0, 0.0, x_um],
-                [0.0, 1.0, y_um],
-                [0.0, 0.0, 1.0 ],
+                [1.0, 0.0, x_downsampled],
+                [0.0, 1.0, y_downsampled],
+                [0.0, 0.0, w_downsampled],
+                [0.0, 0.0, h_downsampled],
             ]
-            return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um"
-    
+            return mat, ["X", "Y","W","H"], [out_px_um_x, out_px_um_y], "um"
+        
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
 

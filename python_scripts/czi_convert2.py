@@ -38,6 +38,7 @@ def czi2bitmapHPC(
 
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
+        print("Rectangles de scènes",czidoc.scenes_bounding_rectangle)
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
