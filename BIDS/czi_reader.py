@@ -125,10 +125,7 @@ class MimosaReader:
 
             vx = float(dist[0]["Value"])
             vy = float(dist[1]["Value"]) if len(dist) > 1 else vx
-            if vx < 1e-3:
-                vx *= 1e6
-            if vy < 1e-3:
-                vy *= 1e6
+           
             return (vx, vy, "um")
         except Exception:
             return (1.0, 1.0, "um")
@@ -169,7 +166,7 @@ class MimosaReader:
 
         res = f"{px_x:.2f}x{px_y:.2f}"
 
-        return f"{illumination}-resolution{res}"
+        return f"{illumination}-resolution-{res}"
     
     def get_manufacturer(self) -> str:
         """returns microscope name from metadata"""
@@ -186,8 +183,8 @@ class MimosaReader:
         # in this case pixel is a relative unit cuz it depends on every microscope and acquisition settings, so we need frst to convert it into the right resolution(downsampled) then we convert the scene coordinates(pixels) into an absolute unit (micrometers) 
         px_um_x, px_um_y = pixel_size_um
         # Adjust downsampled pixel size to maintain correct physical dimensions
-        out_px_um_x = px_um_x / downsampling_factor
-        out_px_um_y = px_um_y / downsampling_factor
+        out_px_um_x = px_um_x * downsampling_factor
+        out_px_um_y = px_um_y * downsampling_factor
 
         try:
             x_px = float(rect.x)
@@ -200,28 +197,25 @@ class MimosaReader:
             w_px = float(rect[2])
             h_px = float(rect[3])
 
-        x_downsampled = x_px / downsampling_factor
-        y_downsampled = y_px / downsampling_factor
-        w_downsampled = w_px / downsampling_factor
-        h_downsampled = h_px / downsampling_factor
+        x_downsampled = x_px * downsampling_factor
+        y_downsampled = y_px * downsampling_factor
+        w_downsampled = w_px * downsampling_factor
+        h_downsampled = h_px * downsampling_factor
 
         if slice_index is not None:
             mat = [
                 [1.0, 0.0, 0.0, x_downsampled],
                 [0.0, 1.0, 0.0, y_downsampled],
-                [0.0, 0.0, 1.0, slice_index  ],
-                [0.0, 0.0, 0.0, w_downsampled],
-                [0.0, 0.0, 0.0, h_downsampled],
+                [0.0, 0.0, 1.0, slice_index  ]
             ]
-            return mat, ["X", "Y", "Z" , "W" ,"H"], [out_px_um_x, out_px_um_y], "um"
+            return mat, ["X", "Y", "Z"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
         else:
             mat = [
-                [1.0, 0.0, x_downsampled],
-                [0.0, 1.0, y_downsampled],
-                [0.0, 0.0, w_downsampled],
-                [0.0, 0.0, h_downsampled],
+                [1.0, 0.0 ,x_downsampled],
+                [0.0, 1.0, 0.0, y_downsampled],
+                [0.0, 0.0, 1.0, ],
             ]
-            return mat, ["X", "Y","W","H"], [out_px_um_x, out_px_um_y], "um"
+            return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
         
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
@@ -252,7 +246,7 @@ class MimosaReader:
         manufacturer = self.get_manufacturer()
         px_um_x, px_um_y, unit = self.get_pixel_size_um()
         acq_sig = self.get_acq_signature()
-        chunk_mat, axes, out_pix, out_unit = self.get_chunk_transform_matrix(
+        chunk_mat, axes, out_pix, out_unit, w_downsampled, h_downsampled = self.get_chunk_transform_matrix(
             rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor,slice_index=slice_idx
         )
 
@@ -262,9 +256,12 @@ class MimosaReader:
             "PixelSizeUnits": out_unit,
             "SampleStaining": stain,
             "AcquisitionSignature": acq_sig,
+            "AcquisitionDate": self.get_session(),
             "ChunkTransformationMatrix": chunk_mat,
             "ChunkTransformationMatrixAxis": axes,
-            "DownsamplingFactor": downsampling_factor,
+            "Width": w_downsampled,
+            "Height": h_downsampled,
+            "DownsamplingFactor": downsampling_factor
         }
 
         if slice_idx is not None:

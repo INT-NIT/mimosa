@@ -13,8 +13,7 @@ def save_czi_metadata_json(czi_path: Path, out_json: Path) -> None:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
 def main() -> None:
-    czi_path = Path("/envau/work/nit/users/boudlal.h/original-dataset/1-Fenouil-MTO10092101/MTO10092101_Cx_200-208.czi")
-
+    czi_path = Path("/envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA/2026_01_08__10_18__0053.czi")
     # --- CORRECTION ICI ---
     # On transforme la string en objet Path
     out_json = Path("./metadata.json") 

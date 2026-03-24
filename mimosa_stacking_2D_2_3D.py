@@ -109,7 +109,8 @@ def main():
 
 
         list_w = []
-        list_h = []
+        list_h = []"Width": w_downsampled,
+            "Height": h_downsampled
 
         for i in range(0, len(myimages_channel_sorted) ):
             rawImage = output_path + "/" + myimages_channel_sorted[i]
