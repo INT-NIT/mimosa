@@ -8,7 +8,7 @@ participants_json:
   participant_id:
     Description: Unique participant ID
   species:
-    Description: ' '
+    Description: 'Specie of the animal , e.g: Marmouset'
 participants_tsv:
   columns:
   - participant_id
@@ -33,12 +33,12 @@ samples:
   - participant_id
   - sample_type
   entries:
-  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/1-Fenouil- MTO10092101
-    subject: Fenouil
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/
+    subject: 
     samples:
-    - sample_id: sample-Cx
-      sample_type: tissue
-      participant_id: sub-Fenouil
+    - sample_id: 
+      sample_type: 
+      participant_id: 
       files:
       - filename: 20230413_695.czi
       - filename: 20230413_696.czi

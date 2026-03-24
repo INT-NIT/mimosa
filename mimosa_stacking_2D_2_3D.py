@@ -109,9 +109,7 @@ def main():
 
 
         list_w = []
-        list_h = []"Width": w_downsampled,
-            "Height": h_downsampled
-
+        list_h = []
         for i in range(0, len(myimages_channel_sorted) ):
             rawImage = output_path + "/" + myimages_channel_sorted[i]
             rawImage_nii = nb.load(rawImage)

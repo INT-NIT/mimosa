@@ -213,7 +213,7 @@ class MimosaReader:
             mat = [
                 [1.0, 0.0 ,x_downsampled],
                 [0.0, 1.0, 0.0, y_downsampled],
-                [0.0, 0.0, 1.0, ],
+                [0.0, 0.0, 1.0, ]
             ]
             return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
         
