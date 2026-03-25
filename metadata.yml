@@ -1,9 +1,18 @@
 dataset_description:
-  Name: MIMOSA Microscopy Dataset
-  BIDSVersion: 1.11.1
-  DatasetType: raw
   Authors:
   - ibos
+  BIDSVersion: 1.11.1
+  DatasetType: raw
+  Name: MIMOSA Microscopy Dataset
+derivatives:
+  downsampled:
+    dataset_description:
+      BIDSVersion: 1.11.1
+      DatasetType: derivative
+      GeneratedBy:
+      - Description: Downsampled conversion of CZI microscopy images
+        Name: mimosa_hpc_convert
+      Name: Downsampled microscopy images
 participants_json:
   participant_id:
     Description: Unique participant ID
@@ -14,241 +23,118 @@ participants_tsv:
   - participant_id
   - species
   rows:
-  - participant_id: sub-Fenouil
+  - participant_id: sub-kaki-MTO14052301
     species: Marmouset
-  - participant_id: sub-Nuphar
-    species: Marmouset
-derivatives:
-  downsampled:
-    dataset_description:
-      Name: Downsampled microscopy images
-      BIDSVersion: 1.11.1
-      DatasetType: derivative
-      GeneratedBy:
-      - Name: mimosa_hpc_convert
-        Description: Downsampled conversion of CZI microscopy images
 samples:
   columns:
   - sample_id
   - participant_id
   - sample_type
   entries:
-  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/
-    subject: 
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/3-kaki-MTO14052301/originaux
+    subject: Kaki
     samples:
-    - sample_id: 
-      sample_type: 
-      participant_id: 
+    - sample_id: sample-Cx
+      participant_id: sub-Kaki
+      sample_type: Brain
       files:
-      - filename: 20230413_695.czi
-      - filename: 20230413_696.czi
-      - filename: 20230417_775.czi
-      - filename: 20230417_776.czi
-      - filename: 20230417_777.czi
-      - filename: 20230417_778.czi
-      - filename: 20230417_779.czi
-      - filename: 20230417_780.czi
-      - filename: MTO10092101_Cx_008-056.czi
-        slices:
-        - 8
-        - 56
-      - filename: MTO10092101_Cx_064-096.czi
-        slices:
-        - 64
-        - 96
-      - filename: MTO10092101_Cx_104-128.czi
+      - filename: 456-464.czi
+      - filename: MTO14052301_Cx_104-112-120-128-136.czi
         slices:
         - 104
+        - 112
+        - 120
         - 128
-      - filename: MTO10092101_Cx_136-144.czi
-        slices:
         - 136
-        - 144
-      - filename: MTO10092101_Cx_152-160.czi
+      - filename: MTO14052301_Cx_144-152-160-168.czi
         slices:
+        - 144
         - 152
         - 160
-      - filename: MTO10092101_Cx_168-176.czi
-        slices:
         - 168
-        - 176
-      - filename: MTO10092101_Cx_184-192.czi
+      - filename: MTO14052301_Cx_176-184-192.czi
         slices:
+        - 176
         - 184
         - 192
-      - filename: MTO10092101_Cx_200-208.czi
+      - filename: MTO14052301_Cx_200-208.czi
         slices:
         - 200
         - 208
-      - filename: MTO10092101_Cx_216-224.czi
+      - filename: MTO14052301_Cx_216-224.czi
         slices:
         - 216
         - 224
-      - filename: MTO10092101_Cx_232-240.czi
+      - filename: MTO14052301_Cx_232-240.czi
         slices:
         - 232
         - 240
-      - filename: MTO10092101_Cx_248-256.czi
+      - filename: MTO14052301_Cx_248-256.czi
         slices:
         - 248
         - 256
-      - filename: MTO10092101_Cx_264-272.czi
+      - filename: MTO14052301_Cx_264-272.czi
         slices:
         - 264
         - 272
-      - filename: MTO10092101_Cx_280-288.czi
+      - filename: MTO14052301_Cx_280-288.czi
         slices:
         - 280
         - 288
-      - filename: MTO10092101_Cx_296-304.czi
+      - filename: MTO14052301_Cx_296-304.czi
         slices:
         - 296
         - 304
-      - filename: MTO10092101_Cx_312-320.czi
+      - filename: MTO14052301_Cx_312-320.czi
         slices:
         - 312
         - 320
-      - filename: MTO10092101_Cx_328-336.czi
+      - filename: MTO14052301_Cx_328-336.czi
         slices:
         - 328
         - 336
-      - filename: MTO10092101_Cx_344-352.czi
+      - filename: MTO14052301_Cx_344-352.czi
         slices:
         - 344
         - 352
-      - filename: MTO10092101_Cx_360-368.czi
+      - filename: MTO14052301_Cx_360-368.czi
         slices:
         - 360
         - 368
-      - filename: MTO10092101_TC_1-33.czi
+      - filename: MTO14052301_Cx_376-384.czi
         slices:
-        - 1
-        - 33
-      - filename: MTO10092101_TC_105-109.czi
+        - 376
+        - 384
+      - filename: MTO14052301_Cx_392-400.czi
         slices:
-        - 105
-        - 109
-      - filename: MTO10092101_TC_111-115.czi
+        - 392
+        - 400
+      - filename: MTO14052301_Cx_408-416.czi
         slices:
-        - 111
-        - 115
-      - filename: MTO10092101_TC_117-119.czi
+        - 408
+        - 416
+      - filename: MTO14052301_Cx_424-432.czi
         slices:
-        - 117
-        - 119
-      - filename: MTO10092101_TC_121-123.czi
+        - 424
+        - 432
+      - filename: MTO14052301_Cx_440-448.czi
         slices:
-        - 121
-        - 123
-      - filename: MTO10092101_TC_125-127.czi
+        - 440
+        - 448
+      - filename: MTO14052301_Cx_472-480.czi
         slices:
-        - 125
-        - 127
-      - filename: MTO10092101_TC_129-131.czi
+        - 472
+        - 480
+      - filename: MTO14052301_Cx_8-16-32-40-48-56-64-72-80-88-96.czi
         slices:
-        - 129
-        - 131
-      - filename: MTO10092101_TC_133-135.czi
-        slices:
-        - 133
-        - 135
-      - filename: MTO10092101_TC_137-139.czi
-        slices:
-        - 137
-        - 139
-      - filename: MTO10092101_TC_141-143.czi
-        slices:
-        - 141
-        - 143
-      - filename: MTO10092101_TC_145-147.czi
-        slices:
-        - 145
-        - 147
-      - filename: MTO10092101_TC_149-151.czi
-        slices:
-        - 149
-        - 151
-      - filename: MTO10092101_TC_153-155.czi
-        slices:
-        - 153
-        - 155
-      - filename: MTO10092101_TC_157-159.czi
-        slices:
-        - 157
-        - 159
-      - filename: MTO10092101_TC_161-163.czi
-        slices:
-        - 161
-        - 163
-      - filename: MTO10092101_TC_165-167.czi
-        slices:
-        - 165
-        - 167
-      - filename: MTO10092101_TC_169-171.czi
-        slices:
-        - 169
-        - 171
-      - filename: MTO10092101_TC_173-175.czi
-        slices:
-        - 173
-        - 175
-      - filename: MTO10092101_TC_177-179.czi
-        slices:
-        - 177
-        - 179
-      - filename: MTO10092101_TC_181-183.czi
-        slices:
-        - 181
-        - 183
-      - filename: MTO10092101_TC_185-187.czi
-        slices:
-        - 185
-        - 187
-      - filename: MTO10092101_TC_189-191.czi
-        slices:
-        - 189
-        - 191
-      - filename: MTO10092101_TC_193_195.czi
-        slices:
-        - 193
-        - 195
-      - filename: MTO10092101_TC_197-199.czi
-        slices:
-        - 197
-        - 199
-      - filename: MTO10092101_TC_201-203.czi
-        slices:
-        - 201
-        - 203
-      - filename: MTO10092101_TC_205-209.czi
-        slices:
-        - 205
-        - 209
-      - filename: MTO10092101_TC_211-215.czi
-        slices:
-        - 211
-        - 215
-      - filename: MTO10092101_TC_217-221.czi
-        slices:
-        - 217
-        - 221
-      - filename: MTO10092101_TC_35-49.czi
-        slices:
-        - 35
-        - 49
-      - filename: MTO10092101_TC_51-65.czi
-        slices:
-        - 51
-        - 65
-      - filename: MTO10092101_TC_67-79.czi
-        slices:
-        - 67
-        - 79
-      - filename: MTO10092101_TC_81-91.czi
-        slices:
-        - 81
-        - 91
-      - filename: MTO10092101_TC_93-103.czi
-        slices:
-        - 93
-        - 103
+        - 8
+        - 16
+        - 32
+        - 40
+        - 48
+        - 56
+        - 64
+        - 72
+        - 80
+        - 88
+        - 96

@@ -113,7 +113,7 @@ def main():
         for i in range(0, len(myimages_channel_sorted) ):
             rawImage = output_path + "/" + myimages_channel_sorted[i]
             rawImage_nii = nb.load(rawImage)
-            list_w.append(rawImage_nii.shape[0])
+            list_w.append(rawImage_nii.shape[0]) # width in pixel and not micrometre
             list_h.append(rawImage_nii.shape[1])
 
         max_w = np.max(list_w)
@@ -128,6 +128,7 @@ def main():
         new_resolution = [downsampled_res, downsampled_res, original_thickness]
         new_affine = np.zeros((4, 4))
         new_affine[:3, :3] = np.diag(new_resolution)
+        # nous donne la position en micrometre du pixel d'origine(0,0,0) genre a quelle distance se trouve le nouveau centre , à 16 micrometre .... 
         new_affine[:3, 3] = padding_target_shape * new_resolution / 2. * -1
         new_affine[3, 3] = 1.
         stack_of_slices = np.zeros((padding_target_shape[0], padding_target_shape[1], padding_target_shape[2]))
@@ -143,6 +144,7 @@ def main():
             image_data = array_img.get_fdata()
 
             image_data_arr = np.asarray(image_data)
+            # normaliser l'image , pixel valeur basse -> devient 0 = noir , pixel valeur haute -> devient 255 = blanc 
             image_data_norm = (255 * (image_data_arr - np.percentile(image_data_arr, 5)) / np.percentile(image_data_arr, 95)).astype(int)
 
             image_data_norm_2D = np.squeeze(image_data_norm, 2)
