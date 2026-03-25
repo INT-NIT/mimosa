@@ -125,7 +125,11 @@ class MimosaReader:
 
             vx = float(dist[0]["Value"])
             vy = float(dist[1]["Value"]) if len(dist) > 1 else vx
-           
+
+            if vx < 1e-3:
+                vx = vx * 1e6
+                vy = vy * 1e6
+                
             return (vx, vy, "um")
         except Exception:
             return (1.0, 1.0, "um")
@@ -206,14 +210,15 @@ class MimosaReader:
             mat = [
                 [1.0, 0.0, 0.0, x_downsampled],
                 [0.0, 1.0, 0.0, y_downsampled],
-                [0.0, 0.0, 1.0, slice_index  ]
+                [0.0, 0.0, 1.0, slice_index  ],
+                [0.0, 0.0, 0.0, 1.0]
             ]
             return mat, ["X", "Y", "Z"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
         else:
             mat = [
-                [1.0, 0.0 ,x_downsampled],
-                [0.0, 1.0, 0.0, y_downsampled],
-                [0.0, 0.0, 1.0, ]
+                [1.0, 0.0,x_downsampled],
+                [0.0, 1.0, y_downsampled],
+                [0.0, 0.0, 1.0 ]
             ]
             return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
         

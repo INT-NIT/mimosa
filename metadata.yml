@@ -36,7 +36,7 @@ samples:
     samples:
     - sample_id: sample-Cx
       participant_id: sub-Kaki
-      sample_type: Brain
+      sample_type: tissue
       files:
       - filename: 456-464.czi
       - filename: MTO14052301_Cx_104-112-120-128-136.czi
