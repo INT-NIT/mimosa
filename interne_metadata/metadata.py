@@ -13,7 +13,7 @@ def save_czi_metadata_json(czi_path: Path, out_json: Path) -> None:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
 def main() -> None:
-    czi_path = Path("/envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA/2026_01_08__10_18__0053.czi")
+    czi_path = Path("/envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/5-Sully-MIO21100401/originaux/MIO21100401_Cx_418_420.czi")
     # --- CORRECTION ICI ---
     # On transforme la string en objet Path
     out_json = Path("./metadata.json") 
@@ -23,3 +23,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    """
+    Subject: Sully, Date: 2024-06-09T00:00:00, Sample: Cx
+Placeholder: MIO21100401_Cx_418_420.czi
+Rectangles de scènes {0: Rectangle(x=-165629, y=1512, w=76928, h=64662), 1: Rectangle(x=-90482, y=7654, w=76929, h=58510)}
+    """
