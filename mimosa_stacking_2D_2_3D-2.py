@@ -12,7 +12,7 @@ class SlicePreprocessor:
     def __init__(self, input_root: str, output_root: str):
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
-
+        self.subject_max_sizes = {}
         self.downsampled_root = self.input_root / "derivatives" / "downsampled"
         self.preproc_root = self.output_root / "derivatives" / "preproc"
 
@@ -33,7 +33,7 @@ class SlicePreprocessor:
         """
         for nii_path in subject_dir.rglob("*.nii.gz"):
             yield nii_path
-            
+
     def iter_subject_dirs(self):
         """
         Iterate over subject directories inside derivatives/downsampled
@@ -89,7 +89,7 @@ class SlicePreprocessor:
 
         return int(width), int(height)              
     
-    def compute_target_shape(self, nii_paths: list[Path], padding_delta: int) -> tuple[int, int]:
+    def compute_target_shape(self, nii_paths: list[Path], padding_delta: int , subject_name: str) -> tuple[int, int]:
         """
         Compute target 2D shape for a group of slices:
         max width + padding_delta, max height + padding_delta
@@ -104,7 +104,7 @@ class SlicePreprocessor:
                 max_width = width
             if height > max_height:
                 max_height = height
-
+        self.subject_max_sizes[subject_name] = (max_width, max_height)
         target_width = max_width + padding_delta
         target_height = max_height + padding_delta
 
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         if not subject_niftis:
             continue
 
-        target_shape = proc.compute_target_shape(subject_niftis, padding_delta)
+        target_shape = proc.compute_target_shape(subject_niftis, padding_delta,subject_dir.name)
 
         print("SUBJECT :", subject_dir.name)
         print("TARGET SHAPE :", target_shape)
