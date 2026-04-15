@@ -25,8 +25,23 @@ class SlicePreprocessor:
        iteration over all niffti files in derivatives/downsampled 
         """
         for nii_path in self.downsampled_root.rglob("*.nii.gz"):
-            yield nii_path # returns nii files one by one not all at same time 
-        
+            yield nii_path # returns nii files one by one not all at same time
+
+    def iter_subject_niftis(self, subject_dir: Path):
+        """
+        Iterate over all NIfTI files for one subject
+        """
+        for nii_path in subject_dir.rglob("*.nii.gz"):
+            yield nii_path
+            
+    def iter_subject_dirs(self):
+        """
+        Iterate over subject directories inside derivatives/downsampled
+        """
+        for subject_dir in sorted(self.downsampled_root.glob("sub-*")):
+            if subject_dir.is_dir():
+                yield subject_dir
+            
     def build_output_path(self, nii_path: Path) -> Path:
         """
         preserve same hierarchy of derivatives/downsampled  in derivatives/preproc 
@@ -53,8 +68,49 @@ class SlicePreprocessor:
             shutil.copyfile(input_json, output_json)
         else:
             print(f"WARNING : NO JSON for {input_nii_path.name}")
+    def get_slice_size_from_json(self, nii_path: Path) -> tuple[int, int]:
+        """
+            Read width and height of one slice from its JSON sidecar
+        """
+        json_path = self.get_json_path(nii_path)
 
-    def process_one_slice(self, nii_path: Path) -> Path:
+        if not json_path.exists():
+            raise FileNotFoundError(f"JSON introuvable pour {nii_path.name}: {json_path}")
+
+        import json
+        with open(json_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        width = meta.get("Width")
+        height = meta.get("Height")
+
+        if width is None or height is None:
+            raise ValueError(f"Width/Height NOT FOUND IN {json_path}")
+
+        return int(width), int(height)              
+    
+    def compute_target_shape(self, nii_paths: list[Path], padding_delta: int) -> tuple[int, int]:
+        """
+        Compute target 2D shape for a group of slices:
+        max width + padding_delta, max height + padding_delta
+        """
+        max_width = 0
+        max_height = 0
+
+        for nii_path in nii_paths:
+            width, height = self.get_slice_size_from_json(nii_path)
+
+            if width > max_width:
+                max_width = width
+            if height > max_height:
+                max_height = height
+
+        target_width = max_width + padding_delta
+        target_height = max_height + padding_delta
+
+        return target_width, target_height
+
+    def process_one_slice(self, nii_path: Path ,  target_shape: tuple[int, int]) -> Path:
         """
         For now:
         - load input NIfTI
@@ -83,10 +139,23 @@ if __name__ == "__main__":
         output_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/"
     )
 
-    for nii_path in proc.iter_input_niftis():
-        out = proc.process_one_slice(nii_path)
-        print("IN :", nii_path)
-        print("OUT:", out)
+    padding_delta = 100
+
+    for subject_dir in proc.iter_subject_dirs():
+        subject_niftis = list(proc.iter_subject_niftis(subject_dir))
+
+        if not subject_niftis:
+            continue
+
+        target_shape = proc.compute_target_shape(subject_niftis, padding_delta)
+
+        print("SUBJECT :", subject_dir.name)
+        print("TARGET SHAPE :", target_shape)
+
+        for nii_path in subject_niftis:
+            out = proc.process_one_slice(nii_path, target_shape)
+            print("IN :", nii_path)
+            print("OUT:", out)
     
 
 
