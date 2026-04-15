@@ -40,7 +40,7 @@ class SlicePreprocessor:
         """
         Return the sidecar JSON path corresponding to a .nii.gz file
         """
-        return nii_path.with_suffix("").with_suffix(".json")
+        return Path(os.path.splitext(str(nii_path))[0] + ".json")
 
     def copy_json_sidecar(self, input_nii_path: Path, output_nii_path: Path) -> None:
         """
@@ -79,15 +79,15 @@ class SlicePreprocessor:
 
 if __name__ == "__main__":
     proc = SlicePreprocessor(
-        input_root="/envau/work/nit/users/boudlal.h/BIDS-3-sujets/",
-        output_root="/envau/work/nit/users/boudlal.h/BIDS-3-sujets/"
+        input_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/",
+        output_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/"
     )
 
     for nii_path in proc.iter_input_niftis():
         out = proc.process_one_slice(nii_path)
         print("IN :", nii_path)
         print("OUT:", out)
-        break
+    
 
 
 
