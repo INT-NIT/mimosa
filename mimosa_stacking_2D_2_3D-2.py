@@ -54,7 +54,7 @@ class BidsTools:
         z_value = meta.get("SliceIndex")
 
         if z_value is None:
-            raise ValueError("Slice index not found in JSON")
+            return None 
 
         return int(z_value)
     @classmethod    
@@ -87,7 +87,9 @@ class BidsTools:
         first_res = value_part.split("x")[0]
 
         return float(first_res)
-    
+    @classmethod
+    def has_slice_index(cls, meta: dict) -> bool:
+        return meta.get("SliceIndex") is not None
 
 
 
@@ -286,13 +288,19 @@ class VolumeBuilder3D:
 
         # 1) Lire les métadonnées de toutes les slices et trier selon Z
         sorted_slices = []
+        skipped_slices = []
+
         for nii_path in nii_paths:
             meta, _ = BidsTools.load_metadata(nii_path)
-            z_index = BidsTools.get_z_index(meta)   # adapte le nom du champ dans cette fonction
+            z_index = BidsTools.get_z_index(meta)
+
+            if z_index is None:
+                skipped_slices.append(nii_path.name)
+                continue
+
             sorted_slices.append((z_index, nii_path, meta))
-
         sorted_slices.sort(key=lambda x: x[0])
-
+        
         # 2) Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
         downsampling_factor = BidsTools.get_downsampling_factor(first_meta)
