@@ -201,10 +201,10 @@ class MimosaReader:
             w_px = float(rect[2])
             h_px = float(rect[3])
 
-        x_downsampled = x_px * downsampling_factor
-        y_downsampled = y_px * downsampling_factor
-        w_downsampled = w_px * downsampling_factor
-        h_downsampled = h_px * downsampling_factor
+        x_downsampled = x_px / downsampling_factor
+        y_downsampled = y_px / downsampling_factor
+        w_downsampled = w_px / downsampling_factor
+        h_downsampled = h_px / downsampling_factor
 
         if slice_index is not None:
             mat = [
