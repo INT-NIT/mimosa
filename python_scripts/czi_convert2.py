@@ -47,11 +47,17 @@ def czi2bitmapHPC(
         zoom_factor = float(1.0 / downsampling_factor)
 
         for scene_idx in range(len(scenes)):
-            chunk = f"{scene_idx:02d}"
             rect = scenes[scene_idx]
             roi = (rect[0], rect[1], rect[2], rect[3])
 
-            # Lire chaque channel pour cette scene
+            slice_idx = reader.get_slice_index_for_scene(scene_idx)
+
+            if slice_idx is None:
+                print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
+                continue
+
+            bids_info["section"] = slice_idx
+
             channel_images = {}
             for c in range(nb_channels):
                 channel_images[c] = czidoc.read(roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor)
@@ -64,8 +70,7 @@ def czi2bitmapHPC(
                     base = bm.build_bids_basename(
                         bids_info=bids_info,
                         stain=stain,
-                        chunk=chunk,
-                        suffix="FLUO",
+                        suffix="FLUO",          # ← plus de chunk
                     )
 
                     if write_tif:

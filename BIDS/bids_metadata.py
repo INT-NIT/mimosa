@@ -99,28 +99,14 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
     print(f"sessions.tsv cree: sub-{subject}/sessions.tsv")
     
-def write_samples_tsv(bids_root: str, cfg: dict) -> None:
-    """
-    Writes samples.tsv directly from YAML.
-    Adding a column in YAML automatically adds it in the TSV.
-    """
+def write_samples_tsv(bids_root: str, samples_rows: list) -> None:
     path = os.path.join(bids_root, "samples.tsv")
-
-    samples_section = cfg.get("samples")
-    if not samples_section:
-        raise ValueError("Key 'samples' missing in YAML")
-
-    cols = samples_section.get("columns")
-    if not cols:
-        raise ValueError("Key 'columns' missing in samples section of YAML")
+    cols = ["sample_id", "participant_id", "sample_type", "derived_from", "source_filename"]
 
     lines = ["\t".join(cols)]
-
-    for entry in samples_section.get("entries", []):
-        for s in entry.get("samples", []):
-            # direct drag and drop from YAML
-            line = "\t".join(str(s.get(c, "n/a")) for c in cols)
-            lines.append(line)
+    for r in samples_rows:
+        line = [str(r.get(c, "n/a")) for c in cols]
+        lines.append("\t".join(line))
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -136,13 +122,23 @@ def write_micr_sidecar_json(image_path: str, meta: dict) -> None:
 
 
 
-def extract_slices_from_filename(filename: str) -> list[int]:
+def extract_slices_from_filename(filename: str) -> list[int]: # pour update yaml with slides genre on extrait les slices des noms des fichiers et on remplit le champ slices dans yaml  
     """ex: MTO10092101_Cx_008-056.czi -> [8, 56]"""
     match = re.search(r'_(\d+(?:[-_]\d+)+)\.czi$', filename)
     if match:
         return [int(n) for n in re.split(r'[-_]', match.group(1))]
     return []
 
+
+
+def get_slices_for_file(cfg: dict, filename: str) -> list: # pour un fichier czi donné on retourne les slices dans yaml 
+    """Returns list of slice numbers for a given CZI filename from YAML"""
+    for entry in cfg.get("samples", {}).get("entries", []):
+        for sample in entry.get("samples", []):
+            for f in sample.get("files", []):
+                if f["filename"] == filename:
+                    return f.get("slices", [])
+    return []
 
 def update_yaml_with_slices(yaml_path: str) -> None:
     """

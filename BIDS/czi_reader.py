@@ -159,6 +159,7 @@ class MimosaReader:
             if val:
                 return val
         return "Unknown"
+    
     def get_acq_signature(self) -> str:
         """
         returns acquisition signature based on illumination type and pixel size.

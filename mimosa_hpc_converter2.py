@@ -75,17 +75,35 @@ def main():
                 print(f"    Subject: {summary['sub']}, Date: {summary['acq_time']}, Sample: {summary['sample']}")
 
                 bm.create_sourcedata_links(full_input_path, summary["sub"], bids_root_path)
-
                 bids_info = session.get_bids_info(
                     summary_meta=summary,
-                    czi_id=czi_id
+                    czi_id=czi_id,
+                    section_idx=None   # sera mis à jour dans czi_convert2 pour chaque scène
                 )
 
+                participant_id = f"sub-{bids_info['sub']}"
+                slide_num = len([r for r in samples_rows 
+                                if r['sample_type'] == 'technical sample' 
+                                and r['participant_id'] == participant_id]) + 1
+                slide_id = f"sample-slide{slide_num:02d}"
+                              
                 samples_rows.append({
-                    "sample_id":      f"sample-{bids_info['sample']}",
-                    "participant_id": f"sub-{bids_info['sub']}"
+                    "sample_id":      slide_id,
+                    "participant_id": f"sub-{bids_info['sub']}",
+                    "sample_type":    "technical sample",
+                    "derived_from":   "n/a",
+                    "source_filename": filename,
                 })
 
+                slices = bmeta.get_slices_for_file(cfg, filename)  # liste des slices ex: [176, 184, 192]
+                for slice_num in slices:
+                    samples_rows.append({
+                        "sample_id":      f"sample-section{slice_num}",
+                        "participant_id": f"sub-{bids_info['sub']}",
+                        "sample_type":    "tissue",
+                        "derived_from":   slide_id,
+                        "source_filename": "n/a",
+                    })
                 sub     = bids_info["sub"]
                 ses_id  = f"ses-{bids_info['ses']}"
                 sessions_by_sub.setdefault(sub, {})
@@ -110,7 +128,7 @@ def main():
         rows = [{"session_id": ses_id, "acq_time": d[ses_id]} for ses_id in sorted(d.keys())]
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
     
-    bmeta.write_samples_tsv(bids_root_path, cfg)
+    bmeta.write_samples_tsv(bids_root_path, samples_rows)
 
     print("\n[SUCCESS] Conversion done.")
 

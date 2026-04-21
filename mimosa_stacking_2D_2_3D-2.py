@@ -96,7 +96,7 @@ class BidsTools:
 
 
 class SlicePreprocessor:
-    def __init__(self, input_root: str, output_root: str, reorient_mode: str = "flip_ud"):
+    def __init__(self, input_root: str, output_root: str, reorient_mode: str = "none"):
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
         self.subject_max_sizes = {} # having track of max width and height for each subject 
@@ -106,7 +106,7 @@ class SlicePreprocessor:
         self.preproc_root = self.output_root / "derivatives" / "preproc"
 
         if not self.downsampled_root.exists():
-            raise FileNotFoundError(f"Dossier introuvable: {self.downsampled_root}")
+            raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
 
         self.preproc_root.mkdir(parents=True, exist_ok=True)
 
@@ -132,16 +132,20 @@ class SlicePreprocessor:
 
         return int(width), int(height)              
     
-    def compute_target_shape(self, nii_paths: list[Path], padding_delta: int , subject_name: str) -> tuple[int, int]:
-        """
-        Compute target 2D shape for a group of slices:
-        max width + padding_delta, max height + padding_delta
-        """
+    def compute_target_shape(self, nii_paths, padding_delta, subject_name):
         max_width = 0
         max_height = 0
 
+        # Check if rotation swaps dimensions
+        swaps_dimensions = any(m in self.reorient_mode.split("+") 
+                            for m in ["rot90_cw", "rot90_ccw"])
+
         for nii_path in nii_paths:
             width, height = self.get_slice_size_from_json(nii_path)
+
+            # If rotation swaps axes, swap width and height
+            if swaps_dimensions:
+                width, height = height, width
 
             if width > max_width:
                 max_width = width
@@ -150,25 +154,32 @@ class SlicePreprocessor:
 
         self.subject_max_sizes[subject_name] = (max_width, max_height)
 
-        target_width = max_width + padding_delta
-        target_height = max_height + padding_delta
-
-        return target_width, target_height
+        return max_width + padding_delta, max_height + padding_delta
     
     def reorient_slice_2d(self, data_2d: np.ndarray) -> np.ndarray:
         """
-        Apply 2D reorientation before padding
+        Apply multiple 2D reorientation before padding
         """
-        if self.reorient_mode == "none":
-            return data_2d
-        elif self.reorient_mode == "flip_ud":
-            return np.flipud(data_2d)
-        elif self.reorient_mode == "flip_lr":
-            return np.fliplr(data_2d)
-        elif self.reorient_mode == "rot180":
-            return np.rot90(data_2d, 2)
-        else:
-            raise ValueError(f"UNKNOWN ROTATION MODE : {self.reorient_mode}")
+        modes = self.reorient_mode.split("+")
+
+        for mode in modes:
+            mode = mode.strip()
+            if mode == "none":
+                pass
+            elif mode == "flip_ud":
+                data_2d = np.flipud(data_2d)
+            elif mode == "flip_lr":
+                data_2d = np.fliplr(data_2d)
+            elif mode == "rot180":
+                data_2d = np.rot90(data_2d, 2)
+            elif mode == "rot90_cw":
+                data_2d = np.rot90(data_2d, 3)
+            elif mode == "rot90_ccw":
+                data_2d = np.rot90(data_2d, 1)
+            else:
+                raise ValueError(f"UNKNOWN ROTATION MODE : {mode}")
+
+        return data_2d
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
         """
@@ -212,7 +223,7 @@ class SlicePreprocessor:
 
         if shift_x < 0 or shift_y < 0:
             raise ValueError(
-                f"Target shape {target_shape} plus petite que l'image {data_2d.shape} pour {nii_path.name}"
+                f"Target shape {target_shape} smaller than the image {data_2d.shape} for {nii_path.name}"
             )
 
         padded_data_2d = np.pad(
@@ -286,7 +297,7 @@ class VolumeBuilder3D:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR  {subject_dir.name} {channel}")
 
-        # 1) Lire les métadonnées de toutes les slices et trier selon Z
+        #  Lire les métadonnées de toutes les slices et trier selon Z
         sorted_slices = []
         skipped_slices = []
 
@@ -301,14 +312,14 @@ class VolumeBuilder3D:
             sorted_slices.append((z_index, nii_path, meta))
         sorted_slices.sort(key=lambda x: x[0])
         
-        # 2) Métadonnées de référence (première slice du groupe)
+        # Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
         downsampling_factor = BidsTools.get_downsampling_factor(first_meta)
         original_res = BidsTools.get_original_resolution(first_meta)
 
         downsampled_res = original_res * downsampling_factor
 
-        # 3) Lire la taille des slices déjà paddées/réorientées
+        #  Lire la taille des slices déjà paddées/réorientées
         first_img = nb.load(str(sorted_slices[0][1]))
         first_data = np.squeeze(first_img.get_fdata())
 
@@ -318,7 +329,7 @@ class VolumeBuilder3D:
 
         volume_shape = np.array((width, height, nb_slices))
 
-        # 4) Construire la résolution et l’affine du volume final
+        #  Construire la résolution et l’affine du volume final
         new_resolution = [downsampled_res, downsampled_res, self.original_thickness]
 
         new_affine = np.zeros((4, 4))
@@ -326,20 +337,23 @@ class VolumeBuilder3D:
         new_affine[:3, 3] = volume_shape * new_resolution / 2.0 * -1
         new_affine[3, 3] = 1.0
 
-        # 5) Empiler les slices dans l’ordre du Z
-        stack_of_slices = np.zeros((width, height, nb_slices))
-
+        # float32 instead of default float64 to reduce memory usage by half
+        # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
+        # which have pixel values between 0 and 65535
+        stack_of_slices = np.zeros((width, height, nb_slices), dtype=np.float32) 
         for i, (z_index, nii_path, meta) in enumerate(sorted_slices):
             img = nb.load(str(nii_path))
             data = img.get_fdata()
             data_2d = np.squeeze(data)
             stack_of_slices[:, :, i] = data_2d
 
-        # 6) Sauvegarder le volume
+        # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         output_path = self.build_volume_output_path(subject_dir, channel)
         nb.save(out_img, str(output_path))
-        BidsTools.copy_json_sidecar(sorted_slices[0][1], output_path)
+        output_json = BidsTools.get_json_path(output_path)
+        with open(output_json, "w", encoding="utf-8") as f:
+            json.dump({}, f)
         self.update_output_json(output_path, new_affine, tuple(volume_shape))
         return output_path
     
@@ -352,32 +366,55 @@ class VolumeBuilder3D:
                 print("VOLUME:", out)
     
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Slice preprocessing and 3D volume stacking")
+    parser.add_argument("--bids_root",          required=True,                  help="Path to BIDS root folder")
+    parser.add_argument("--reorient_mode",      required=False, default="none", help="Reorientation mode: none, flip_ud, flip_lr, rot180, rot90_cw(clockwise), rot90_ccw — chain with '+' e.g. 'flip_ud+rot90_cw'")
+    parser.add_argument("--padding_delta",      required=False, type=int,   default=100,   help="Padding size in pixels (default: 100)")
+    parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness  default 200 ")
+    args = parser.parse_args()
+
     proc = SlicePreprocessor(
-        input_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/",
-        output_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/"
+        input_root=args.bids_root,
+        output_root=args.bids_root,
+        reorient_mode=args.reorient_mode
     )
 
-    padding_delta = 100
+    downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
+    preproc_niftis     = list(proc.preproc_root.rglob("*.nii.gz"))
 
-    for subject_dir in BidsTools.iter_subject_dirs(proc.downsampled_root):
-        subject_niftis = list(BidsTools.iter_subject_niftis(subject_dir))
+    print(f"Downsampled: {len(downsampled_niftis)} files")
+    print(f"Preproc:     {len(preproc_niftis)} files")
 
-        if not subject_niftis:
-            continue
+    if len(preproc_niftis) < len(downsampled_niftis):
+        print("Preproc incomplete or missing — running SlicePreprocessor...")
 
-        target_shape = proc.compute_target_shape(subject_niftis, padding_delta,subject_dir.name)
+        for subject_dir in BidsTools.iter_subject_dirs(proc.downsampled_root):
+            subject_niftis = list(BidsTools.iter_subject_niftis(subject_dir))
 
-        print("SUBJECT :", subject_dir.name)
-        print("TARGET SHAPE :", target_shape)
+            if not subject_niftis:
+                continue
 
-        for nii_path in subject_niftis:
-            out = proc.process_one_slice(nii_path, target_shape,subject_dir.name)
-            print("IN :", nii_path)
-            print("OUT:", out)
+            target_shape = proc.compute_target_shape(subject_niftis, args.padding_delta, subject_dir.name)
+            print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
+
+            for nii_path in subject_niftis:
+                # Skip slices already preprocessed
+                output_path = proc.build_output_path(nii_path)
+                if output_path.exists():
+                    print(f"  SKIP (already exists): {nii_path.name}")
+                    continue
+
+                out = proc.process_one_slice(nii_path, target_shape, subject_dir.name)
+                print(f"  IN : {nii_path.name}")
+                print(f"  OUT: {out.name}")
+    else:
+        print("Preproc is complete — skipping SlicePreprocessor")
+
+    print("\nRunning VolumeBuilder3D...")
     builder = VolumeBuilder3D(
-    bids_root="/envau/work/nit/users/boudlal.h/BIDS-2-sujets/",
-    original_thickness=0.100
+        bids_root=args.bids_root,
+        original_thickness=args.original_thickness
     )
-
     builder.build_all_volumes()
-
