@@ -3,7 +3,7 @@ import nibabel as nb
 from pathlib import Path
 import json 
 from BIDS import bids_metadata as bmeta
-
+from BIDS import bids_manager as bm
 
 class SlicePreprocessor:
     def __init__(self, input_root: str, output_root: str, reorient_mode: str = "none"):
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     if len(preproc_niftis) < len(downsampled_niftis):
         print("Preproc incomplete or missing — running SlicePreprocessor...")
 
-        for subject_dir in bmeta.iter_subject_dirs(proc.downsampled_root):
+        for subject_dir in bm.iter_subject_dirs(proc.downsampled_root):
             subject_niftis = list(bmeta.iter_subject_niftis(subject_dir))
 
             if not subject_niftis:
