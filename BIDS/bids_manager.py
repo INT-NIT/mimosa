@@ -109,12 +109,12 @@ def build_bids_basename(bids_info, stain, suffix="FLUO"):
         f"_stain-{stain_clean}"
         f"_{suffix}"
     )
-def iter_subject_dirs(self, root: Path):
+def iter_subject_dirs( root: Path):
     for subject_dir in sorted(root.glob("sub-*")):
         if subject_dir.is_dir():
             yield subject_dir
 
-def iter_subject_niftis(cls, subject_dir: Path):
+def iter_subject_niftis( subject_dir: Path):
     for nii_path in subject_dir.rglob("*.nii.gz"):
         yield nii_path
 def group_subject_niftis_by_channel(self, subject_dir: Path):
