@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 
 
 from python_scripts import czi_convert2 as czi
@@ -32,6 +31,7 @@ def main():
     bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml, output_format=output_format)
 
     cfg = bmeta.load_metadata_config(args.yaml)
+    print("###################################################### ", cfg)
 
     cfg = bmeta.update_yaml_with_slices(args.yaml)
 

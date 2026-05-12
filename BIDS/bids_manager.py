@@ -1,4 +1,5 @@
 import os
+import pathlib as Path
 import re
 import glob
 from BIDS import bids_metadata as bmeta

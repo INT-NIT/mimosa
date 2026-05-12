@@ -191,12 +191,19 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
     yaml_path = Path(yaml_path)
     with open(yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = Path(entry["path"])
         subject      = entry["subject"]
+
         if not subject_path.exists():
             print(f"WARNING: {subject} path not found: {subject_path}")
             continue
+
+        # If no samples defined, create a default one
+        if not entry.get("samples"):
+            entry["samples"] = [{"sample_id": "sample-Cx", "files": []}]
+
         for sample in entry.get("samples", []):
             sample_id = sample["sample_id"]
             files = []
@@ -208,6 +215,8 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
                 files.append(file_entry)
             sample["files"] = files
             print(f"{subject} / {sample_id} → {len(files)} files added")
+
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
     return cfg

@@ -24,7 +24,7 @@ participants_tsv:
   - participant_id
   - species
   rows:
-  - participant_id: sub-Nuphar
+  - participant_id: sub-Marmot
     species: Marmouset
 microscopy_json:
   MicroscopyTechnique: "Fluorescence microscopy"
@@ -32,6 +32,8 @@ microscopy_json:
   BodyPart: "Brain"
 samples:
   entries:
-  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/2-Nuphar-MJO17020301/originaux
-    subject: Nuphar
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/6-Marmot-MJO16052401/originaux/
+    subject: Marmot
+    samples:
+      - sample_id: sample-Cx
    
