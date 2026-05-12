@@ -108,7 +108,29 @@ def build_bids_basename(bids_info, stain, suffix="FLUO"):
         f"_stain-{stain_clean}"
         f"_{suffix}"
     )
+def iter_subject_dirs(self, root: Path):
+    for subject_dir in sorted(root.glob("sub-*")):
+        if subject_dir.is_dir():
+            yield subject_dir
 
+def iter_subject_niftis(cls, subject_dir: Path):
+    for nii_path in subject_dir.rglob("*.nii.gz"):
+        yield nii_path
+def group_subject_niftis_by_channel(self, subject_dir: Path):
+    groups = {}
+    for nii_path in subject_dir.rglob("*.nii.gz"):
+        channel = self.get_channel_from_path(nii_path)
+        groups.setdefault(channel, []).append(nii_path)
+    return groups
+
+def get_channel_from_path(self, nii_path: Path) -> str:
+    parts = nii_path.name.split("_")
+
+    for part in parts:
+        if part.startswith("stain-"):
+            return part.replace("stain-", "")
+
+    raise ValueError(f"CHANNEL NOT FOUND  {nii_path.name}")
 
 def get_raw_micr_folder(bids_root_path: str, bids_info: dict) -> str:
     folder_path = os.path.join(

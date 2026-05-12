@@ -1,98 +1,10 @@
 import os
-import shutil
 import numpy as np
 import subprocess as sp
 import nibabel as nb
 from pathlib import Path
 import json 
-
-class BidsTools:
-    @classmethod
-    def get_json_path(self, nii_path: Path) -> Path:
-        return Path(os.path.splitext(str(nii_path))[0] + ".json")
-    @classmethod
-    def load_metadata(self, nii_path: Path) -> dict:
-        json_path = self.get_json_path(nii_path)
-
-        if not json_path.exists():
-            raise FileNotFoundError(f"JSON NOT FOUND FOR {nii_path.name}: {json_path}")
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f) , json_path
-    @classmethod
-    def iter_subject_dirs(self, root: Path):
-        for subject_dir in sorted(root.glob("sub-*")):
-            if subject_dir.is_dir():
-                yield subject_dir
-    @classmethod
-    def iter_subject_niftis(cls, subject_dir: Path):
-        for nii_path in subject_dir.rglob("*.nii.gz"):
-            yield nii_path
-    @classmethod
-    def copy_json_sidecar(self, input_nii_path: Path, output_nii_path: Path) -> None:
-        """
-        Copy JSON sidecar from input NIfTI to output NIfTI
-        """
-        input_json = self.get_json_path(input_nii_path)
-        output_json = self.get_json_path(output_nii_path)
-
-        if input_json.exists():
-            shutil.copyfile(input_json, output_json)
-        else:
-            print(f"WARNING : NO JSON for {input_nii_path.name}")
-    @classmethod
-    def get_channel_from_path(self, nii_path: Path) -> str:
-        parts = nii_path.name.split("_")
-
-        for part in parts:
-            if part.startswith("stain-"):
-                return part.replace("stain-", "")
-
-        raise ValueError(f"CHANNEL NOT FOUND  {nii_path.name}")
-    @classmethod
-    def get_z_index(cls, meta: dict) -> int:
-        z_value = meta.get("SliceIndex")
-
-        if z_value is None:
-            return None 
-
-        return int(z_value)
-    @classmethod    
-    def group_subject_niftis_by_channel(self, subject_dir: Path):
-        groups = {}
-        for nii_path in subject_dir.rglob("*.nii.gz"):
-            channel = self.get_channel_from_path(nii_path)
-            groups.setdefault(channel, []).append(nii_path)
-        return groups
-    @classmethod
-    def get_downsampling_factor(self, meta: dict) -> float:
-        value = meta.get("DownsamplingFactor")
-
-        if value is None:
-            raise ValueError("DownsamplingFactor not found in the JSON ")
-
-        return float(value)
-    @classmethod    
-    def get_original_resolution(self, meta: dict) -> float:
-        signature = meta.get("AcquisitionSignature")
-
-        if not signature:
-            raise ValueError("AcquisitionSignature not found in the JSON ")
-
-        marker = "resolution-"
-        if marker not in signature:
-            raise ValueError(f"Not expected AcquisitionSignature format: {signature}")
-
-        value_part = signature.split(marker)[1]
-        first_res = value_part.split("x")[0]
-
-        return float(first_res)
-    @classmethod
-    def has_slice_index(cls, meta: dict) -> bool:
-        return meta.get("SliceIndex") is not None
-
-
-
+from BIDS import bids_metadata as bmeta
 
 
 class SlicePreprocessor:
@@ -123,7 +35,7 @@ class SlicePreprocessor:
         """
             Read width and height of one slice from its JSON sidecar
         """
-        meta, json_path=BidsTools.load_metadata(nii_path)
+        meta, json_path=bmeta.load_metadata(nii_path)
         width = meta.get("Width")
         height = meta.get("Height")
 
@@ -166,15 +78,15 @@ class SlicePreprocessor:
             mode = mode.strip()
             if mode == "none":
                 pass
-            elif mode == "flip_ud":
+            elif mode == "flip_ud": # haut bas 
                 data_2d = np.flipud(data_2d)
-            elif mode == "flip_lr":
+            elif mode == "flip_lr": # gauche , droite 
                 data_2d = np.fliplr(data_2d)
             elif mode == "rot180":
                 data_2d = np.rot90(data_2d, 2)
             elif mode == "rot90_cw":
                 data_2d = np.rot90(data_2d, 3)
-            elif mode == "rot90_ccw":
+            elif mode == "rot90_ccw": # anti horaire 
                 data_2d = np.rot90(data_2d, 1)
             else:
                 raise ValueError(f"UNKNOWN ROTATION MODE : {mode}")
@@ -185,7 +97,7 @@ class SlicePreprocessor:
         """
         Update copied JSON sidecar with preprocessing metadata
         """
-        meta, output_json = BidsTools.load_metadata(output_nii_path)
+        meta, output_json = bmeta.load_metadata(output_nii_path)
 
         meta["ReorientationMode"] = self.reorient_mode
         meta["PaddingTargetShape"] = [int(target_shape[0]), int(target_shape[1])]
@@ -241,7 +153,7 @@ class SlicePreprocessor:
         out_img = nb.Nifti1Image(padded_data, affine, header)
         nb.save(out_img, str(output_path))
 
-        BidsTools.copy_json_sidecar(nii_path, output_path)
+        bmeta.copy_json_sidecar(nii_path, output_path)
         self.update_output_json(output_path, target_shape, subject_name)
         return output_path
 
@@ -272,7 +184,7 @@ class VolumeBuilder3D:
         Update JSON sidecar for 3D volume with stacking metadata
         """
 
-        meta, output_json = BidsTools.load_metadata(output_nii_path)
+        meta, output_json = bmeta.load_metadata(output_nii_path)
 
         meta["VolumeShape"] = [
             int(volume_shape[0]),
@@ -302,8 +214,8 @@ class VolumeBuilder3D:
         skipped_slices = []
 
         for nii_path in nii_paths:
-            meta, _ = BidsTools.load_metadata(nii_path)
-            z_index = BidsTools.get_z_index(meta)
+            meta, _ = bmeta.load_metadata(nii_path)
+            z_index = bmeta.get_z_index(meta)
 
             if z_index is None:
                 skipped_slices.append(nii_path.name)
@@ -314,8 +226,8 @@ class VolumeBuilder3D:
         
         # Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
-        downsampling_factor = BidsTools.get_downsampling_factor(first_meta)
-        original_res = BidsTools.get_original_resolution(first_meta)
+        downsampling_factor = bmeta.get_downsampling_factor(first_meta)
+        original_res = bmeta.get_original_resolution(first_meta)
 
         downsampled_res = original_res * downsampling_factor
 
@@ -351,15 +263,15 @@ class VolumeBuilder3D:
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         output_path = self.build_volume_output_path(subject_dir, channel)
         nb.save(out_img, str(output_path))
-        output_json = BidsTools.get_json_path(output_path)
+        output_json = bmeta.get_json_path(output_path)
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump({}, f)
         self.update_output_json(output_path, new_affine, tuple(volume_shape))
         return output_path
     
     def build_all_volumes(self):
-        for subject_dir in BidsTools.iter_subject_dirs(self.preproc_root):
-            groups = BidsTools.group_subject_niftis_by_channel(subject_dir)
+        for subject_dir in bmeta.iter_subject_dirs(self.preproc_root):
+            groups = bmeta.group_subject_niftis_by_channel(subject_dir)
 
             for channel, nii_paths in groups.items():
                 out = self.build_one_volume(subject_dir, channel, nii_paths)
@@ -390,8 +302,8 @@ if __name__ == "__main__":
     if len(preproc_niftis) < len(downsampled_niftis):
         print("Preproc incomplete or missing — running SlicePreprocessor...")
 
-        for subject_dir in BidsTools.iter_subject_dirs(proc.downsampled_root):
-            subject_niftis = list(BidsTools.iter_subject_niftis(subject_dir))
+        for subject_dir in bmeta.iter_subject_dirs(proc.downsampled_root):
+            subject_niftis = list(bmeta.iter_subject_niftis(subject_dir))
 
             if not subject_niftis:
                 continue
