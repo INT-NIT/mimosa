@@ -269,7 +269,7 @@ class VolumeBuilder3D:
     
     def build_all_volumes(self):
         for subject_dir in bmeta.iter_subject_dirs(self.preproc_root):
-            groups = bmeta.group_subject_niftis_by_channel(subject_dir)
+            groups = bm.group_subject_niftis_by_channel(subject_dir)
 
             for channel, nii_paths in groups.items():
                 out = self.build_one_volume(subject_dir, channel, nii_paths)
