@@ -124,7 +124,7 @@ def group_subject_niftis_by_channel(self, subject_dir: Path):
         groups.setdefault(channel, []).append(nii_path)
     return groups
 
-def get_channel_from_path(self, nii_path: Path) -> str:
+def get_channel_from_path( nii_path: Path) -> str:
     parts = nii_path.name.split("_")
 
     for part in parts:
