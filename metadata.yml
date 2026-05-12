@@ -4,6 +4,7 @@ dataset_description:
   BIDSVersion: 1.11.1
   DatasetType: raw
   Name: MIMOSA Microscopy Dataset
+
 derivatives:
   downsampled:
     dataset_description:
@@ -25,6 +26,10 @@ participants_tsv:
   rows:
   - participant_id: sub-Nuphar
     species: Marmouset
+microscopy_json:
+  MicroscopyTechnique: "Fluorescence microscopy"
+  SampleEnvironment: "ex vivo"
+  BodyPart: "Brain"
 samples:
   entries:
   - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/2-Nuphar-MJO17020301/originaux

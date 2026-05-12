@@ -42,6 +42,7 @@ def czi2bitmapHPC(
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
+        bmeta.create_micr_json(raw_folder, cfg)
         deriv_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info) if write_nii else None
 
         zoom_factor = float(1.0 / downsampling_factor)

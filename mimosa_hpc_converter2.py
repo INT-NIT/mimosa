@@ -108,7 +108,13 @@ def main():
                 ses_id  = f"ses-{bids_info['ses']}"
                 sessions_by_sub.setdefault(sub, {})
                 sessions_by_sub[sub][ses_id] = bids_info["acq_time"]
-
+                raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
+                bmeta.create_micr_json(
+                    micr_folder  = raw_folder,
+                    manufacturer = reader.get_manufacturer(),
+                    illumination = reader.get_illumination_type(),
+                    cfg          = cfg   # ← cfg est dispo ici !
+                )
                 czi.czi2bitmapHPC(
                     input_dir,
                     filename,

@@ -58,7 +58,9 @@ def create_participants_files(bids_root: Path, cfg: dict) -> None:
         f.write("\n".join(lines))
     print("participants.tsv created")
 
-def create_derivatives_descriptions(bids_root: Path, cfg: dict) -> None:
+
+def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
+
     derivs = cfg.get("derivatives", {})
     if not derivs:
         raise ValueError("Key 'derivatives' missing in YAML")
@@ -75,10 +77,13 @@ def create_derivatives_descriptions(bids_root: Path, cfg: dict) -> None:
             json.dump(desc, f, indent=2, ensure_ascii=False)
         print(f"dataset_description.json created for derivative '{pipeline}'")
 
-def write_subject_sessions_tsv(bids_root: Path, subject: str, ses_rows: list[dict]) -> None:
-    sub_dir = Path(bids_root) / f"sub-{subject}"
-    sub_dir.mkdir(parents=True, exist_ok=True)
-    path = sub_dir / f"sub-{subject}_sessions.tsv"
+def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
+   
+    sub_dir = os.path.join(bids_root, f"sub-{subject}")
+    os.makedirs(sub_dir, exist_ok=True)
+
+    path = os.path.join(sub_dir, f"sub-{subject}_sessions.tsv")
+
     lines = ["session_id\tacq_time"]
     for r in ses_rows:
         lines.append(f"{r['session_id']}\t{r['acq_time']}")
