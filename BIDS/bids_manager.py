@@ -117,10 +117,10 @@ def iter_subject_dirs( root: Path):
 def iter_subject_niftis( subject_dir: Path):
     for nii_path in subject_dir.rglob("*.nii.gz"):
         yield nii_path
-def group_subject_niftis_by_channel(self, subject_dir: Path):
+def group_subject_niftis_by_channel( subject_dir: Path):
     groups = {}
     for nii_path in subject_dir.rglob("*.nii.gz"):
-        channel = self.get_channel_from_path(nii_path)
+        channel = get_channel_from_path(nii_path)
         groups.setdefault(channel, []).append(nii_path)
     return groups
 
