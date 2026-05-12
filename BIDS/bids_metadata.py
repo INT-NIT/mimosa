@@ -77,6 +77,24 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
             json.dump(desc, f, indent=2, ensure_ascii=False)
         print(f"dataset_description.json created for derivative '{pipeline}'")
 
+def create_micr_json(micr_folder: str, manufacturer: str, illumination: str, cfg: dict) -> None:
+    """Creates micr.json from YAML manual fields + auto fields from CZI reader"""
+    path = os.path.join(micr_folder, "microscopy.json")
+    if os.path.exists(path):
+        return
+
+    # Manual fields from YAML
+    content = cfg.get("microscopy_json", {}).copy()
+
+    # Auto fields from CZI reader
+    content["Manufacturer"]     = manufacturer
+    content["IlluminationType"] = illumination
+    content["PixelSizeUnits"]   = "um"
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(content, f, indent=2, ensure_ascii=False)
+    print("micr.json created")
+
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
    
     sub_dir = os.path.join(bids_root, f"sub-{subject}")
