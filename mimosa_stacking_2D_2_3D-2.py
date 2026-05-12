@@ -301,7 +301,7 @@ if __name__ == "__main__":
         print("Preproc incomplete or missing — running SlicePreprocessor...")
 
         for subject_dir in bm.iter_subject_dirs(proc.downsampled_root):
-            subject_niftis = list(bmeta.iter_subject_niftis(subject_dir))
+            subject_niftis = list(bm.iter_subject_niftis(subject_dir))
 
             if not subject_niftis:
                 continue
