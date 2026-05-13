@@ -232,7 +232,7 @@ samples:
       - filename: 2026_02_11__10_15__0253.czi
         slices: [448,450,2]
       - filename: 2026_02_11__10_16__0254.czi
-        slices: [452i,454,2]
+        slices: [452,454,2]
       - filename: 2026_02_11__10_17__0255.czi
         slices: [456,458,2]
       - filename: 2026_02_11__10_19__0256.czi
