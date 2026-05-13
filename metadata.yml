@@ -23,7 +23,7 @@ participants_tsv:
   - participant_id
   - species
   rows:
-  - participant_id: sub-Una
+  - participant_id: sub-Marmot
     species: Marmouset
 microscopy_json:
   MicroscopyTechnique: Fluorescence microscopy
@@ -36,6 +36,7 @@ samples:
   - sample_type
   entries:
   - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA
+    subject: Una 
     samples:
     - sections_interval: null
       sample_id: sample-Cx
