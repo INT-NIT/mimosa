@@ -4,7 +4,6 @@ dataset_description:
   BIDSVersion: 1.11.1
   DatasetType: raw
   Name: MIMOSA Microscopy Dataset
-
 derivatives:
   downsampled:
     dataset_description:
@@ -24,12 +23,12 @@ participants_tsv:
   - participant_id
   - species
   rows:
-  - participant_id: sub-Marmot
+  - participant_id: sub-Una
     species: Marmouset
 microscopy_json:
-  MicroscopyTechnique: "Fluorescence microscopy"
-  SampleEnvironment: "ex vivo"
-  BodyPart: "Brain"
+  MicroscopyTechnique: Fluorescence microscopy
+  SampleEnvironment: ex vivo
+  BodyPart: Brain
 samples:
   columns:
   - sample_id
@@ -38,248 +37,796 @@ samples:
   entries:
   - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA
     samples:
-    - sections_interval: ######################## to be filled manually later
+    - sections_interval: null
       sample_id: sample-Cx
       participant_id: sub-Una
-      sample_type: Brain 
+      sample_type: Brain
       files:
       - filename: 2026_01_08__09_49__0051_Prescan.czi
-        slices: [NaN] ###################### to be filled manually later
+        slices:
+        - NaN
       - filename: 2026_01_08__10_18__0053.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__12_04__0118_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__12_14__0119.czi
-        slices: [2,28,2]
+        slices:
+        - 2
+        - 4
+        - 6
+        - 8
+        - 10
+        - 12
+        - 14
+        - 16
+        - 18
+        - 20
+        - 22
+        - 24
+        - 26
+        - 28
       - filename: 2026_02_02__12_15__0120.czi
-        slices: [30,46,2]
+        slices:
+        - 30
+        - 32
+        - 34
+        - 36
+        - 38
+        - 40
+        - 42
+        - 44
+        - 46
       - filename: 2026_02_02__12_16__0121.czi
-        slices: [48,64,2]
+        slices:
+        - 48
+        - 50
+        - 52
+        - 54
+        - 56
+        - 58
+        - 60
+        - 62
+        - 64
       - filename: 2026_02_02__12_17__0122.czi
-        slices: [67,74,2]
+        slices:
+        - 67
+        - 69
+        - 71
+        - 73
       - filename: 2026_02_02__12_19__0123.czi
-        slices: [76,82,2]
+        slices:
+        - 76
+        - 78
+        - 80
+        - 82
       - filename: 2026_02_02__12_21__0124.czi
-        slices: [84,90,2]
+        slices:
+        - 84
+        - 86
+        - 88
+        - 90
       - filename: 2026_02_02__12_22__0125.czi
-        slices: [92,98,2]
+        slices:
+        - 92
+        - 94
+        - 96
+        - 98
       - filename: 2026_02_02__12_23__0126.czi
-        slices: [100,106,2]
+        slices:
+        - 100
+        - 102
+        - 104
+        - 106
       - filename: 2026_02_02__12_25__0127.czi
-        slices: [108,114,2]
+        slices:
+        - 108
+        - 110
+        - 112
+        - 114
       - filename: 2026_02_02__12_26__0128.czi
-        slices: [116,122,1]
+        slices:
+        - 116
+        - 117
+        - 118
+        - 119
+        - 120
+        - 121
+        - 122
       - filename: 2026_02_02__12_27__0129.czi
-        slices: [124,130,2]
+        slices:
+        - 124
+        - 126
+        - 128
+        - 130
       - filename: 2026_02_02__12_28__0130.czi
-        slices: [132,138,2]
+        slices:
+        - 132
+        - 134
+        - 136
+        - 138
       - filename: 2026_02_02__12_30__0131.czi
-        slices: [140,142,2]
+        slices:
+        - 140
+        - 142
       - filename: 2026_02_02__12_31__0132.czi
-        slices: [144,146,2]
+        slices:
+        - 144
+        - 146
       - filename: 2026_02_02__12_32__0133.czi
-        slices: [148,150,2]
+        slices:
+        - 148
+        - 150
       - filename: 2026_02_02__12_34__0134.czi
-        slices: [152,154,2]
+        slices:
+        - 152
+        - 154
       - filename: 2026_02_02__12_35__0135.czi
-        slices: [156,158,2]
+        slices:
+        - 156
+        - 158
       - filename: 2026_02_02__12_37__0136.czi
-        slices: [160,162,2]
+        slices:
+        - 160
+        - 162
       - filename: 2026_02_02__12_38__0137.czi
-        slices: [164,166,2]
+        slices:
+        - 164
+        - 166
       - filename: 2026_02_02__12_40__0138.czi
-        slices: [168,170,2]
+        slices:
+        - 168
+        - 170
       - filename: 2026_02_02__12_41__0139.czi
-        slices: [172,174,2]
+        slices:
+        - 172
+        - 174
       - filename: 2026_02_02__12_42__0140.czi
-        slices: [176,178,2]
+        slices:
+        - 176
+        - 178
       - filename: 2026_02_02__12_43__0141.czi
-        slices: [180,182,2]
+        slices:
+        - 180
+        - 182
       - filename: 2026_02_02__12_44__0142.czi
-        slices: [184,186,2]
+        slices:
+        - 184
+        - 186
       - filename: 2026_02_02__12_46__0143.czi
-        slices: [188,190,2]
+        slices:
+        - 188
+        - 190
       - filename: 2026_02_02__12_47__0144.czi
-        slices: [192,194,2]
+        slices:
+        - 192
+        - 194
       - filename: 2026_02_02__12_48__0145.czi
-        slices: [196,198,2]
+        slices:
+        - 196
+        - 198
       - filename: 2026_02_02__12_49__0146.czi
-        slices: [200,202,2]
+        slices:
+        - 200
+        - 202
       - filename: 2026_02_02__12_51__0147.czi
-        slices: [204,206,2]
+        slices:
+        - 204
+        - 206
       - filename: 2026_02_02__12_52__0148.czi
-        slices: [208,210,2]
+        slices:
+        - 208
+        - 210
       - filename: 2026_02_02__12_53__0149.czi
-        slices: [212,214,2]
+        slices:
+        - 212
+        - 214
       - filename: 2026_02_02__12_54__0150.czi
-        slices: [216,218,2]
+        slices:
+        - 216
+        - 218
       - filename: 2026_02_02__12_56__0151.czi
-        slices: [220,222,2]
+        slices:
+        - 220
+        - 222
       - filename: 2026_02_02__12_57__0152.czi
-        slices: [224,226,2]
+        slices:
+        - 224
+        - 226
       - filename: 2026_02_02__12_58__0153.czi
-        slices: [228,230,2]
+        slices:
+        - 228
+        - 230
       - filename: 2026_02_02__13_00__0154.czi
-        slices: [232,234,2]
+        slices:
+        - 232
+        - 234
       - filename: 2026_02_02__13_01__0155.czi
-        slices: [236,238,2]
+        slices:
+        - 236
+        - 238
       - filename: 2026_02_02__13_02__0156.czi
-        slices: [240,242,2]
+        slices:
+        - 240
+        - 242
       - filename: 2026_02_02__13_04__0157.czi
-        slices: [244,246,2]
+        slices:
+        - 244
+        - 246
       - filename: 2026_02_02__13_05__0158.czi
-        slices: [248,250,2]
+        slices:
+        - 248
+        - 250
       - filename: 2026_02_02__13_06__0159.czi
-        slices: [252,254,2]
+        slices:
+        - 252
+        - 254
       - filename: 2026_02_02__13_08__0160.czi
-        slices: [256,258,2]
+        slices:
+        - 256
+        - 258
       - filename: 2026_02_02__13_09__0161.czi
-        slices: [260,262,2]
+        slices:
+        - 260
+        - 262
       - filename: 2026_02_02__13_10__0162.czi
-        slices: [264,266,2]
+        slices:
+        - 264
+        - 266
       - filename: 2026_02_02__13_12__0163.czi
-        slices: [268,270,2]
+        slices:
+        - 268
+        - 270
       - filename: 2026_02_02__13_13__0164.czi
-        slices: [272,274,2]
+        slices:
+        - 272
+        - 274
       - filename: 2026_02_02__13_14__0165.czi
-        slices: [276,278,2]
+        slices:
+        - 276
+        - 278
       - filename: 2026_02_02__13_15__0166.czi
-        slices: [280,282,2]
+        slices:
+        - 280
+        - 282
       - filename: 2026_02_02__13_17__0167.czi
-        slices: [284,286,2]
+        slices:
+        - 284
+        - 286
       - filename: 2026_02_02__13_18__0168.czi
-        slices: [288,290,2]
+        slices:
+        - 288
+        - 290
       - filename: 2026_02_02__13_20__0169.czi
-        slices: [292,294,2]
+        slices:
+        - 292
+        - 294
       - filename: 2026_02_02__13_20__0169_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_21__0170.czi
-        slices: [296,298,2]
+        slices:
+        - 296
+        - 298
       - filename: 2026_02_02__13_21__0170_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_23__0171.czi
-        slices: [300,302,2]
+        slices:
+        - 300
+        - 302
       - filename: 2026_02_02__13_23__0171_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_24__0172.czi
-        slices: [304,306,2]
+        slices:
+        - 304
+        - 306
       - filename: 2026_02_02__13_24__0172_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_26__0173.czi
-        slices: [308,310,2]
+        slices:
+        - 308
+        - 310
       - filename: 2026_02_02__13_26__0173_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_27__0174.czi
-        slices: [312,314,2]
+        slices:
+        - 312
+        - 314
       - filename: 2026_02_02__13_27__0174_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_02__13_29__0175.czi
-        slices: [316,318,2]
+        slices:
+        - 316
+        - 318
       - filename: 2026_02_10__18_05__0225.czi
-        slices: [324,326,2]
+        slices:
+        - 324
+        - 326
       - filename: 2026_02_10__18_06__0226.czi
-        slices: [328,330,2]
+        slices:
+        - 328
+        - 330
       - filename: 2026_02_10__18_07__0227.czi
-        slices: [332,334,2]
+        slices:
+        - 332
+        - 334
       - filename: 2026_02_10__18_09__0229.czi
-        slices: [336,338,2]
+        slices:
+        - 336
+        - 338
       - filename: 2026_02_11__09_41__0230_Prescan.czi
-        slices: [NaN]
+        slices:
+        - NaN
       - filename: 2026_02_11__09_44__0231.czi
-        slices: [340,342,2]
+        slices:
+        - 340
+        - 342
       - filename: 2026_02_11__09_46__0232.czi
-        slices: [344,346,2]
+        slices:
+        - 344
+        - 346
       - filename: 2026_02_11__09_47__0233.czi
-        slices: [368,370,2]
+        slices:
+        - 368
+        - 370
       - filename: 2026_02_11__09_48__0234.czi
-        slices: [372,374,2]
+        slices:
+        - 372
+        - 374
       - filename: 2026_02_11__09_50__0235.czi
-        slices: [376,378,2]
+        slices:
+        - 376
+        - 378
       - filename: 2026_02_11__09_51__0236.czi
-        slices: [380,382,2]
+        slices:
+        - 380
+        - 382
       - filename: 2026_02_11__09_53__0237.czi
-        slices: [384,386,2]
+        slices:
+        - 384
+        - 386
       - filename: 2026_02_11__09_54__0238.czi
-        slices: [388,390,2]
+        slices:
+        - 388
+        - 390
       - filename: 2026_02_11__09_56__0239.czi
-        slices: [392,934,2]
+        slices:
+        - 392
+        - 394
+        - 396
+        - 398
+        - 400
+        - 402
+        - 404
+        - 406
+        - 408
+        - 410
+        - 412
+        - 414
+        - 416
+        - 418
+        - 420
+        - 422
+        - 424
+        - 426
+        - 428
+        - 430
+        - 432
+        - 434
+        - 436
+        - 438
+        - 440
+        - 442
+        - 444
+        - 446
+        - 448
+        - 450
+        - 452
+        - 454
+        - 456
+        - 458
+        - 460
+        - 462
+        - 464
+        - 466
+        - 468
+        - 470
+        - 472
+        - 474
+        - 476
+        - 478
+        - 480
+        - 482
+        - 484
+        - 486
+        - 488
+        - 490
+        - 492
+        - 494
+        - 496
+        - 498
+        - 500
+        - 502
+        - 504
+        - 506
+        - 508
+        - 510
+        - 512
+        - 514
+        - 516
+        - 518
+        - 520
+        - 522
+        - 524
+        - 526
+        - 528
+        - 530
+        - 532
+        - 534
+        - 536
+        - 538
+        - 540
+        - 542
+        - 544
+        - 546
+        - 548
+        - 550
+        - 552
+        - 554
+        - 556
+        - 558
+        - 560
+        - 562
+        - 564
+        - 566
+        - 568
+        - 570
+        - 572
+        - 574
+        - 576
+        - 578
+        - 580
+        - 582
+        - 584
+        - 586
+        - 588
+        - 590
+        - 592
+        - 594
+        - 596
+        - 598
+        - 600
+        - 602
+        - 604
+        - 606
+        - 608
+        - 610
+        - 612
+        - 614
+        - 616
+        - 618
+        - 620
+        - 622
+        - 624
+        - 626
+        - 628
+        - 630
+        - 632
+        - 634
+        - 636
+        - 638
+        - 640
+        - 642
+        - 644
+        - 646
+        - 648
+        - 650
+        - 652
+        - 654
+        - 656
+        - 658
+        - 660
+        - 662
+        - 664
+        - 666
+        - 668
+        - 670
+        - 672
+        - 674
+        - 676
+        - 678
+        - 680
+        - 682
+        - 684
+        - 686
+        - 688
+        - 690
+        - 692
+        - 694
+        - 696
+        - 698
+        - 700
+        - 702
+        - 704
+        - 706
+        - 708
+        - 710
+        - 712
+        - 714
+        - 716
+        - 718
+        - 720
+        - 722
+        - 724
+        - 726
+        - 728
+        - 730
+        - 732
+        - 734
+        - 736
+        - 738
+        - 740
+        - 742
+        - 744
+        - 746
+        - 748
+        - 750
+        - 752
+        - 754
+        - 756
+        - 758
+        - 760
+        - 762
+        - 764
+        - 766
+        - 768
+        - 770
+        - 772
+        - 774
+        - 776
+        - 778
+        - 780
+        - 782
+        - 784
+        - 786
+        - 788
+        - 790
+        - 792
+        - 794
+        - 796
+        - 798
+        - 800
+        - 802
+        - 804
+        - 806
+        - 808
+        - 810
+        - 812
+        - 814
+        - 816
+        - 818
+        - 820
+        - 822
+        - 824
+        - 826
+        - 828
+        - 830
+        - 832
+        - 834
+        - 836
+        - 838
+        - 840
+        - 842
+        - 844
+        - 846
+        - 848
+        - 850
+        - 852
+        - 854
+        - 856
+        - 858
+        - 860
+        - 862
+        - 864
+        - 866
+        - 868
+        - 870
+        - 872
+        - 874
+        - 876
+        - 878
+        - 880
+        - 882
+        - 884
+        - 886
+        - 888
+        - 890
+        - 892
+        - 894
+        - 896
+        - 898
+        - 900
+        - 902
+        - 904
+        - 906
+        - 908
+        - 910
+        - 912
+        - 914
+        - 916
+        - 918
+        - 920
+        - 922
+        - 924
+        - 926
+        - 928
+        - 930
+        - 932
+        - 934
       - filename: 2026_02_11__09_57__0240.czi
-        slices: [396,398,2]
+        slices:
+        - 396
+        - 398
       - filename: 2026_02_11__09_59__0241.czi
-        slices: [400,402,2]
+        slices:
+        - 400
+        - 402
       - filename: 2026_02_11__10_00__0242.czi
-        slices: [404,406,2]
+        slices:
+        - 404
+        - 406
       - filename: 2026_02_11__10_01__0243.czi
-        slices: [408,410,2]
+        slices:
+        - 408
+        - 410
       - filename: 2026_02_11__10_03__0244.czi
-        slices: [412,414,2]
+        slices:
+        - 412
+        - 414
       - filename: 2026_02_11__10_04__0245.czi
-        slices: [416,418,2]
+        slices:
+        - 416
+        - 418
       - filename: 2026_02_11__10_05__0246.czi
-        slices: [420,422,2,]
+        slices:
+        - 420
+        - 422
       - filename: 2026_02_11__10_07__0247.czi
-        slices: [424,426,2]
+        slices:
+        - 424
+        - 426
       - filename: 2026_02_11__10_08__0248.czi
-        slices: [428,430,2]
+        slices:
+        - 428
+        - 430
       - filename: 2026_02_11__10_10__0249.czi
-        slices: [432,434,2]
+        slices:
+        - 432
+        - 434
       - filename: 2026_02_11__10_11__0250.czi
-        slices: [436,438,2]
+        slices:
+        - 436
+        - 438
       - filename: 2026_02_11__10_12__0251.czi
-        slices: [440,442,2]
+        slices:
+        - 440
+        - 442
       - filename: 2026_02_11__10_14__0252.czi
-        slices: [444,446,2]
+        slices:
+        - 444
+        - 446
       - filename: 2026_02_11__10_15__0253.czi
-        slices: [448,450,2]
+        slices:
+        - 448
+        - 450
       - filename: 2026_02_11__10_16__0254.czi
-        slices: [452,454,2]
+        slices:
+        - 452
+        - 454
       - filename: 2026_02_11__10_17__0255.czi
-        slices: [456,458,2]
+        slices:
+        - 456
+        - 458
       - filename: 2026_02_11__10_19__0256.czi
-        slices: [460,462,2]
+        slices:
+        - 460
+        - 462
       - filename: 2026_02_11__10_20__0257.czi
-        slices: [464,466,2]
+        slices:
+        - 464
+        - 466
       - filename: 2026_02_11__10_22__0258.czi
-        slices: [468,470,2]
+        slices:
+        - 468
+        - 470
       - filename: 2026_02_11__10_23__0259.czi
-        slices: [472,474,2]
+        slices:
+        - 472
+        - 474
       - filename: 2026_02_11__10_25__0260.czi
-        slices: [476,478,2]
+        slices:
+        - 476
+        - 478
       - filename: 2026_02_11__10_26__0261.czi
-        slices: [480,482,2]
+        slices:
+        - 480
+        - 482
       - filename: 2026_02_11__10_27__0262.czi
-        slices: [484,486,2]
+        slices:
+        - 484
+        - 486
       - filename: 2026_02_11__10_28__0263.czi
-        slices: [488,490,2]
+        slices:
+        - 488
+        - 490
       - filename: 2026_02_18__17_09__0469.czi
-        slices: [492,494,2]
+        slices:
+        - 492
+        - 494
       - filename: 2026_02_18__17_11__0470.czi
-        slices: [494,498,2]
+        slices:
+        - 494
+        - 496
+        - 498
       - filename: 2026_02_18__17_12__0471.czi
-        slices: [500,502,2]
+        slices:
+        - 500
+        - 502
       - filename: 2026_02_18__17_13__0472.czi
-        slices: [504,506,2]
+        slices:
+        - 504
+        - 506
       - filename: 2026_02_18__17_14__0473.czi
-        slices: [508,510,2]
+        slices:
+        - 508
+        - 510
       - filename: 2026_02_18__17_15__0474.czi
-        slices: [512,514,2]
+        slices:
+        - 512
+        - 514
       - filename: 2026_02_18__17_16__0475.czi
-        slices: [516,518,2]
+        slices:
+        - 516
+        - 518
       - filename: 2026_02_18__17_17__0476.czi
-        slices: [520,522,2]
+        slices:
+        - 520
+        - 522
       - filename: 2026_02_18__17_19__0477.czi
-        slices: [524,526,2]
+        slices:
+        - 524
+        - 526
       - filename: 2026_02_18__17_20__0478.czi
-        slices: [528,530,2]
+        slices:
+        - 528
+        - 530
       - filename: 2026_02_18__17_21__0479.czi
-        slices: [532,534,2]
+        slices:
+        - 532
+        - 534
       - filename: 2026_02_18__17_22__0480.czi
-        slices: [536,538,2]
+        slices:
+        - 536
+        - 538
       - filename: 2026_02_18__17_24__0481.czi
-        slices: [540,542,2]
+        slices:
+        - 540
+        - 542
       - filename: 2026_02_18__17_25__0482.czi
-        slices: [544,546,2]
+        slices:
+        - 544
+        - 546
       - filename: 2026_02_18__17_26__0483.czi
-        slices: [548,550,2]
+        slices:
+        - 548
+        - 550
       - filename: 2026_02_18__17_27__0484.czi
-        slices: [452,454,2]
+        slices:
+        - 452
+        - 454
