@@ -29,11 +29,8 @@ def main():
     clean_output_path = args.output_path.rstrip("/")
 
     bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml, output_format=output_format)
-
     cfg = bmeta.load_metadata_config(args.yaml)
-    print("###################################################### ", cfg)
 
-    cfg = bmeta.update_yaml_with_slices(args.yaml)
 
     MimosaReader.load_correspondence_from_yaml(cfg)
 
