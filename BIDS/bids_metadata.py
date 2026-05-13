@@ -187,14 +187,15 @@ def has_slice_index(meta: dict) -> bool:
     return meta.get("SliceIndex") is not None
 
 def update_yaml_with_slices(yaml_path: Path) -> dict:
-    """reads metadata.yml and adds files + slice indices for each subject/sample."""
+    """reads metadata.yml and adds files + slice indices for each subject/sample.
+    Does not overwrite existing slices if already defined manually."""
     yaml_path = Path(yaml_path)
     with open(yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = Path(entry["path"])
-        subject      = entry["subject"]
+        subject      = entry.get("subject", "Unknown")
 
         if not subject_path.exists():
             print(f"WARNING: {subject} path not found: {subject_path}")
@@ -206,13 +207,28 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
         for sample in entry.get("samples", []):
             sample_id = sample["sample_id"]
+            existing_files = sample.get("files", [])
             files = []
+
             for filename in sorted(subject_path.rglob("*.czi")):
                 file_entry = {"filename": filename.name}
-                slices = extract_slices_from_filename(filename.name)
-                if slices:
-                    file_entry["slices"] = slices
+
+                # Keep existing slices if already defined — don't overwrite manual slices !
+                existing_slices = next(
+                    (f.get("slices") for f in existing_files
+                     if f["filename"] == filename.name and f.get("slices")),
+                    None
+                )
+
+                if existing_slices:
+                    file_entry["slices"] = existing_slices  # ← keep manual slices
+                else:
+                    slices = extract_slices_from_filename(filename.name)
+                    if slices:
+                        file_entry["slices"] = slices
+
                 files.append(file_entry)
+
             sample["files"] = files
             print(f"{subject} / {sample_id} → {len(files)} files added")
 
