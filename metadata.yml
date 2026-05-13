@@ -31,9 +31,11 @@ microscopy_json:
   SampleEnvironment: "ex vivo"
   BodyPart: "Brain"
 samples:
+  columns:
+  - sample_id
+  - participant_id
+  - sample_type
   entries:
-  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/6-Marmot-MJO16052401/originaux/
-    subject: Marmot
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/6-Marmot-MJO16052401/UNA
     samples:
-      - sample_id: sample-Cx
-   
+    
