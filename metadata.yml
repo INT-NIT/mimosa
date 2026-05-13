@@ -35,7 +35,7 @@ samples:
   - participant_id
   - sample_type
   entries:
-  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA/
     subject: Una 
     samples:
     - sections_interval: null
