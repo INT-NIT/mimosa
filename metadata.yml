@@ -23,7 +23,7 @@ participants_tsv:
   - participant_id
   - species
   rows:
-  - participant_id: sub-Marmot
+  - participant_id: sub-Una
     species: Marmouset
 microscopy_json:
   MicroscopyTechnique: Fluorescence microscopy
@@ -45,13 +45,13 @@ samples:
       files:
       - filename: 2026_01_08__09_49__0051_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_01_08__10_18__0053.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__12_04__0118_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__12_14__0119.czi
         slices:
         - 2
@@ -305,42 +305,42 @@ samples:
         - 294
       - filename: 2026_02_02__13_20__0169_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_21__0170.czi
         slices:
         - 296
         - 298
       - filename: 2026_02_02__13_21__0170_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_23__0171.czi
         slices:
         - 300
         - 302
       - filename: 2026_02_02__13_23__0171_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_24__0172.czi
         slices:
         - 304
         - 306
       - filename: 2026_02_02__13_24__0172_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_26__0173.czi
         slices:
         - 308
         - 310
       - filename: 2026_02_02__13_26__0173_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_27__0174.czi
         slices:
         - 312
         - 314
       - filename: 2026_02_02__13_27__0174_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_02__13_29__0175.czi
         slices:
         - 316
@@ -363,7 +363,7 @@ samples:
         - 338
       - filename: 2026_02_11__09_41__0230_Prescan.czi
         slices:
-        - NaN
+        - 
       - filename: 2026_02_11__09_44__0231.czi
         slices:
         - 340

@@ -6,11 +6,10 @@ from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 
 class SlicePreprocessor:
-    def __init__(self, input_root: str, output_root: str, reorient_mode: str = "none"):
+    def __init__(self, input_root: str, output_root: str):
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
         self.subject_max_sizes = {} # having track of max width and height for each subject 
-        self.reorient_mode = reorient_mode
 
         self.downsampled_root = self.input_root / "derivatives" / "downsampled"
         self.preproc_root = self.output_root / "derivatives" / "preproc"
@@ -46,16 +45,8 @@ class SlicePreprocessor:
         max_width = 0
         max_height = 0
 
-        # Check if rotation swaps dimensions
-        swaps_dimensions = any(m in self.reorient_mode.split("+") 
-                            for m in ["rot90_cw", "rot90_ccw"])
-
         for nii_path in nii_paths:
             width, height = self.get_slice_size_from_json(nii_path)
-
-            # If rotation swaps axes, swap width and height
-            if swaps_dimensions:
-                width, height = height, width
 
             if width > max_width:
                 max_width = width
@@ -66,30 +57,7 @@ class SlicePreprocessor:
 
         return max_width + padding_delta, max_height + padding_delta
     
-    def reorient_slice_2d(self, data_2d: np.ndarray) -> np.ndarray:
-        """
-        Apply multiple 2D reorientation before padding
-        """
-        modes = self.reorient_mode.split("+")
-
-        for mode in modes:
-            mode = mode.strip()
-            if mode == "none":
-                pass
-            elif mode == "flip_ud": # haut bas 
-                data_2d = np.flipud(data_2d)
-            elif mode == "flip_lr": # gauche , droite 
-                data_2d = np.fliplr(data_2d)
-            elif mode == "rot180":
-                data_2d = np.rot90(data_2d, 2)
-            elif mode == "rot90_cw":
-                data_2d = np.rot90(data_2d, 3)
-            elif mode == "rot90_ccw": # anti horaire 
-                data_2d = np.rot90(data_2d, 1)
-            else:
-                raise ValueError(f"UNKNOWN ROTATION MODE : {mode}")
-
-        return data_2d
+   
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
         """
@@ -97,7 +65,6 @@ class SlicePreprocessor:
         """
         meta, output_json = bmeta.load_metadata(output_nii_path)
 
-        meta["ReorientationMode"] = self.reorient_mode
         meta["PaddingTargetShape"] = [int(target_shape[0]), int(target_shape[1])]
         meta["SubjectMaxSize"] = [
             int(self.subject_max_sizes[subject_name][0]),
@@ -109,7 +76,7 @@ class SlicePreprocessor:
 
     def process_one_slice(self, nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> Path:
         """
-        Load one input NIfTI, reorient it, pad it to target_shape,
+        Load one input NIfTI, pad it to target_shape,
         save it to derivatives/preproc, and copy its JSON sidecar.
         """
         output_path = self.build_output_path(nii_path)
@@ -120,8 +87,6 @@ class SlicePreprocessor:
         header = img.header.copy()
         # flip , rotation , padding works more efficienly with 2D so we squeeze 3D (X,Y,Z)=> Z=1 to just (X,Y)
         data_2d = np.squeeze(data)
-
-        data_2d = self.reorient_slice_2d(data_2d)
 
         current_width = data_2d.shape[0]
         current_height = data_2d.shape[1]
@@ -157,13 +122,11 @@ class SlicePreprocessor:
 
 
 
-
-
 class VolumeBuilder3D:
-    def __init__(self, bids_root: str, original_thickness: float):
+    def __init__(self, bids_root: str, original_thickness: float, volume_reorient: str="none"):
         self.bids_root = Path(bids_root).resolve()
         self.original_thickness = original_thickness
-
+        self.volume_reorient = volume_reorient
         self.preproc_root = self.bids_root / "derivatives" / "preproc"
         self.stacking_root = self.bids_root / "derivatives" / "stacking"
 
@@ -183,7 +146,7 @@ class VolumeBuilder3D:
         """
 
         meta, output_json = bmeta.load_metadata(output_nii_path)
-
+        meta["VolumeReorientationMode"] = self.volume_reorient
         meta["VolumeShape"] = [
             int(volume_shape[0]),
             int(volume_shape[1]),
@@ -203,6 +166,185 @@ class VolumeBuilder3D:
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4)
 
+    def reorient_volume_3d(self,volume: np.ndarray,resolution: list[float],mode: str) -> tuple[np.ndarray, list[float]]:
+        """
+        Reorient a 3D volume.
+
+        Two syntaxes are supported.
+
+        1) fslswapdim-like syntax:
+            "x,y,z"       -> no change
+            "x,-z,-y"     -> new X = old X, new Y = old Z reversed, new Z = old Y reversed
+            "-x,y,z"      -> flip old X
+            "z,y,x"       -> swap X and Z
+
+        2) operation syntax:
+            "none"                      -> no change
+            "flip_x"                    -> reverse X axis
+            "flip_y"                    -> reverse Y axis
+            "flip_z"                    -> reverse Z axis
+            "swap_xy"                   -> exchange X and Y
+            "swap_xz"                   -> exchange X and Z
+            "swap_yz"                   -> exchange Y and Z
+            "swap_yz+flip_y+flip_z"     -> equivalent to "x,-z,-y"
+
+        Important:
+            volume is modified in voxel space using np.transpose and np.flip.
+            resolution is reordered to stay consistent with the new axes.
+        """
+
+        if mode is None:
+            return volume, resolution
+
+        mode = mode.strip().lower()
+
+        if mode in ("", "none", "no", "identity", "x,y,z"):
+            return volume, resolution
+
+        resolution = list(resolution)
+
+        axes_map = {
+            "x": 0,
+            "y": 1,
+            "z": 2,
+        }
+
+       
+        if "," in mode:
+            parts = [p.strip() for p in mode.split(",")]
+
+            if len(parts) != 3:
+                raise ValueError(
+                    f"Invalid volume reorientation mode: {mode}. "
+                    "Expected format like 'x,y,z' or 'x,-z,-y'."
+                )
+
+            transpose_axes = [] # will contain [0, 2, 1] => "x,-z,-y"
+            flip_axes = [] # will contain the flipped axes (means we put - ) which is in our exemple z ,y => [1, 2]
+
+            for new_axis, part in enumerate(parts):
+                if not part:
+                    raise ValueError(
+                        f"Invalid empty axis in volume reorientation mode: {mode}"
+                    )
+
+                if part.startswith("-"):
+                    axis_name = part[1:]
+                    do_flip = True
+                else:
+                    axis_name = part
+                    do_flip = False
+
+                if axis_name not in axes_map:
+                    raise ValueError(
+                        f"Invalid axis '{part}' in volume reorientation mode: {mode}. "
+                        "Allowed axes are x, y, z, -x, -y, -z."
+                    )
+
+                old_axis = axes_map[axis_name] # convert axes name to a number 
+                transpose_axes.append(old_axis)
+
+                if do_flip:
+                    flip_axes.append(new_axis) # new_axis gives the index of the axe to flip from the loop "x,-z,-y" => [1, 2]
+            # verify if we used each axe or not we avoid cases like this => "x,x,z" , [0, 0, 2] 
+            if sorted(transpose_axes) != [0, 1, 2]: 
+                raise ValueError(
+                    f"Invalid volume reorientation mode: {mode}. "
+                    "Each axis x, y, z must be used exactly once."
+                )
+
+            # Reorder axes
+            volume = np.transpose(volume, transpose_axes)
+
+            # Flip requested new axes
+            for axis in flip_axes:
+                volume = np.flip(volume, axis=axis)
+
+            # Resolution follows the old axes for exemple : resolution = [res_x, res_y, res_z] 
+            new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
+
+            return volume, new_resolution
+
+       
+        operations = [op.strip() for op in mode.split("+") if op.strip()]
+
+        for op in operations:
+            if op == "flip_x":
+                volume = np.flip(volume, axis=0)
+
+            elif op == "flip_y":
+                volume = np.flip(volume, axis=1)
+
+            elif op == "flip_z":
+                volume = np.flip(volume, axis=2)
+
+            elif op == "swap_xy":
+                volume = np.transpose(volume, (1, 0, 2))
+                resolution = [resolution[1], resolution[0], resolution[2]]
+
+            elif op == "swap_xz":
+                volume = np.transpose(volume, (2, 1, 0))
+                resolution = [resolution[2], resolution[1], resolution[0]]
+
+            elif op == "swap_yz":
+                volume = np.transpose(volume, (0, 2, 1))
+                resolution = [resolution[0], resolution[2], resolution[1]]
+
+            else:
+                raise ValueError(
+                    f"Invalid volume reorientation operation: {op}. "
+                    "Allowed operations are: flip_x, flip_y, flip_z, "
+                    "swap_xy, swap_xz, swap_yz. "
+                    "You can combine them with '+', for example: "
+                    "'swap_yz+flip_y+flip_z'."
+                )
+
+        return volume, resolution
+    
+    def build_new_affine_matrix(
+        self,volume_shape: tuple[int, int, int],resolution: list[float]) -> np.ndarray:
+        """
+        Build a simple NIfTI affine after volume reorientation.
+
+        volume_shape:
+            Shape of the final 3D volume, for example:
+            (512, 80, 512)
+
+        resolution:
+            Voxel size for each final axis, for example:
+            [0.05, 0.2, 0.05]
+
+        The affine says:
+            axis X has voxel size resolution[0]
+            axis Y has voxel size resolution[1]
+            axis Z has voxel size resolution[2]
+
+        The origin is set so the volume is centered around (0, 0, 0).
+        """
+
+        volume_shape = np.array(volume_shape, dtype=float)
+        resolution = np.array(resolution, dtype=float)
+
+        if volume_shape.shape[0] != 3:
+            raise ValueError(
+                f"volume_shape must have 3 values, got {volume_shape}"
+            )
+
+        if resolution.shape[0] != 3:
+            raise ValueError(
+                f"resolution must have 3 values, got {resolution}"
+            )
+
+        affine = np.eye(4, dtype=float)
+
+        # Voxel sizes on X, Y, Z
+        affine[:3, :3] = np.diag(resolution)
+
+        # Center the volume around 0,0,0
+        affine[:3, 3] = -volume_shape * resolution / 2.0
+
+        return affine
+    
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR  {subject_dir.name} {channel}")
@@ -242,11 +384,6 @@ class VolumeBuilder3D:
         #  Construire la résolution et l’affine du volume final
         new_resolution = [downsampled_res, downsampled_res, self.original_thickness]
 
-        new_affine = np.zeros((4, 4))
-        new_affine[:3, :3] = np.diag(new_resolution)
-        new_affine[:3, 3] = volume_shape * new_resolution / 2.0 * -1
-        new_affine[3, 3] = 1.0
-
         # float32 instead of default float64 to reduce memory usage by half
         # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
         # which have pixel values between 0 and 65535
@@ -256,6 +393,11 @@ class VolumeBuilder3D:
             data = img.get_fdata()
             data_2d = np.squeeze(data)
             stack_of_slices[:, :, i] = data_2d
+
+        stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.volume_reorient)
+        volume_shape = np.array(stack_of_slices.shape)
+
+        new_affine = self.build_new_affine_matrix(tuple(volume_shape),new_resolution)
 
         # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
@@ -279,17 +421,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Slice preprocessing and 3D volume stacking")
-    parser.add_argument("--bids_root",          required=True,                  help="Path to BIDS root folder")
-    parser.add_argument("--reorient_mode",      required=False, default="none", help="Reorientation mode: none, flip_ud, flip_lr, rot180, rot90_cw(clockwise), rot90_ccw — chain with '+' e.g. 'flip_ud+rot90_cw'")
-    parser.add_argument("--padding_delta",      required=False, type=int,   default=100,   help="Padding size in pixels (default: 100)")
-    parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness  default 200 ")
+    parser.add_argument("--bids_root", required=True, help="Path to BIDS root folder")
+    parser.add_argument("--volume_reorient", required=False, default="none", help="3D volume reorientation: none, x,y,z, x,-z,-y, swap_yz+flip_y+flip_z, etc.")
+    parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
+    parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
     args = parser.parse_args()
 
     proc = SlicePreprocessor(
         input_root=args.bids_root,
-        output_root=args.bids_root,
-        reorient_mode=args.reorient_mode
-    )
+        output_root=args.bids_root)
 
     downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
     preproc_niftis     = list(proc.preproc_root.rglob("*.nii.gz"))
@@ -325,6 +465,15 @@ if __name__ == "__main__":
     print("\nRunning VolumeBuilder3D...")
     builder = VolumeBuilder3D(
         bids_root=args.bids_root,
-        original_thickness=args.original_thickness
+        original_thickness=args.original_thickness,
+        volume_reorient=args.volume_reorient
     )
     builder.build_all_volumes()
+
+
+"""
+python mimosa_stacking_2D_2_3D-2.py \
+  --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
+  --volume_reorient x,-z,-y \
+  --original_thickness 200
+"""
