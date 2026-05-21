@@ -1,8 +1,8 @@
 dataset_description:
   Authors:
   - Hanane boudlal
-  - Guilleme ibos 
-  - Arnaud le Troter 
+  - Guilleme ibos
+  - Arnaud le Troter
   BIDSVersion: 3.0.0-alpha.3
   DatasetType: raw
   Name: MIMOSA Microscopy Dataset
@@ -468,7 +468,6 @@ samples:
         - 494
       - filename: 2026_02_18__17_11__0470.czi
         slices:
-        - 494
         - 496
         - 498
       - filename: 2026_02_18__17_12__0471.czi
