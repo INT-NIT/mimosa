@@ -21,7 +21,7 @@ def czi2bitmapHPC(
     bids_info: dict,
     downsampling_factor: int,
     output_format: str,
-    pipeline_name: str = "downsampled",
+    pipeline_name: str = "2D-downsampled",
     reader=None
 ):
    

@@ -110,8 +110,8 @@ class MimosaReader:
             match = re.search(r"(20\d{2})[-_]?(\d{2})[-_]?(\d{2})", self._to_string(raw_date))
             if match:
                 year, month, day = match.groups()
-                return f"{year}-{month}-{day}T00:00:00"  
-        return "01"  
+                return f"{year}-{month}-{day}"  
+        return "None"  
     
     def get_pixel_size_um(self):
        
