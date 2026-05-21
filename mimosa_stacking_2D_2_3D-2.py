@@ -11,8 +11,8 @@ class SlicePreprocessor:
         self.output_root = Path(output_root).resolve()
         self.subject_max_sizes = {} # having track of max width and height for each subject 
 
-        self.downsampled_root = self.input_root / "derivatives" / "downsampled"
-        self.preproc_root = self.output_root / "derivatives" / "preproc"
+        self.downsampled_root = self.input_root / "derivatives" / "2D-downsampled"
+        self.preproc_root = self.output_root / "derivatives" / "2D-preproc"
 
         if not self.downsampled_root.exists():
             raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
@@ -127,8 +127,8 @@ class VolumeBuilder3D:
         self.bids_root = Path(bids_root).resolve()
         self.original_thickness = original_thickness
         self.volume_reorient = volume_reorient
-        self.preproc_root = self.bids_root / "derivatives" / "preproc"
-        self.stacking_root = self.bids_root / "derivatives" / "stacking"
+        self.preproc_root = self.bids_root / "derivatives" / "2D-preproc"
+        self.stacking_root = self.bids_root / "derivatives" / "3D-stacking"
 
         if not self.preproc_root.exists():
             raise FileNotFoundError(f"REPOSITORY NOT FOUND : {self.preproc_root}")
@@ -138,7 +138,7 @@ class VolumeBuilder3D:
     def build_volume_output_path(self, subject_dir: Path, channel: str) -> Path:
         output_dir = self.stacking_root / subject_dir.name / "micr"
         output_dir.mkdir(parents=True, exist_ok=True)
-        return output_dir / f"{subject_dir.name}_{channel}_volume.nii.gz"
+        return output_dir / f"{subject_dir.name}_{channel}_desc-stacking_volume.nii.gz"
     
     def update_output_json(self, output_nii_path: Path, new_affine: np.ndarray, volume_shape: tuple[int, int, int]) -> None:
         """
