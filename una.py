@@ -6,6 +6,9 @@ INVALID_STRINGS = {"", "nan", "none", "null", "na", "n/a"}
 
 
 def is_invalid_value(value) -> bool:
+    """
+    Return True if value is None, NaN, empty string, 'nan', 'none', etc.
+    """
     if value is None:
         return True
 
@@ -20,8 +23,17 @@ def is_invalid_value(value) -> bool:
 
 def to_int(value, filename: str) -> int:
     """
-    Accept: 452 or "452"
-    Refuse: "x320", "452i", "abc", 45.5
+    Convert a slice value to int.
+
+    Accepted:
+        452
+        "452"
+
+    Rejected:
+        "x320"
+        "452i"
+        "abc"
+        45.5
     """
     if is_invalid_value(value):
         raise ValueError(f"invalid slice value {value!r}")
@@ -51,8 +63,11 @@ def parse_slices(file_entry: dict) -> tuple[list[int], tuple[int, int, int]]:
     """
     Parse one file slices field.
 
-    Expected:
+    Expected format:
         slices: [start, end, step]
+
+    Example:
+        [2, 28, 2] -> [2, 4, 6, ..., 28]
 
     Returns:
         expanded_slices, (start, end, step)
@@ -93,14 +108,41 @@ def parse_slices(file_entry: dict) -> tuple[list[int], tuple[int, int, int]]:
 def expand_slice_ranges(yaml_path: str) -> None:
     """
     Reads a YAML file and for each file entry:
-    - If slices = [start, end, step] → expands to list e.g. [2, 28, 2] → [2, 4, 6, ..., 28]
-    - If slices is empty, None, or contains NaN → removes the file entry entirely
-    - If slices contains invalid values like x320 or 452i → removes the file entry entirely
-    - If range is impossible like [392, 3, 2] → removes the file entry entirely
-    - If a range overlaps with the next valid file range → removes the suspicious current file
+
+    - If slices = [start, end, step], expands to:
+        [start, start+step, ..., end]
+
+    - If slices is empty, None, or contains NaN:
+        removes the file entry
+
+    - If slices contains invalid values like x320 or 452i:
+        removes the file entry
+
+    - If range is impossible like [392, 3, 2]:
+        removes the file entry
+
+    - If a range strongly overlaps with the next valid file range:
+        corrects the current end.
+
+        Example:
+            current [392, 934, 2]
+            next    [396, 398, 2]
+
+        becomes:
+            current [392, 394, 2]
+
+    - If current end == next start:
+        keeps both, because this can be valid in your data.
+
+        Example:
+            current [492, 494, 2]
+            next    [494, 498, 2]
+
+        remains unchanged.
 
     Saves the updated YAML in place.
     """
+
     with open(yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
@@ -110,7 +152,7 @@ def expand_slice_ranges(yaml_path: str) -> None:
 
             valid_entries = []
 
-            # 1) First pass: remove invalid / empty / NaN / x320 / 452i / bad range
+            # 1. First pass: remove invalid files
             for file_entry in files:
                 filename = file_entry.get("filename", "<unknown>")
 
@@ -128,36 +170,58 @@ def expand_slice_ranges(yaml_path: str) -> None:
                     "range": range_info,
                 })
 
-            # 2) Second pass: check logical order between consecutive valid files
+            # 2. Keep original YAML order
             updated_files = []
 
             for idx, item in enumerate(valid_entries):
                 file_entry = item["file_entry"]
                 filename = item["filename"]
-                expanded = item["expanded"]
+
                 start, end, step = item["range"]
 
                 remove_current = False
 
+                # Compare with next valid file
                 if idx + 1 < len(valid_entries):
                     next_item = valid_entries[idx + 1]
+
                     next_filename = next_item["filename"]
                     next_start, next_end, next_step = next_item["range"]
 
-                    # Current range must finish before next range starts.
-                    # Example bad:
-                    # current [392, 934, 2]
-                    # next    [396, 398, 2]
-                    if end >= next_start:
-                        print(
-                            f"  REMOVED (range overlaps next file): {filename}\n"
-                            f"    current: [{start}, {end}, {step}]\n"
-                            f"    next:    {next_filename} [{next_start}, {next_end}, {next_step}]"
-                        )
-                        remove_current = True
+                    # Strong overlap only.
+                    # We fix only when current end is strictly greater than next start.
+                    #
+                    # Accepted:
+                    #   current [492, 494, 2]
+                    #   next    [494, 498, 2]
+                    #
+                    # Fixed:
+                    #   current [392, 934, 2]
+                    #   next    [396, 398, 2]
+                    if end > next_start:
+                        corrected_end = next_start - step
 
-                    # Warning only: if there is a gap or irregular jump
+                        if corrected_end < start:
+                            print(
+                                f"  REMOVED (cannot fix overlap): {filename}\n"
+                                f"    current: [{start}, {end}, {step}]\n"
+                                f"    next:    {next_filename} [{next_start}, {next_end}, {next_step}]\n"
+                                f"    problem: corrected end {corrected_end} < start {start}"
+                            )
+                            remove_current = True
+
+                        else:
+                            print(
+                                f"  FIXED (range overlaps next file): {filename}\n"
+                                f"    current before: [{start}, {end}, {step}]\n"
+                                f"    next:           {next_filename} [{next_start}, {next_end}, {next_step}]\n"
+                                f"    current after:  [{start}, {corrected_end}, {step}]"
+                            )
+                            end = corrected_end
+
+                    # Warning only: no modification.
                     expected_next_start = end + step
+
                     if not remove_current and next_start != expected_next_start:
                         print(
                             f"  WARNING (gap or irregular continuity): {filename} -> {next_filename}\n"
@@ -167,8 +231,15 @@ def expand_slice_ranges(yaml_path: str) -> None:
                 if remove_current:
                     continue
 
+                expanded = list(range(start, end + 1, step))
+
+                if len(expanded) == 0:
+                    print(f"  REMOVED (no slices after correction): {filename}")
+                    continue
+
                 file_entry["slices"] = expanded
                 updated_files.append(file_entry)
+
                 print(f"  EXPANDED {filename}: [{start}, {end}, {step}] → {expanded}")
 
             sample["files"] = updated_files
