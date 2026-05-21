@@ -120,10 +120,26 @@ def copy_json_sidecar(input_nii_path: Path, output_nii_path: Path) -> None:
     else:
         print(f"WARNING : NO JSON for {Path(input_nii_path).name}")
 
-def get_json_path(nii_path: Path) -> Path:
-    """Returns the JSON sidecar path for a given NIfTI path"""
-    return Path(str(nii_path).replace(".nii.gz", ".json").replace(".nii", ".json"))
+def get_json_path(image_path: Path) -> Path:
+    """
+    Returns the JSON sidecar path for NIfTI or TIFF images.
 
+    Examples:
+        image.nii.gz -> image.json
+        image.nii    -> image.json
+        image.tif    -> image.json
+        image.tiff   -> image.json
+    """
+    image_path = Path(image_path)
+    name = image_path.name
+
+    if name.endswith(".nii.gz"):
+        json_name = name[:-7] + ".json"
+    elif name.endswith(".tif"):
+        json_name = name[:-4] + ".json"
+
+
+    return image_path.parent / json_name
 def extract_slices_from_filename(filename: str) -> list[int]:
     """ex: MTO10092101_Cx_008-056.czi -> [8, 56]"""
     match = re.search(r'_(\d+(?:[-_]\d+)+)\.czi$', filename)
