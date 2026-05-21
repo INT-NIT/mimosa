@@ -100,19 +100,17 @@ class MimosaReader:
 
         return "Cx" if any(x in self.path.name.lower() for x in ["cortex", "cx"]) else "Unknown"
 
-
     def get_session(self) -> str:
         raw_date = (
             self._find_key(self.metadata, "AcquisitionDateAndTime") or
             self._find_key(self.metadata, "CreationDate")
         )
+
         if raw_date:
-            match = re.search(r"(20\d{2})[-_]?(\d{2})[-_]?(\d{2})", self._to_string(raw_date))
-            if match:
-                year, month, day = match.groups()
-                return f"{year}-{month}-{day}"  
-        return "None"  
-    
+            raw_date = self._to_string(raw_date).strip()
+            return raw_date
+
+        return "n/a"
     def get_pixel_size_um(self):
        
         scaling = self._find_key(self.metadata, "Scaling")
