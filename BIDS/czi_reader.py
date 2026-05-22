@@ -183,11 +183,25 @@ class MimosaReader:
         return "Unknown"
 
     def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor, slice_index=None):
-        # in this case pixel is a relative unit cuz it depends on every microscope and acquisition settings, so we need frst to convert it into the right resolution(downsampled) then we convert the scene coordinates(pixels) into an absolute unit (micrometers) 
+        """
+        Build BIDS ChunkTransformationMatrix.
+
+        It maps local pixels of the saved image to physical coordinates
+        in the slide/sample coordinate system.
+
+        For a downsampled image:
+            X_slide_um = out_px_um_x * x_downsampled_pixel + x0_um
+            Y_slide_um = out_px_um_y * y_downsampled_pixel + y0_um
+
+        rect.x and rect.y are assumed to be in original CZI pixel coordinates.
+        PixelSizeUnits is micrometers.
+        """
+
         px_um_x, px_um_y = pixel_size_um
-        # Adjust downsampled pixel size to maintain correct physical dimensions
-        out_px_um_x = px_um_x * downsampling_factor
-        out_px_um_y = px_um_y * downsampling_factor
+
+        # Pixel size of the saved downsampled image
+        out_px_um_x = float(px_um_x) * float(downsampling_factor)
+        out_px_um_y = float(px_um_y) * float(downsampling_factor)
 
         try:
             x_px = float(rect.x)
@@ -200,27 +214,23 @@ class MimosaReader:
             w_px = float(rect[2])
             h_px = float(rect[3])
 
-        x_downsampled = x_px / downsampling_factor
-        y_downsampled = y_px / downsampling_factor
-        w_downsampled = w_px / downsampling_factor
-        h_downsampled = h_px / downsampling_factor
+        # Position of the scene origin in slide coordinates, in micrometers
+        x0_um = x_px * float(px_um_x)
+        y0_um = y_px * float(px_um_y)
 
-        if slice_index is not None:
-            mat = [
-                [1.0, 0.0, 0.0, x_downsampled],
-                [0.0, 1.0, 0.0, y_downsampled],
-                [0.0, 0.0, 1.0, slice_index  ],
-                [0.0, 0.0, 0.0, 1.0]
-            ]
-            return mat, ["X", "Y", "Z"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
-        else:
-            mat = [
-                [1.0, 0.0,x_downsampled],
-                [0.0, 1.0, y_downsampled],
-                [0.0, 0.0, 1.0 ]
-            ]
-            return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
-        
+        # Size of the saved downsampled image, in pixels
+        w_downsampled = w_px / float(downsampling_factor)
+        h_downsampled = h_px / float(downsampling_factor)
+
+        # For now, keep ChunkTransformationMatrix as 2D.
+        # SliceIndex stays as a separate metadata field.
+        mat = [
+            [out_px_um_x, 0.0, x0_um],
+            [0.0, out_px_um_y, y0_um],
+            [0.0, 0.0, 1.0],
+        ]
+
+        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
 
