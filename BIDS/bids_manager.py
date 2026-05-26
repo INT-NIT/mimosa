@@ -3,7 +3,7 @@ import pathlib as Path
 import re
 import glob
 from BIDS import bids_metadata as bmeta
-
+SESSION_ORDER_BY_ROOT = {}
 
 class BIDSSession:
     """
@@ -15,7 +15,8 @@ class BIDSSession:
         self.bids_root_path = bids_root_path
         self._ses_map = {}   
         self._acq_map = {}   
-
+        self._session_order = SESSION_ORDER_BY_ROOT.get(self.bids_root_path, {})
+        
     def _get_last_index(self, entity: str, sub_path: str = None) -> int:
         """scan folders to find existing entity numbers so we can calculate the next index for session"""
         search_root = sub_path if sub_path else self.bids_root_path
@@ -31,16 +32,16 @@ class BIDSSession:
     def _session_index_for_time(self, sub: str, acq_time: str) -> str:
         """
         Assign one session per acquisition date.
-
-        Example:
-            2026-02-02T12:14:33Z -> ses-01
-            2026-02-10T18:05:00Z -> ses-02
+        If YAML slice order exists, use it to number sessions.
         """
         if sub not in self._ses_map:
             self._ses_map[sub] = {}
 
-        # Use only the date to group sessions, not the full acquisition time
         session_key = str(acq_time).split("T")[0]
+
+        if sub in self._session_order and session_key in self._session_order[sub]:
+            self._ses_map[sub][session_key] = self._session_order[sub][session_key]
+            return self._session_order[sub][session_key]
 
         if session_key not in self._ses_map[sub]:
             next_idx = len(self._ses_map[sub]) + 1
@@ -83,6 +84,58 @@ def initialize_dataset(bids_root_path: str, yaml_path: str = "metadata.yml", out
         raise FileNotFoundError(f"YAML not found: {yaml_path}")
 
     cfg = bmeta.load_metadata_config(yaml_path)
+    session_order = {}
+
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subject = entry.get("subject")
+        if not subject:
+            continue
+
+        date_to_min_slice = {}
+
+        for sample in entry.get("samples", []):
+            for file_entry in sample.get("files", []):
+                filename = file_entry.get("filename")
+                slices = file_entry.get("slices", [])
+
+                if not filename or not slices:
+                    continue
+
+                date_part = filename.split("__")[0]
+                parts = date_part.split("_")
+
+                if len(parts) != 3:
+                    continue
+
+                year, month, day = parts
+                date_key = f"{year}-{month}-{day}"
+
+                valid_slices = []
+                for s in slices:
+                    try:
+                        valid_slices.append(int(s))
+                    except Exception:
+                        continue
+
+                if not valid_slices:
+                    continue
+
+                min_slice = min(valid_slices)
+
+                if date_key not in date_to_min_slice:
+                    date_to_min_slice[date_key] = min_slice
+                else:
+                    date_to_min_slice[date_key] = min(date_to_min_slice[date_key], min_slice)
+
+        sorted_dates = sorted(date_to_min_slice.keys(), key=lambda d: date_to_min_slice[d])
+
+        session_order[subject] = {
+            date_key: f"{idx + 1:02d}"
+            for idx, date_key in enumerate(sorted_dates)
+        }
+
+    SESSION_ORDER_BY_ROOT[bids_root_path] = session_order
+
     bmeta.create_dataset_description(bids_root_path, cfg)
     bmeta.create_participants_files(bids_root_path, cfg)
     
