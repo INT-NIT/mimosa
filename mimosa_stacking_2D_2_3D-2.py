@@ -714,12 +714,6 @@ if __name__ == "__main__":
             target_shape = proc.compute_target_shape(subject_niftis, args.padding_delta, subject_dir.name)
             print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
 
-            builder_tmp = VolumeBuilder3D(
-                bids_root=args.bids_root,
-                original_thickness=args.original_thickness,
-                volume_reorient=args.volume_reorient,
-            )
-
             sorted_subject_niftis = sorted(
                 subject_niftis,
                 key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
@@ -746,7 +740,13 @@ if __name__ == "__main__":
 
             tmp_volume = np.zeros(old_shape, dtype=np.uint8)
 
-            tmp_volume, new_resolution = builder_tmp.reorient_volume_3d(
+            tmp_builder = VolumeBuilder3D(
+                bids_root=args.bids_root,
+                original_thickness=args.original_thickness,
+                volume_reorient=args.volume_reorient,
+            )
+
+            tmp_volume, new_resolution = tmp_builder.reorient_volume_3d(
                 tmp_volume,
                 old_resolution,
                 args.volume_reorient,
@@ -758,8 +758,8 @@ if __name__ == "__main__":
             )
 
             for slice_position, nii_path in enumerate(sorted_subject_niftis):
-                # Skip slices already preprocessed
                 output_path = proc.build_output_path(nii_path)
+
                 if output_path.exists():
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
