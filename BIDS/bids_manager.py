@@ -30,14 +30,24 @@ class BIDSSession:
 
     def _session_index_for_time(self, sub: str, acq_time: str) -> str:
         """
-        Stock for each subject all the sessions with each session a correspondant index
+        Assign one session per acquisition date.
+
+        Example:
+            2026-02-02T12:14:33Z -> ses-01
+            2026-02-02T12:30:10Z -> ses-01
+            2026-02-10T18:05:00Z -> ses-02
         """
         if sub not in self._ses_map:
             self._ses_map[sub] = {}
-        if acq_time not in self._ses_map[sub]:
+
+        # Use only the date to group sessions, not the full acquisition time
+        session_key = str(acq_time).split("T")[0]
+
+        if session_key not in self._ses_map[sub]:
             next_idx = len(self._ses_map[sub]) + 1
-            self._ses_map[sub][acq_time] = f"{next_idx:02d}"
-        return self._ses_map[sub][acq_time]
+            self._ses_map[sub][session_key] = f"{next_idx:02d}"
+
+        return self._ses_map[sub][session_key]
 
     def _acq_index_for_signature(self, acq_sig: str) -> str:
         """returns acq number for a given microscope signature"""
