@@ -189,12 +189,11 @@ class SlicePreprocessor:
 
         # Local pixel (0,0) of the 2D image , gives indexes of the pixel/voxel 
         old_origin = (pad_x, pad_y, slice_position)
-
         # Local pixel (1,0): one step in image X
         old_x_step = (pad_x + 1, pad_y, slice_position)
-
         # Local pixel (0,1): one step in image Y
         old_y_step = (pad_x, pad_y + 1, slice_position)
+        old_z_step = (pad_x, pad_y, slice_position + 1)
 
         # Convert old indices to final reoriented volume indices , gives the new indexes of the same previous pixel but after reorientation 
         new_origin = VolumeBuilder3D.map_old_index_to_reoriented_index(
@@ -214,15 +213,21 @@ class SlicePreprocessor:
             old_shape,
             self.volume_reorient,
         )
-
+        new_z_step = VolumeBuilder3D.map_old_index_to_reoriented_index(
+            old_z_step,
+            old_shape,
+            self.volume_reorient,
+        )
         # Convert voxel indices to physical coordinates using final volume affine
         new_origin = np.array([new_origin[0], new_origin[1], new_origin[2], 1.0])
         new_x_step = np.array([new_x_step[0], new_x_step[1], new_x_step[2], 1.0])
         new_y_step = np.array([new_y_step[0], new_y_step[1], new_y_step[2], 1.0])
+        new_z_step = np.array([new_z_step[0], new_z_step[1], new_z_step[2], 1.0])
 
         origin_phys = volume_affine @ new_origin # gives how much is far away the pixel 0,0 of the 2D image from the origin of the volume which is the center  
         x_step_phys = volume_affine @ new_x_step
         y_step_phys = volume_affine @ new_y_step
+        z_step_phys = volume_affine @ new_z_step
 
         sform = np.eye(4, dtype=float)
 
@@ -233,8 +238,8 @@ class SlicePreprocessor:
         sform[:3, 1] = y_step_phys[:3] - origin_phys[:3]
 
         # 2D slice has no local z direction
-        sform[:3, 2] = [0.0, 0.0, 0.0]
-
+        sform[:3, 2] = z_step_phys[:3] - origin_phys[:3]
+        
         # Position of image pixel (0,0)
         sform[:3, 3] = origin_phys[:3]
 

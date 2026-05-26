@@ -34,7 +34,6 @@ class BIDSSession:
 
         Example:
             2026-02-02T12:14:33Z -> ses-01
-            2026-02-02T12:30:10Z -> ses-01
             2026-02-10T18:05:00Z -> ses-02
         """
         if sub not in self._ses_map:
