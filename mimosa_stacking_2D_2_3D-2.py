@@ -724,7 +724,18 @@ if __name__ == "__main__":
                 key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
             )
 
-            nb_slices = len(sorted_subject_niftis)
+            unique_slice_indices = sorted({
+                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
+                for p in sorted_subject_niftis
+                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
+            })
+
+            slice_position_map = {
+                slice_index: position
+                for position, slice_index in enumerate(unique_slice_indices)
+            }
+
+            nb_slices = len(unique_slice_indices)
 
             first_meta, _ = bmeta.load_metadata(sorted_subject_niftis[0])
             downsampling_factor = bmeta.get_downsampling_factor(first_meta)
@@ -762,7 +773,13 @@ if __name__ == "__main__":
                 new_resolution,
             )
 
-            for slice_position, nii_path in enumerate(sorted_subject_niftis):
+            for nii_path in sorted_subject_niftis:
+
+                meta, _ = bmeta.load_metadata(nii_path)
+
+                slice_index = int(bmeta.get_z_index(meta))
+
+                slice_position = slice_position_map[slice_index]
                 output_path = proc.build_output_path(nii_path)
 
                 if output_path.exists():
