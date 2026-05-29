@@ -21,15 +21,20 @@ class VolumeBuilder3D:
             self.preproc_root = self.bids_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
             self.stacking_root = self.bids_root / "derivatives" / f"3D-stacking_res-{self.res_label}"
                 
-    def build_volume_output_path(self, subject_dir: Path, channel: str) -> Path:
+    def build_volume_output_path(
+        self,
+        subject_dir: Path,
+        channel: str,
+        res_label: str | None = None,
+    ) -> Path:
         output_dir = self.stacking_root / subject_dir.name / "micr"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        if self.res_label is not None:
-            return output_dir / f"{subject_dir.name}_{channel}_res-{self.res_label}_desc-stacking_volume.nii.gz"
+        if res_label is not None:
+            return output_dir / f"{subject_dir.name}_{channel}_res-{res_label}_desc-stacking_volume.nii.gz"
 
         return output_dir / f"{subject_dir.name}_{channel}_desc-stacking_volume.nii.gz"
-    
+        
     def update_output_json(self, output_nii_path: Path, new_affine: np.ndarray, volume_shape: tuple[int, int, int]) -> None:
         """
         Update JSON sidecar for 3D volume with stacking metadata
