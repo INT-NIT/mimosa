@@ -20,6 +20,7 @@ def main():
     parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="factor 2^N")
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
+    parser.add_argument("--original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -30,7 +31,7 @@ def main():
 
     bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml, output_format=output_format)
     cfg = bmeta.load_metadata_config(args.yaml)
-
+    slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
@@ -129,7 +130,9 @@ def main():
                     downsampling_factor,
                     output_format,
                     pipeline_name="2D-downsampled",
-                    reader=reader        
+                    reader=reader,
+                    slice_position_map=slice_position_map,
+                    original_thickness=args.original_thickness,
                 )
 
         except Exception as e:

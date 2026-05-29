@@ -5,278 +5,6 @@ import json
 from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 
-class SlicePreprocessor:
-    def __init__(
-        self,input_root: str,output_root: str,original_thickness: float,volume_reorient: str = "none",):     
-        self.input_root = Path(input_root).resolve()
-        self.output_root = Path(output_root).resolve()
-        self.original_thickness = original_thickness
-        self.volume_reorient = volume_reorient
-        self.subject_max_sizes = {} # having track of max width and height for each subject 
-
-        self.downsampled_root = self.input_root / "derivatives" / "2D-downsampled"
-        self.preproc_root = self.output_root / "derivatives" / "2D-preproc"
-
-        if not self.downsampled_root.exists():
-            raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
-
-        self.preproc_root.mkdir(parents=True, exist_ok=True)
-
-    def build_output_path(self, nii_path: Path) -> Path:
-        """
-        preserve same hierarchy of derivatives/downsampled  in derivatives/preproc 
-        """
-        relative_path = nii_path.relative_to(self.downsampled_root)
-        output_path = self.preproc_root / relative_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        return output_path
-
-    def get_slice_size_from_json(self, nii_path: Path) -> tuple[int, int]:
-        """
-            Read width and height of one slice from its JSON sidecar
-        """
-        meta, json_path=bmeta.load_metadata(nii_path)
-        width = meta.get("Width")
-        height = meta.get("Height")
-
-        if width is None or height is None:
-            raise ValueError(f"Width/Height NOT FOUND IN {json_path}")
-
-        return int(width), int(height)              
-    
-    def compute_target_shape(self, nii_paths, padding_delta, subject_name):
-        max_width = 0
-        max_height = 0
-
-        for nii_path in nii_paths:
-            width, height = self.get_slice_size_from_json(nii_path)
-
-            if width > max_width:
-                max_width = width
-            if height > max_height:
-                max_height = height
-
-        self.subject_max_sizes[subject_name] = (max_width, max_height)
-
-        return max_width + padding_delta, max_height + padding_delta
-    
-   
-        
-    def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
-        """
-        Update copied JSON sidecar with preprocessing metadata
-        """
-        meta, output_json = bmeta.load_metadata(output_nii_path)
-
-        meta["PaddingTargetShape"] = [int(target_shape[0]), int(target_shape[1])]
-        meta["SubjectMaxSize"] = [
-            int(self.subject_max_sizes[subject_name][0]),
-            int(self.subject_max_sizes[subject_name][1]),
-        ]
-
-        with open(output_json, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=4)
-    def process_one_slice(
-        self,
-        nii_path: Path,
-        target_shape: tuple[int, int],
-        subject_name: str,
-        volume_affine: np.ndarray,
-        old_shape: tuple[int, int, int],
-        slice_position: int,
-    ) -> Path:
-        """
-        Load one input NIfTI, pad it to target_shape,
-        save it to derivatives/preproc, and copy its JSON sidecar.
-        """
-        output_path = self.build_output_path(nii_path)
-
-        img = nb.load(str(nii_path))
-        data = img.get_fdata()
-        header = img.header.copy()
-
-        # flip , rotation , padding works more efficienly with 2D so we squeeze 3D (X,Y,Z)=> Z=1 to just (X,Y)
-        data_2d = np.squeeze(data)
-
-        current_width = data_2d.shape[0]
-        current_height = data_2d.shape[1]
-
-        target_width, target_height = target_shape
-
-        shift_x = target_width - current_width
-        shift_y = target_height - current_height
-
-        if shift_x < 0 or shift_y < 0:
-            raise ValueError(
-                f"Target shape {target_shape} smaller than the image {data_2d.shape} for {nii_path.name}"
-            )
-
-        pad_x_before = round(shift_x / 2)
-        pad_y_before = round(shift_y / 2)
-
-        downsampled_sform = self.compute_sform_matrix(
-            volume_affine=volume_affine,
-            old_shape=old_shape,
-            slice_position=slice_position,
-            pad_delta=(pad_x_before, pad_y_before),
-        )
-
-        self.write_sform_to_nifti_and_json(
-            nii_path=nii_path,
-            sform_matrix=downsampled_sform,
-            description="SForm matrix placing this 2D downsampled slice in the final 3D volume space",
-        )
-
-        padded_data_2d = np.pad(
-            data_2d,
-            (
-                (pad_x_before, shift_x - pad_x_before),
-                (pad_y_before, shift_y - pad_y_before),
-            ),
-            mode="constant",
-            constant_values=0,
-        )
-
-        padded_data = np.expand_dims(padded_data_2d, axis=2)
-
-        preproc_sform = self.compute_sform_matrix(
-            volume_affine=volume_affine,
-            old_shape=old_shape,
-            slice_position=slice_position,
-            pad_delta=(0, 0),
-        )
-
-        out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
-        out_img.set_sform(preproc_sform, code=1)
-        out_img.set_qform(preproc_sform, code=1)
-        nb.save(out_img, str(output_path))
-
-        bmeta.copy_json_sidecar(nii_path, output_path)
-        self.update_output_json(output_path, target_shape, subject_name)
-
-        self.write_sform_to_nifti_and_json(
-            nii_path=output_path,
-            sform_matrix=preproc_sform,
-            description="SForm matrix placing this padded 2D preprocessed slice in the final 3D volume space",
-        )
-
-        return output_path
-
-    def compute_sform_matrix(
-        self,
-        volume_affine: np.ndarray,
-        old_shape: tuple[int, int, int],
-        slice_position: int,
-        pad_delta: tuple[int, int],
-    ) -> np.ndarray:
-        """
-        Build SFormMatrix for one 2D slice.
-
-        This matrix places a 2D slice inside the final 3D volume space.
-
-        old_shape:
-            shape before reorientation = (width, height, nb_slices)
-
-        slice_position:
-            position of this slice in the stack: 0, 1, 2, ...
-
-        pad_before:
-            for 2D-downsampled: (pad_x_before, pad_y_before)
-            for 2D-preproc: (0, 0)
-        """
-
-        pad_x, pad_y = pad_delta
-
-        # Local pixel (0,0) of the 2D image , gives indexes of the pixel/voxel 
-        old_origin = (pad_x, pad_y, slice_position)
-        # Local pixel (1,0): one step in image X
-        old_x_step = (pad_x + 1, pad_y, slice_position)
-        # Local pixel (0,1): one step in image Y
-        old_y_step = (pad_x, pad_y + 1, slice_position)
-        old_z_step = (pad_x, pad_y, slice_position + 1)
-
-        # Convert old indices to final reoriented volume indices , gives the new indexes of the same previous pixel but after reorientation 
-        new_origin = VolumeBuilder3D.map_old_index_to_reoriented_index(
-            old_origin,
-            old_shape,
-            self.volume_reorient,
-        )
-
-        new_x_step = VolumeBuilder3D.map_old_index_to_reoriented_index(
-            old_x_step,
-            old_shape,
-            self.volume_reorient,
-        )
-
-        new_y_step = VolumeBuilder3D.map_old_index_to_reoriented_index(
-            old_y_step,
-            old_shape,
-            self.volume_reorient,
-        )
-        new_z_step = VolumeBuilder3D.map_old_index_to_reoriented_index(
-            old_z_step,
-            old_shape,
-            self.volume_reorient,
-        )
-        # Convert voxel indices to physical coordinates using final volume affine
-        new_origin = np.array([new_origin[0], new_origin[1], new_origin[2], 1.0])
-        new_x_step = np.array([new_x_step[0], new_x_step[1], new_x_step[2], 1.0])
-        new_y_step = np.array([new_y_step[0], new_y_step[1], new_y_step[2], 1.0])
-        new_z_step = np.array([new_z_step[0], new_z_step[1], new_z_step[2], 1.0])
-
-        origin_phys = volume_affine @ new_origin # gives how much is far away the pixel 0,0 of the 2D image from the origin of the volume which is the center  
-        x_step_phys = volume_affine @ new_x_step
-        y_step_phys = volume_affine @ new_y_step
-        z_step_phys = volume_affine @ new_z_step
-
-        sform = np.eye(4, dtype=float)
-
-        # Direction when image x increases by 1 pixel
-        sform[:3, 0] = x_step_phys[:3] - origin_phys[:3] # position du pixel (1,0) - position du pixel (0,0) = pixel size n thats the resolution
-
-        # Direction when image y increases by 1 pixel
-        sform[:3, 1] = y_step_phys[:3] - origin_phys[:3]
-
-        # 2D slice has no local z direction
-        sform[:3, 2] = z_step_phys[:3] - origin_phys[:3]
-        
-        # Position of image pixel (0,0)
-        sform[:3, 3] = origin_phys[:3]
-
-        return sform
-    def write_sform_to_nifti_and_json(
-        self,
-        nii_path: Path,
-        sform_matrix: np.ndarray,
-        description: str,
-    ) -> None:
-        """
-        Write SFormMatrix into:
-        1. NIfTI header
-        2. JSON sidecar
-        """
-
-        img = nb.load(str(nii_path))
-        data = img.get_fdata()
-        header = img.header.copy()
-
-        out_img = nb.Nifti1Image(data, sform_matrix, header)
-        out_img.set_sform(sform_matrix, code=1)
-        out_img.set_qform(sform_matrix, code=1)
-        nb.save(out_img, str(nii_path))
-
-        meta, json_path = bmeta.load_metadata(nii_path)
-
-        meta["SFormMatrix"] = sform_matrix.tolist()
-        meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
-        meta["SFormMatrixDescription"] = description
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=4)
-
-
-
-
 
 
 class VolumeBuilder3D:
@@ -322,37 +50,34 @@ class VolumeBuilder3D:
 
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4)
+    
     @staticmethod
-    def map_old_index_to_reoriented_index(
-        old_index: tuple[float, float, float],
-        old_shape: tuple[int, int, int],
-        mode: str,
-    ) -> tuple[float, float, float]:
-        """
-        Convert an index from original volume space to reoriented volume space.
+    def is_identity_reorientation(mode: str) -> bool:
+        if mode is None:
+            return True
 
-        old_index = (x, y, z)
-        old_shape = (width, height, nb_slices)
+        mode = mode.strip().lower()
+        return mode in ("", "none", "no", "identity", "x,y,z")
+
+
+    @staticmethod
+    def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
+        """
+        Parse volume_reorient mode once.
+
+        Returns:
+            transpose_axes: old axes order used to create new volume
+            flip_axes: new axes to flip after transpose
 
         Example:
-            mode = "x,-z,-y"
-
-            old_index = (x, y, z)
-
-            new_x = x
-            new_y = nb_slices - 1 - z
-            new_z = height - 1 - y
+            "x,-z,-y"
+            transpose_axes = [0, 2, 1]
+            flip_axes = [1, 2]
         """
-
-        x, y, z = old_index
-
-        if mode is None:
-            return x, y, z
+        if VolumeBuilder3D.is_identity_reorientation(mode):
+            return [0, 1, 2], []
 
         mode = mode.strip().lower()
-
-        if mode in ("", "none", "no", "identity", "x,y,z"):
-            return x, y, z
 
         axes_map = {
             "x": 0,
@@ -360,124 +85,6 @@ class VolumeBuilder3D:
             "z": 2,
         }
 
-        # Same syntax as fslswapdim, example: "x,-z,-y"
-        if "," in mode:
-            old_values = [x, y, z]
-            old_shape_values = list(old_shape)
-
-            parts = [p.strip() for p in mode.split(",")]
-
-            if len(parts) != 3:
-                raise ValueError(
-                    f"Invalid volume reorientation mode: {mode}. "
-                    "Expected format like 'x,y,z' or 'x,-z,-y'."
-                )
-
-            new_index = []
-
-            for part in parts:
-                if part.startswith("-"):
-                    axis_name = part[1:]
-                    flip = True
-                else:
-                    axis_name = part
-                    flip = False
-
-                if axis_name not in axes_map:
-                    raise ValueError(
-                        f"Invalid axis '{part}' in volume reorientation mode: {mode}"
-                    )
-
-                old_axis = axes_map[axis_name]
-                value = old_values[old_axis]
-
-                if flip:
-                    value = old_shape_values[old_axis] - 1 - value
-
-                new_index.append(value)
-
-            return tuple(new_index)
-
-        # Operation syntax, example: "swap_yz+flip_y+flip_z"
-        current_index = [x, y, z]
-        current_shape = list(old_shape)
-
-        operations = [op.strip() for op in mode.split("+") if op.strip()]
-
-        for op in operations:
-            if op == "flip_x":
-                current_index[0] = current_shape[0] - 1 - current_index[0]
-
-            elif op == "flip_y":
-                current_index[1] = current_shape[1] - 1 - current_index[1]
-
-            elif op == "flip_z":
-                current_index[2] = current_shape[2] - 1 - current_index[2]
-
-            elif op == "swap_xy":
-                current_index = [current_index[1], current_index[0], current_index[2]]
-                current_shape = [current_shape[1], current_shape[0], current_shape[2]]
-
-            elif op == "swap_xz":
-                current_index = [current_index[2], current_index[1], current_index[0]]
-                current_shape = [current_shape[2], current_shape[1], current_shape[0]]
-
-            elif op == "swap_yz":
-                current_index = [current_index[0], current_index[2], current_index[1]]
-                current_shape = [current_shape[0], current_shape[2], current_shape[1]]
-
-            else:
-                raise ValueError(
-                    f"Invalid volume reorientation operation: {op}. "
-                    "Allowed operations are: flip_x, flip_y, flip_z, "
-                    "swap_xy, swap_xz, swap_yz."
-                )
-
-        return tuple(current_index)
-    def reorient_volume_3d(self,volume: np.ndarray,resolution: list[float],mode: str) -> tuple[np.ndarray, list[float]]:
-        """
-        Reorient a 3D volume.
-
-        Two syntaxes are supported.
-
-        1) fslswapdim-like syntax:
-            "x,y,z"       -> no change
-            "x,-z,-y"     -> new X = old X, new Y = old Z reversed, new Z = old Y reversed
-            "-x,y,z"      -> flip old X
-            "z,y,x"       -> swap X and Z
-
-        2) operation syntax:
-            "none"                      -> no change
-            "flip_x"                    -> reverse X axis
-            "flip_y"                    -> reverse Y axis
-            "flip_z"                    -> reverse Z axis
-            "swap_xy"                   -> exchange X and Y
-            "swap_xz"                   -> exchange X and Z
-            "swap_yz"                   -> exchange Y and Z
-            "swap_yz+flip_y+flip_z"     -> equivalent to "x,-z,-y"
-
-        Important:
-            volume is modified in voxel space using np.transpose and np.flip.
-            resolution is reordered to stay consistent with the new axes.
-        """
-
-        if mode is None:
-            return volume, resolution
-
-        mode = mode.strip().lower()
-
-        if mode in ("", "none", "no", "identity", "x,y,z"):
-            return volume, resolution
-
-        resolution = list(resolution)
-
-        axes_map = {
-            "x": 0,
-            "y": 1,
-            "z": 2,
-        }
-
-       
         if "," in mode:
             parts = [p.strip() for p in mode.split(",")]
 
@@ -487,8 +94,8 @@ class VolumeBuilder3D:
                     "Expected format like 'x,y,z' or 'x,-z,-y'."
                 )
 
-            transpose_axes = [] # will contain [0, 2, 1] => "x,-z,-y"
-            flip_axes = [] # will contain the flipped axes (means we put - ) which is in our exemple z ,y => [1, 2]
+            transpose_axes = []
+            flip_axes = []
 
             for new_axis, part in enumerate(parts):
                 if not part:
@@ -509,109 +116,210 @@ class VolumeBuilder3D:
                         "Allowed axes are x, y, z, -x, -y, -z."
                     )
 
-                old_axis = axes_map[axis_name] # convert axes name to a number 
+                old_axis = axes_map[axis_name]
                 transpose_axes.append(old_axis)
 
                 if do_flip:
-                    flip_axes.append(new_axis) # new_axis gives the index of the axe to flip from the loop "x,-z,-y" => [1, 2]
-            # verify if we used each axe or not we avoid cases like this => "x,x,z" , [0, 0, 2] 
-            if sorted(transpose_axes) != [0, 1, 2]: 
+                    flip_axes.append(new_axis)
+
+            if sorted(transpose_axes) != [0, 1, 2]:
                 raise ValueError(
                     f"Invalid volume reorientation mode: {mode}. "
                     "Each axis x, y, z must be used exactly once."
                 )
 
-            # Reorder axes
-            volume = np.transpose(volume, transpose_axes)
+            return transpose_axes, flip_axes
 
-            # Flip requested new axes
-            for axis in flip_axes:
-                volume = np.flip(volume, axis=axis)
+        transpose_axes = [0, 1, 2]
+        flip_axes = []
 
-            # Resolution follows the old axes for exemple : resolution = [res_x, res_y, res_z] 
-            new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
-
-            return volume, new_resolution
-
-       
         operations = [op.strip() for op in mode.split("+") if op.strip()]
 
         for op in operations:
             if op == "flip_x":
-                volume = np.flip(volume, axis=0)
+                flip_axes.append(0)
 
             elif op == "flip_y":
-                volume = np.flip(volume, axis=1)
+                flip_axes.append(1)
 
             elif op == "flip_z":
-                volume = np.flip(volume, axis=2)
+                flip_axes.append(2)
 
             elif op == "swap_xy":
-                volume = np.transpose(volume, (1, 0, 2))
-                resolution = [resolution[1], resolution[0], resolution[2]]
+                transpose_axes = [
+                    transpose_axes[1],
+                    transpose_axes[0],
+                    transpose_axes[2],
+                ]
+
+                flip_axes = [
+                    1 if axis == 0 else
+                    0 if axis == 1 else
+                    axis
+                    for axis in flip_axes
+                ]
 
             elif op == "swap_xz":
-                volume = np.transpose(volume, (2, 1, 0))
-                resolution = [resolution[2], resolution[1], resolution[0]]
+                transpose_axes = [
+                    transpose_axes[2],
+                    transpose_axes[1],
+                    transpose_axes[0],
+                ]
+
+                flip_axes = [
+                    2 if axis == 0 else
+                    0 if axis == 2 else
+                    axis
+                    for axis in flip_axes
+                ]
 
             elif op == "swap_yz":
-                volume = np.transpose(volume, (0, 2, 1))
-                resolution = [resolution[0], resolution[2], resolution[1]]
+                transpose_axes = [
+                    transpose_axes[0],
+                    transpose_axes[2],
+                    transpose_axes[1],
+                ]
+
+                flip_axes = [
+                    2 if axis == 1 else
+                    1 if axis == 2 else
+                    axis
+                    for axis in flip_axes
+                ]
 
             else:
                 raise ValueError(
                     f"Invalid volume reorientation operation: {op}. "
                     "Allowed operations are: flip_x, flip_y, flip_z, "
-                    "swap_xy, swap_xz, swap_yz. "
-                    "You can combine them with '+', for example: "
-                    "'swap_yz+flip_y+flip_z'."
+                    "swap_xy, swap_xz, swap_yz."
                 )
 
-        return volume, resolution
-    @staticmethod
-    def build_new_affine_matrix(volume_shape: tuple[int, int, int],resolution: list[float]) -> np.ndarray:
-        """
-        Build a simple NIfTI affine after volume reorientation.
-
-        volume_shape:
-            Shape of the final 3D volume, for example:
-            (512, 80, 512)
-
-        resolution:
-            Voxel size for each final axis, for example:
-            [0.05, 0.2, 0.05]
-
-        The affine says:
-            axis X has voxel size resolution[0]
-            axis Y has voxel size resolution[1]
-            axis Z has voxel size resolution[2]
-
-        The origin is set so the volume is centered around (0, 0, 0).
-        """
-
-        volume_shape = np.array(volume_shape, dtype=float)
-        resolution = np.array(resolution, dtype=float)
-
-        if volume_shape.shape[0] != 3:
-            raise ValueError(
-                f"volume_shape must have 3 values, got {volume_shape}"
-            )
-
-        if resolution.shape[0] != 3:
-            raise ValueError(
-                f"resolution must have 3 values, got {resolution}"
-            )
-
-        affine = np.eye(4, dtype=float)
-
-        # Voxel sizes on X, Y, Z
-        affine[:3, :3] = np.diag(resolution)
-
-        # Center the volume around 0,0,0
-        affine[:3, 3] = -volume_shape * resolution / 2.0
-
-        return affine
+        return transpose_axes, flip_axes
     
+    def reorient_shape_and_resolution(
+        self,
+        shape: tuple[int, int, int],
+        resolution: list[float],
+        mode: str,
+    ) -> tuple[tuple[int, int, int], list[float]]:
+        """
+        Reorient only shape and resolution, without creating a fake volume.
+        """
+        transpose_axes, _ = VolumeBuilder3D.parse_reorientation_mode(mode)
+
+        shape = list(shape)
+        resolution = list(resolution)
+
+        new_shape = tuple(shape[old_axis] for old_axis in transpose_axes)
+        new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
+
+        return new_shape, new_resolution
+    
+    def reorient_volume_3d(
+        self,
+        volume: np.ndarray,
+        resolution: list[float],
+        mode: str,
+    ) -> tuple[np.ndarray, list[float]]:
+        """
+        Reorient a 3D volume using the parsed reorientation mode.
+        """
+        if VolumeBuilder3D.is_identity_reorientation(mode):
+            return volume, resolution
+
+        transpose_axes, flip_axes = VolumeBuilder3D.parse_reorientation_mode(mode)
+
+        volume = np.transpose(volume, transpose_axes)
+
+        for axis in flip_axes:
+            volume = np.flip(volume, axis=axis)
+
+        resolution = list(resolution)
+        new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
+
+        return volume, new_resolution
+    
+    @staticmethod
+    def build_new_affine_matrix(volume_shape: tuple[int, int, int], resolution: list[float]) -> np.ndarray:
+        return np.array(
+            bmeta.build_centered_affine(
+                shape=volume_shape,
+                resolution=resolution,
+            ),
+            dtype=float,
+        )
+    
+
+    def update_2d_sforms_after_reorientation(self, root_2d: Path) -> None:
+        mode = self.volume_reorient
+
+        if VolumeBuilder3D.is_identity_reorientation(mode):
+            print(f"No volume reorientation requested for {root_2d.name} — keeping existing 2D SFormMatrix.")
+            return
+
+        if not root_2d.exists():
+            return
+
+        for subject_dir in bm.iter_subject_dirs(root_2d):
+            nii_paths = list(bm.iter_subject_niftis(subject_dir))
+
+            if not nii_paths:
+                continue
+
+            unique_slice_indices = sorted({
+                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
+                for p in nii_paths
+                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
+            })
+
+            nb_slices = len(unique_slice_indices)
+
+            if nb_slices == 0:
+                continue
+
+            for nii_path in nii_paths:
+                meta, _ = bmeta.load_metadata(nii_path)
+
+                if "SFormMatrix" not in meta:
+                    print(f"WARNING: no SFormMatrix in {nii_path.name}, skipping")
+                    continue
+
+                if meta.get("SFormVolumeReorientationMode") == self.volume_reorient:
+                    continue
+
+                source_sform = meta.get("InitialSFormMatrix", meta["SFormMatrix"])
+                sform = np.array(source_sform, dtype=float)
+
+                img = nb.load(str(nii_path))
+                data_shape = np.squeeze(img.get_fdata()).shape
+
+                width = int(data_shape[0])
+                height = int(data_shape[1])
+
+                res_x = float(np.linalg.norm(sform[:3, 0]))
+                res_y = float(np.linalg.norm(sform[:3, 1]))
+                res_z = float(np.linalg.norm(sform[:3, 2]))
+
+                if res_z == 0:
+                    res_z = float(self.original_thickness)
+
+                old_shape = (width, height, nb_slices)
+                old_resolution = [res_x, res_y, res_z]
+
+                new_sform = self.reorient_existing_sform(
+                    sform=sform,
+                    old_shape=old_shape,
+                    old_resolution=old_resolution,
+                )
+
+                bmeta.write_sform_to_nifti_and_json(
+                    nii_path=nii_path,
+                    sform_matrix=new_sform,
+                    description=f"SFormMatrix updated using volume_reorient={self.volume_reorient}",
+                    volume_reorient=self.volume_reorient,
+                )
+
+                print(f"Updated SFormMatrix: {nii_path.name}")
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR  {subject_dir.name} {channel}")
@@ -630,7 +338,9 @@ class VolumeBuilder3D:
 
             sorted_slices.append((z_index, nii_path, meta))
         sorted_slices.sort(key=lambda x: x[0])
-        
+
+        if not sorted_slices:
+            raise ValueError(f"NO VALID SLICE INDEX FOUND FOR {subject_dir.name} {channel}")        
         # Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
         downsampling_factor = bmeta.get_downsampling_factor(first_meta)
@@ -668,6 +378,9 @@ class VolumeBuilder3D:
 
         # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
+        out_img.set_sform(new_affine, code=1)
+        out_img.set_qform(new_affine, code=1)
+        out_img.header.set_xyzt_units("micron")
         output_path = self.build_volume_output_path(subject_dir, channel)
         nb.save(out_img, str(output_path))
         output_json = bmeta.get_json_path(output_path)
@@ -687,124 +400,41 @@ class VolumeBuilder3D:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Slice preprocessing and 3D volume stacking")
-    parser.add_argument("--bids_root", required=True, help="Path to BIDS root folder")
-    parser.add_argument("--volume_reorient", required=False, default="none", help="3D volume reorientation: none, x,y,z, x,-z,-y, swap_yz+flip_y+flip_z, etc.")
-    parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
-    parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
-    args = parser.parse_args()
-
-    proc = SlicePreprocessor(
-        input_root=args.bids_root,
-        output_root=args.bids_root,
-        original_thickness=args.original_thickness,
-        volume_reorient=args.volume_reorient,
+    parser = argparse.ArgumentParser(description="3D volume stacking from 2D preprocessed slices")
+    parser.add_argument(
+        "--bids_root",
+        required=True,
+        help="Path to BIDS root folder"
+    )
+    parser.add_argument(
+        "--volume_reorient",
+        required=False,
+        default="none",
+        help="3D volume reorientation: none, x,y,z, x,-z,-y, swap_yz+flip_y+flip_z, etc."
+    )
+    parser.add_argument(
+        "--original_thickness",
+        required=False,
+        type=float,
+        default=200,
+        help="Histological section thickness"
     )
 
-    downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
-    preproc_niftis     = list(proc.preproc_root.rglob("*.nii.gz"))
-
-    print(f"Downsampled: {len(downsampled_niftis)} files")
-    print(f"Preproc:     {len(preproc_niftis)} files")
-
-    if len(preproc_niftis) < len(downsampled_niftis):
-        print("Preproc incomplete or missing — running SlicePreprocessor...")
-
-        for subject_dir in bm.iter_subject_dirs(proc.downsampled_root):
-            subject_niftis = list(bm.iter_subject_niftis(subject_dir))
-
-            if not subject_niftis:
-                continue
-
-            target_shape = proc.compute_target_shape(subject_niftis, args.padding_delta, subject_dir.name)
-            print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
-
-            sorted_subject_niftis = sorted(
-                subject_niftis,
-                key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
-            )
-
-            unique_slice_indices = sorted({
-                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
-                for p in sorted_subject_niftis
-                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
-            })
-
-            slice_position_map = {
-                slice_index: position
-                for position, slice_index in enumerate(unique_slice_indices)
-            }
-
-            nb_slices = len(unique_slice_indices)
-
-            first_meta, _ = bmeta.load_metadata(sorted_subject_niftis[0])
-            downsampling_factor = bmeta.get_downsampling_factor(first_meta)
-            original_res = bmeta.get_original_resolution(first_meta)
-            downsampled_res = original_res * downsampling_factor
-
-            old_shape = (
-                int(target_shape[0]),
-                int(target_shape[1]),
-                int(nb_slices),
-            )
-
-            old_resolution = [
-                downsampled_res,
-                downsampled_res,
-                args.original_thickness,
-            ]
-
-            tmp_volume = np.zeros(old_shape, dtype=np.uint8)
-
-            tmp_builder = VolumeBuilder3D(
-                bids_root=args.bids_root,
-                original_thickness=args.original_thickness,
-                volume_reorient=args.volume_reorient,
-            )
-
-            tmp_volume, new_resolution = tmp_builder.reorient_volume_3d(
-                tmp_volume,
-                old_resolution,
-                args.volume_reorient,
-            )
-
-            volume_affine = VolumeBuilder3D.build_new_affine_matrix(
-                tuple(tmp_volume.shape),
-                new_resolution,
-            )
-
-            for nii_path in sorted_subject_niftis:
-
-                meta, _ = bmeta.load_metadata(nii_path)
-
-                slice_index = int(bmeta.get_z_index(meta))
-
-                slice_position = slice_position_map[slice_index]
-                output_path = proc.build_output_path(nii_path)
-
-                if output_path.exists():
-                    print(f"  SKIP (already exists): {nii_path.name}")
-                    continue
-
-                out = proc.process_one_slice(
-                    nii_path=nii_path,
-                    target_shape=target_shape,
-                    subject_name=subject_dir.name,
-                    volume_affine=volume_affine,
-                    old_shape=old_shape,
-                    slice_position=slice_position,
-                )
-
-                print(f"  IN : {nii_path.name}")
-                print(f"  OUT: {out.name}")
-    else:
-        print("Preproc is complete — skipping SlicePreprocessor")
+    args = parser.parse_args()
 
     print("\nRunning VolumeBuilder3D...")
+
     builder = VolumeBuilder3D(
         bids_root=args.bids_root,
         original_thickness=args.original_thickness,
-        volume_reorient=args.volume_reorient
+        volume_reorient=args.volume_reorient,
+    )
+    builder.update_2d_sforms_after_reorientation(
+        builder.bids_root / "derivatives" / "2D-downsampled"
+    )
+
+    builder.update_2d_sforms_after_reorientation(
+        builder.bids_root / "derivatives" / "2D-preproc"
     )
     builder.build_all_volumes()
 

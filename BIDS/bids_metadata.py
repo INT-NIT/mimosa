@@ -4,7 +4,10 @@ import json
 import re
 from pathlib import Path
 import shutil
-
+import numpy as np
+import nibabel as nb
+import json
+import numpy as np
 
 def load_metadata_config(config_path: Path) -> dict:
     with open(Path(config_path), "r", encoding="utf-8") as f:
@@ -236,3 +239,145 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
         yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
     return cfg
+
+def get_slice_position_map_from_config(cfg: dict) -> dict[int, int]:
+    """
+    Build a map SliceIndex -> position in the global stack.
+
+    Example:
+        SliceIndex 2   -> 0
+        SliceIndex 4   -> 1
+        SliceIndex 452 -> N
+    """
+    slice_indices = []
+
+    for entry in cfg.get("samples", {}).get("entries", []):
+        for sample in entry.get("samples", []):
+            for file_entry in sample.get("files", []):
+                for s in file_entry.get("slices", []):
+                    try:
+                        slice_indices.append(int(s))
+                    except Exception:
+                        continue
+
+    unique_slices = sorted(set(slice_indices))
+
+    return {
+        slice_index: position
+        for position, slice_index in enumerate(unique_slices)
+    }
+
+def build_centered_affine(
+    shape: tuple[float, float, float],
+    resolution: list[float],
+) -> list[list[float]]:
+    """
+    Build a centered affine for a 2D slice or a 3D volume.
+
+    The image/volume is centered around physical coordinate (0,0,0).
+    """
+    shape = np.array(shape, dtype=float)
+    resolution = np.array(resolution, dtype=float)
+
+    affine = np.eye(4, dtype=float)
+    affine[:3, :3] = np.diag(resolution)
+    affine[:3, 3] = -shape * resolution / 2.0
+
+    return affine.tolist()
+
+def build_centered_2d_sform(
+    width: float,
+    height: float,
+    pixel_size: list[float],
+    slice_position: int,
+    nb_slices: int,
+    thickness: float,
+) -> list[list[float]]:
+    """
+    Build an initial SFormMatrix directly during HPC conversion.
+
+    The 2D image is centered in X/Y around 0.
+    Z is centered using the global number of slices.
+    """
+    sform = np.array(
+        build_centered_affine(
+            shape=(width, height, nb_slices),
+            resolution=[pixel_size[0], pixel_size[1], thickness],
+        ),
+        dtype=float,
+    )
+
+    sform[2, 3] += float(slice_position) * float(thickness)
+
+    return sform.tolist()
+
+def add_sform_to_json_metadata(
+    meta: dict,
+    slice_position_map: dict[int, int],
+    original_thickness: float,
+) -> dict:
+    """
+    Add SFormMatrix to a metadata dict using SliceIndex, Width, Height, PixelSize.
+    """
+    slice_index = meta.get("SliceIndex")
+
+    if slice_index is None:
+        return meta
+
+    slice_index = int(slice_index)
+
+    if slice_index not in slice_position_map:
+        return meta
+
+    slice_position = slice_position_map[slice_index]
+    nb_slices = len(slice_position_map)
+
+    sform = build_centered_2d_sform(
+        width=meta["Width"],
+        height=meta["Height"],
+        pixel_size=meta["PixelSize"],
+        slice_position=slice_position,
+        nb_slices=nb_slices,
+        thickness=original_thickness,
+    )
+
+    meta["SFormMatrix"] = sform
+    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
+    meta["SFormMatrixDescription"] = (
+        "Initial SForm matrix placing this 2D slice in a centered common volume reference. "
+        "No volume reorientation applied at conversion time."
+    )
+
+    return meta
+
+def write_sform_to_nifti_and_json(
+    nii_path,
+    sform_matrix,
+    description: str,
+    volume_reorient: str = None,
+) -> None:
+
+
+    img = nb.load(str(nii_path))
+    data = img.get_fdata()
+    header = img.header.copy()
+
+    sform_matrix = np.array(sform_matrix, dtype=float)
+
+    out_img = nb.Nifti1Image(data, sform_matrix, header)
+    out_img.set_sform(sform_matrix, code=1)
+    out_img.set_qform(sform_matrix, code=1)
+    out_img.header.set_xyzt_units("micron")
+    nb.save(out_img, str(nii_path))
+
+    meta, json_path = load_metadata(nii_path)
+
+    meta["SFormMatrix"] = sform_matrix.tolist()
+    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
+    meta["SFormMatrixDescription"] = description
+
+    if volume_reorient is not None:
+        meta["SFormVolumeReorientationMode"] = volume_reorient
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=4)

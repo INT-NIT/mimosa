@@ -13,7 +13,6 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 
-
 def czi2bitmapHPC(
     pathin: str,
     czifilename: str,
@@ -22,7 +21,9 @@ def czi2bitmapHPC(
     downsampling_factor: int,
     output_format: str,
     pipeline_name: str = "2D-downsampled",
-    reader=None
+    reader=None,
+    slice_position_map=None,
+    original_thickness: float = 100,
 ):
    
     czifile_path = os.path.join(pathin, czifilename)
@@ -90,8 +91,7 @@ def czi2bitmapHPC(
                     if write_nii:
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
-                        img = nib.Nifti1Image(arr, np.eye(4))
-                        nib.save(img, out_path)
+
                         meta_nii = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
@@ -100,9 +100,25 @@ def czi2bitmapHPC(
                             axis_swap=True,
                             scene_idx=scene_idx
                         )
+
+                        if slice_position_map is not None:
+                            meta_nii = bmeta.add_sform_to_json_metadata(
+                                meta=meta_nii,
+                                slice_position_map=slice_position_map,
+                                original_thickness=original_thickness,
+                            )
+
+                        sform = np.array(meta_nii.get("SFormMatrix", np.eye(4)), dtype=float)
+
+                        img = nib.Nifti1Image(arr, sform)
+                        img.set_sform(sform, code=1)
+                        img.set_qform(sform, code=1)
+                        img.header.set_xyzt_units("micron")
+
+                        nib.save(img, out_path)
+
                         bmeta.write_micr_sidecar_json(out_path, meta_nii)
                         print(f"  -> derivatives: {os.path.relpath(out_path, bids_root_path)}")
-
                     bar()
 
     return True
