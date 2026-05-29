@@ -254,7 +254,36 @@ class VolumeBuilder3D:
             dtype=float,
         )
     
+    def reorient_existing_sform(
+        self,
+        sform: np.ndarray,
+        old_shape: tuple[int, int, int],
+        old_resolution: list[float],
+        ) -> np.ndarray:
+        mode = self.volume_reorient
 
+        if VolumeBuilder3D.is_identity_reorientation(mode):
+            return sform
+
+        old_affine = VolumeBuilder3D.build_new_affine_matrix(
+            old_shape,
+            old_resolution,
+        )
+
+        new_shape, new_resolution = self.reorient_shape_and_resolution(
+            shape=old_shape,
+            resolution=old_resolution,
+            mode=mode,
+        )
+
+        new_affine = VolumeBuilder3D.build_new_affine_matrix(
+            new_shape,
+            new_resolution,
+        )
+
+        transform = new_affine @ np.linalg.inv(old_affine)
+
+        return transform @ sform
     def update_2d_sforms_after_reorientation(self, root_2d: Path) -> None:
         mode = self.volume_reorient
 
