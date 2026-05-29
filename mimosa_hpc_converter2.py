@@ -36,7 +36,7 @@ def main():
 
     session = bm.BIDSSession(bids_root_path)
 
-    downsampling_factor = downsampling_factor
+    downsampling_factor = args.downsampling_factor
     res_label = f"{downsampling_factor}x"
     pipeline_name = f"2D-downsampled_res-{res_label}"
     files_to_process = []
