@@ -7,16 +7,14 @@ from BIDS import bids_manager as bm
 
 class SlicePreprocessor:
     def __init__(
-        self,input_root: str,output_root: str,original_thickness: float,volume_reorient: str = "none",):     
+        self,input_root: str,output_root: str,original_thickness: float,  res_label: str,):     
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
         self.original_thickness = original_thickness
-        self.volume_reorient = volume_reorient
+        self.res_label = res_label
         self.subject_max_sizes = {} # having track of max width and height for each subject 
-
-        self.downsampled_root = self.input_root / "derivatives" / "2D-downsampled"
-        self.preproc_root = self.output_root / "derivatives" / "2D-preproc"
-
+        self.downsampled_root = self.input_root / "derivatives" / f"2D-downsampled_res-{self.res_label}"
+        self.preproc_root = self.output_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
         if not self.downsampled_root.exists():
             raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
 
@@ -24,10 +22,18 @@ class SlicePreprocessor:
 
     def build_output_path(self, nii_path: Path) -> Path:
         """
-        preserve same hierarchy of derivatives/downsampled  in derivatives/preproc 
+        preserve same hierarchy of derivatives/downsampled in derivatives/preproc
+        and rename desc-downsampled to desc-preproc
         """
         relative_path = nii_path.relative_to(self.downsampled_root)
-        output_path = self.preproc_root / relative_path
+        name = relative_path.name
+
+        if "_desc-downsampled_" in name:
+            name = name.replace("_desc-downsampled_", "_desc-preproc_")
+        elif "_FLUO.nii.gz" in name:
+            name = name.replace("_FLUO.nii.gz", "_desc-preproc_FLUO.nii.gz")
+
+        output_path = self.preproc_root / relative_path.parent / name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
 
@@ -183,12 +189,14 @@ if __name__ == "__main__":
     parser.add_argument("--bids_root", required=True, help="Path to BIDS root folder")
     parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
     parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
+    parser.add_argument("--res",required=True,help="Resolution label to preprocess, for example 4x")
     args = parser.parse_args()
 
     proc = SlicePreprocessor(
         input_root=args.bids_root,
         output_root=args.bids_root,
         original_thickness=args.original_thickness,
+        res_label=args.res
     )
 
     downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
@@ -231,4 +239,10 @@ if __name__ == "__main__":
 
                 print(f"  IN : {nii_path.name}")
                 print(f"  OUT: {out.name}")
-
+"""
+python mimosa_slice_preprocessor.py \
+  --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
+  --res 4x \
+  --padding_delta 100 \
+  --original_thickness 200
+"""

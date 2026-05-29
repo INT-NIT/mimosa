@@ -8,21 +8,26 @@ from BIDS import bids_manager as bm
 
 
 class VolumeBuilder3D:
-    def __init__(self, bids_root: str, original_thickness: float, volume_reorient: str="none"):
+    def __init__(self, bids_root: str, original_thickness: float, volume_reorient: str="none",res_label: str = None,):
         self.bids_root = Path(bids_root).resolve()
         self.original_thickness = original_thickness
         self.volume_reorient = volume_reorient
-        self.preproc_root = self.bids_root / "derivatives" / "2D-preproc"
-        self.stacking_root = self.bids_root / "derivatives" / "3D-stacking"
+        self.res_label = res_label
 
-        if not self.preproc_root.exists():
-            raise FileNotFoundError(f"REPOSITORY NOT FOUND : {self.preproc_root}")
-
-        self.stacking_root.mkdir(parents=True, exist_ok=True)
-
+        if self.res_label is None:
+            self.preproc_root = self.bids_root / "derivatives" / "2D-preproc"
+            self.stacking_root = self.bids_root / "derivatives" / "3D-stacking"
+        else:
+            self.preproc_root = self.bids_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
+            self.stacking_root = self.bids_root / "derivatives" / f"3D-stacking_res-{self.res_label}"
+                
     def build_volume_output_path(self, subject_dir: Path, channel: str) -> Path:
         output_dir = self.stacking_root / subject_dir.name / "micr"
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.res_label is not None:
+            return output_dir / f"{subject_dir.name}_{channel}_res-{self.res_label}_desc-stacking_volume.nii.gz"
+
         return output_dir / f"{subject_dir.name}_{channel}_desc-stacking_volume.nii.gz"
     
     def update_output_json(self, output_nii_path: Path, new_affine: np.ndarray, volume_shape: tuple[int, int, int]) -> None:
@@ -345,7 +350,7 @@ class VolumeBuilder3D:
         first_meta = sorted_slices[0][2]
         downsampling_factor = bmeta.get_downsampling_factor(first_meta)
         original_res = bmeta.get_original_resolution(first_meta)
-
+        res_label = f"{int(downsampling_factor)}x"
         downsampled_res = original_res * downsampling_factor
 
         #  Lire la taille des slices déjà paddées/réorientées
@@ -381,7 +386,7 @@ class VolumeBuilder3D:
         out_img.set_sform(new_affine, code=1)
         out_img.set_qform(new_affine, code=1)
         out_img.header.set_xyzt_units("micron")
-        output_path = self.build_volume_output_path(subject_dir, channel)
+        output_path = self.build_volume_output_path(subject_dir, channel, res_label)
         nb.save(out_img, str(output_path))
         output_json = bmeta.get_json_path(output_path)
         with open(output_json, "w", encoding="utf-8") as f:
@@ -407,6 +412,11 @@ if __name__ == "__main__":
         help="Path to BIDS root folder"
     )
     parser.add_argument(
+        "--res",
+        required=True,
+        help="Resolution label to stack, for example 4x"
+    )
+    parser.add_argument(
         "--volume_reorient",
         required=False,
         default="none",
@@ -419,28 +429,32 @@ if __name__ == "__main__":
         default=200,
         help="Histological section thickness"
     )
-
+    
     args = parser.parse_args()
 
     print("\nRunning VolumeBuilder3D...")
 
     builder = VolumeBuilder3D(
-        bids_root=args.bids_root,
-        original_thickness=args.original_thickness,
-        volume_reorient=args.volume_reorient,
-    )
-    builder.update_2d_sforms_after_reorientation(
-        builder.bids_root / "derivatives" / "2D-downsampled"
+    bids_root=args.bids_root,
+    original_thickness=args.original_thickness,
+    volume_reorient=args.volume_reorient,
+    res_label=args.res,
     )
 
     builder.update_2d_sforms_after_reorientation(
-        builder.bids_root / "derivatives" / "2D-preproc"
+        builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
     )
+
+    builder.update_2d_sforms_after_reorientation(
+        builder.preproc_root
+    )
+
     builder.build_all_volumes()
 
 """
 python mimosa_stacking_2D_2_3D-2.py \
   --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
+  --res 4x \
   --volume_reorient x,-z,-y \
-  --original_thickness 200
+  --original_thickness 100
 """

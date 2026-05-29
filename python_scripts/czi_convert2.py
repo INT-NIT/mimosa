@@ -25,7 +25,8 @@ def czi2bitmapHPC(
     slice_position_map=None,
     original_thickness: float = 100,
 ):
-   
+    res_label = f"{downsampling_factor}x"
+    desc_label = "downsampled"
     czifile_path = os.path.join(pathin, czifilename)
 
     output_format = output_format.lower().strip()
@@ -71,9 +72,9 @@ def czi2bitmapHPC(
                     base = bm.build_bids_basename(
                         bids_info=bids_info,
                         stain=stain,
-                        suffix="FLUO",          # ← plus de chunk
+                        suffix="FLUO",          
                     )
-
+                    base = base.replace("_FLUO", f"_res-{res_label}_desc-{desc_label}_FLUO")
                     if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)

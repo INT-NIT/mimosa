@@ -17,7 +17,7 @@ def dir_path(path):
 def main():
     parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
     parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
-    parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="factor 2^N")
+    parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="downsampling factor e.x: 4 ")
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
     parser.add_argument("--original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
@@ -36,8 +36,9 @@ def main():
 
     session = bm.BIDSSession(bids_root_path)
 
-    downsampling_factor = 2 ** args.downsampling_factor
-
+    downsampling_factor = downsampling_factor
+    res_label = f"{downsampling_factor}x"
+    pipeline_name = f"2D-downsampled_res-{res_label}"
     files_to_process = []
     sessions_by_sub = {}
     samples_rows    = []
@@ -129,7 +130,7 @@ def main():
                     bids_info,
                     downsampling_factor,
                     output_format,
-                    pipeline_name="2D-downsampled",
+                    pipeline_name=pipeline_name,
                     reader=reader,
                     slice_position_map=slice_position_map,
                     original_thickness=args.original_thickness,
@@ -144,7 +145,11 @@ def main():
         bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
     
     bmeta.write_samples_tsv(bids_root_path, samples_rows)
-
+    bmeta.write_subject_sessions_tsv(
+        os.path.join(bids_root_path, "derivatives", "2D-downsampled"),
+        sub,
+        rows,
+    )
     print("\n[SUCCESS] Conversion done.")
 
 
