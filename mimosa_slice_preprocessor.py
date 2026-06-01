@@ -253,6 +253,13 @@ if __name__ == "__main__":
                 meta, _ = bmeta.load_metadata(nii_path)
                 slice_index = int(bmeta.get_z_index(meta))
                 slice_position = slice_position_map[slice_index]
+                print(
+                    "DEBUG PREPROC",
+                    nii_path.name,
+                    "SliceIndex=", slice_index,
+                    "slice_position=", slice_position,
+                    "nb_slices=", nb_slices,
+                )
                 out = proc.process_one_slice(
                     nii_path=nii_path,
                     target_shape=target_shape,

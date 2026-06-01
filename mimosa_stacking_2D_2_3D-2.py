@@ -223,6 +223,7 @@ class VolumeBuilder3D:
         # Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
         downsampling_factor = bmeta.get_downsampling_factor(first_meta)
+        print("dowsnamplkungvegdfhrfhbhrfb",downsampling_factor)
         original_res = bmeta.get_original_resolution(first_meta)
         res_label = f"{int(downsampling_factor)}x"
         downsampled_res = original_res * downsampling_factor
@@ -245,6 +246,13 @@ class VolumeBuilder3D:
         # which have pixel values between 0 and 65535
         stack_of_slices = np.zeros((width, height, nb_slices), dtype=np.float32) 
         for i, (z_index, nii_path, meta) in enumerate(sorted_slices):
+            print(
+                "DEBUG STACK",
+                nii_path.name,
+                "SliceIndex=", z_index,
+                "volume_position=", i,
+                "nb_slices=", len(sorted_slices),
+            )
             img = nb.load(str(nii_path))
             data = img.get_fdata()
             data_2d = np.squeeze(data)
