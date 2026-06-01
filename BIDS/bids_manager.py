@@ -76,7 +76,12 @@ class BIDSSession:
             "bids_root_path": self.bids_root_path,
         }
 
-def initialize_dataset(bids_root_path: str, yaml_path: str = "metadata.yml", output_format: str = "both") -> str:
+def initialize_dataset(
+    bids_root_path: str,
+    yaml_path: str = "metadata.yml",
+    output_format: str = "both",
+    pipeline_names: list[str] | None = None,
+) -> str:
     bids_root_path = os.path.abspath(bids_root_path)
     os.makedirs(bids_root_path, exist_ok=True)
 
@@ -140,8 +145,11 @@ def initialize_dataset(bids_root_path: str, yaml_path: str = "metadata.yml", out
     bmeta.create_participants_files(bids_root_path, cfg)
     
     if output_format in ("nii", "both"):
-        bmeta.create_derivatives_descriptions(bids_root_path, cfg)
-
+        bmeta.create_derivatives_descriptions(
+            bids_root_path,
+            cfg,
+            pipeline_names=pipeline_names,
+        )
     print(f"Dataset initialized in {bids_root_path}")
     return bids_root_path
 

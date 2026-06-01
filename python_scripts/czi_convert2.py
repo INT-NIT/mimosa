@@ -68,13 +68,14 @@ def czi2bitmapHPC(
                 for c in range(nb_channels):
                     channel_name = f"C{c}"
                     stain = channel_name
-
                     base = bm.build_bids_basename(
                         bids_info=bids_info,
                         stain=stain,
-                        suffix="FLUO",          
+                        suffix="FLUO",
                     )
-                    base = base.replace("_FLUO", f"_res-{res_label}_desc-{desc_label}_FLUO")
+
+                    if "_res-" not in base:
+                        base = base.replace("_FLUO", f"_res-{res_label}_desc-{desc_label}_FLUO")
                     if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)

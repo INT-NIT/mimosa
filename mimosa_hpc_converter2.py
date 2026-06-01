@@ -29,16 +29,23 @@ def main():
 
     clean_output_path = args.output_path.rstrip("/")
 
-    bids_root_path = bm.initialize_dataset(clean_output_path, yaml_path=args.yaml, output_format=output_format)
+    downsampling_factor = args.downsampling_factor
+    res_label = f"{downsampling_factor}x"
+    pipeline_name = f"2D-downsampled_res-{res_label}"
+
+    bids_root_path = bm.initialize_dataset(
+        clean_output_path,
+        yaml_path=args.yaml,
+        output_format=output_format,
+        pipeline_names=[pipeline_name],
+    )
     cfg = bmeta.load_metadata_config(args.yaml)
     slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
+
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
 
-    downsampling_factor = args.downsampling_factor
-    res_label = f"{downsampling_factor}x"
-    pipeline_name = f"2D-downsampled_res-{res_label}"
     files_to_process = []
     sessions_by_sub = {}
     samples_rows    = []
