@@ -410,11 +410,23 @@ class VolumeBuilder3D:
             data_2d = np.squeeze(data)
             stack_of_slices[:, :, i] = data_2d
 
-        stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.volume_reorient)
+        #stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.volume_reorient)
+        #volume_shape = np.array(stack_of_slices.shape)
+
+        #new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
+        
         volume_shape = np.array(stack_of_slices.shape)
 
-        new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
+        new_shape, new_resolution = self.reorient_shape_and_resolution(
+            shape=tuple(volume_shape),
+            resolution=new_resolution,
+            mode=self.volume_reorient,
+        )
 
+        new_affine = VolumeBuilder3D.build_new_affine_matrix(
+            new_shape,
+            new_resolution,
+        )
         # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         out_img.set_sform(new_affine, code=1)
