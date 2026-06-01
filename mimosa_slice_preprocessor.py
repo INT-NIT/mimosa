@@ -148,7 +148,12 @@ class SlicePreprocessor:
         padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)
-
+        print(
+    "DEBUG SHAPE",
+    nii_path.name,
+    "nii_shape=", data_2d.shape,
+    "json Width/Height=", meta.get("Width"), meta.get("Height"),
+)
         preproc_sform = np.array(
             bmeta.build_2d_sform_for_volume(
                 width=target_width,
