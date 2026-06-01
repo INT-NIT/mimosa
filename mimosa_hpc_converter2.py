@@ -42,7 +42,9 @@ def main():
     )
     cfg = bmeta.load_metadata_config(args.yaml)
     slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
-
+    print("DEBUG CONVERT slice_position_map size =", len(slice_position_map))
+    print("DEBUG CONVERT first slices =", list(slice_position_map.items())[:10])
+    print("DEBUG CONVERT last slices =", list(slice_position_map.items())[-10:])
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
