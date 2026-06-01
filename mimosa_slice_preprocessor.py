@@ -244,5 +244,5 @@ python mimosa_slice_preprocessor.py \
   --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
   --res 4x \
   --padding_delta 100 \
-  --original_thickness 200
+  --original_thickness 100
 """

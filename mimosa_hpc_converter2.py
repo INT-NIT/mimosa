@@ -141,17 +141,26 @@ def main():
             continue
 
     for sub, d in sessions_by_sub.items():
-        rows = [{"session_id": ses_id, "acq_time": d[ses_id]} for ses_id in sorted(d.keys())]
-        bmeta.write_subject_sessions_tsv(bids_root_path, sub, rows)
-    
-    bmeta.write_samples_tsv(bids_root_path, samples_rows)
-    bmeta.write_subject_sessions_tsv(
-        os.path.join(bids_root_path, "derivatives", "2D-downsampled"),
-        sub,
-        rows,
-    )
-    print("\n[SUCCESS] Conversion done.")
+        rows = [
+            {"session_id": ses_id, "acq_time": d[ses_id]}
+            for ses_id in sorted(d.keys())
+        ]
 
+        bmeta.write_subject_sessions_tsv(
+            bids_root_path,
+            sub,
+            rows,
+        )
+
+        bmeta.write_subject_sessions_tsv(
+            os.path.join(bids_root_path, "derivatives", pipeline_name),
+            sub,
+            rows,
+        )
+
+    bmeta.write_samples_tsv(bids_root_path, samples_rows)
+
+    print("\n[SUCCESS] Conversion done.")
 
 if __name__ == "__main__":
     main()

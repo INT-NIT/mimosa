@@ -102,8 +102,7 @@ class MimosaReader:
 
     def get_session(self) -> str:
         raw_date = (
-            self._find_key(self.metadata, "CreationDate") or 
-            self._find_key(self.metadata, "AcquisitionDateAndTime") 
+            self._find_key(self.metadata, "CreationDate") 
         )
 
         if raw_date:
