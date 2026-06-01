@@ -24,6 +24,7 @@ def czi2bitmapHPC(
     reader=None,
     slice_position_map=None,
     original_thickness: float = 100,
+    reorient: str = "none",
 ):
     res_label = f"{downsampling_factor}x"
     effective_downsampling_factor = 2 ** downsampling_factor 
@@ -83,7 +84,7 @@ def czi2bitmapHPC(
                         meta_tiff = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
-                            downsampling_factor=downsampling_factor,
+                            downsampling_factor=effective_downsampling_factor,
                             is_nifti=False,
                             axis_swap=False,
                             scene_idx=scene_idx
@@ -98,10 +99,11 @@ def czi2bitmapHPC(
                         meta_nii = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
-                            downsampling_factor=downsampling_factor,
+                            downsampling_factor=effective_downsampling_factor,
                             is_nifti=True,
                             axis_swap=True,
-                            scene_idx=scene_idx
+                            scene_idx=scene_idx,
+
                         )
 
                         if slice_position_map is not None:
@@ -109,6 +111,7 @@ def czi2bitmapHPC(
                                 meta=meta_nii,
                                 slice_position_map=slice_position_map,
                                 original_thickness=original_thickness,
+                                reorient=reorient
                             )
 
                         sform = np.array(meta_nii.get("SFormMatrix", np.eye(4)), dtype=float)

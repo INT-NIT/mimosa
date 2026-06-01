@@ -291,6 +291,250 @@ def get_slice_position_map_from_config(cfg: dict) -> dict[int, int]:
         for position, slice_index in enumerate(unique_slices)
     }
 
+def is_identity_reorientation(mode: str) -> bool:
+    if mode is None:
+        return True
+
+    mode = mode.strip().lower()
+    return mode in ("", "none", "no", "identity", "x,y,z")
+
+
+def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
+        """
+        Parse reorient mode once.
+
+        Returns:
+            transpose_axes: old axes order used to create new volume
+            flip_axes: new axes to flip after transpose
+
+        Example:
+            "x,-z,-y"
+            transpose_axes = [0, 2, 1]
+            flip_axes = [1, 2]
+        """
+        if is_identity_reorientation(mode):
+            return [0, 1, 2], []
+
+        mode = mode.strip().lower()
+
+        axes_map = {
+            "x": 0,
+            "y": 1,
+            "z": 2,
+        }
+
+        if "," in mode:
+            parts = [p.strip() for p in mode.split(",")]
+
+            if len(parts) != 3:
+                raise ValueError(
+                    f"Invalid volume reorientation mode: {mode}. "
+                    "Expected format like 'x,y,z' or 'x,-z,-y'."
+                )
+
+            transpose_axes = []
+            flip_axes = []
+
+            for new_axis, part in enumerate(parts):
+                if not part:
+                    raise ValueError(
+                        f"Invalid empty axis in volume reorientation mode: {mode}"
+                    )
+
+                if part.startswith("-"):
+                    axis_name = part[1:]
+                    do_flip = True
+                else:
+                    axis_name = part
+                    do_flip = False
+
+                if axis_name not in axes_map:
+                    raise ValueError(
+                        f"Invalid axis '{part}' in volume reorientation mode: {mode}. "
+                        "Allowed axes are x, y, z, -x, -y, -z."
+                    )
+
+                old_axis = axes_map[axis_name]
+                transpose_axes.append(old_axis)
+
+                if do_flip:
+                    flip_axes.append(new_axis)
+
+            if sorted(transpose_axes) != [0, 1, 2]:
+                raise ValueError(
+                    f"Invalid volume reorientation mode: {mode}. "
+                    "Each axis x, y, z must be used exactly once."
+                )
+
+            return transpose_axes, flip_axes
+
+        transpose_axes = [0, 1, 2]
+        flip_axes = []
+
+        operations = [op.strip() for op in mode.split("+") if op.strip()]
+
+        for op in operations:
+            if op == "flip_x":
+                flip_axes.append(0)
+
+            elif op == "flip_y":
+                flip_axes.append(1)
+
+            elif op == "flip_z":
+                flip_axes.append(2)
+
+            elif op == "swap_xy":
+                transpose_axes = [
+                    transpose_axes[1],
+                    transpose_axes[0],
+                    transpose_axes[2],
+                ]
+
+                flip_axes = [
+                    1 if axis == 0 else
+                    0 if axis == 1 else
+                    axis
+                    for axis in flip_axes
+                ]
+
+            elif op == "swap_xz":
+                transpose_axes = [
+                    transpose_axes[2],
+                    transpose_axes[1],
+                    transpose_axes[0],
+                ]
+
+                flip_axes = [
+                    2 if axis == 0 else
+                    0 if axis == 2 else
+                    axis
+                    for axis in flip_axes
+                ]
+
+            elif op == "swap_yz":
+                transpose_axes = [
+                    transpose_axes[0],
+                    transpose_axes[2],
+                    transpose_axes[1],
+                ]
+
+                flip_axes = [
+                    2 if axis == 1 else
+                    1 if axis == 2 else
+                    axis
+                    for axis in flip_axes
+                ]
+
+            else:
+                raise ValueError(
+                    f"Invalid volume reorientation operation: {op}. "
+                    "Allowed operations are: flip_x, flip_y, flip_z, "
+                    "swap_xy, swap_xz, swap_yz."
+                )
+
+        return transpose_axes, flip_axes
+def reorient_shape_and_resolution(
+        shape: tuple[int, int, int],
+        resolution: list[float],
+        mode: str,
+    ) -> tuple[tuple[int, int, int], list[float]]:
+        """
+        Reorient only shape and resolution, without creating a fake volume.
+        """
+        transpose_axes, _ = parse_reorientation_mode(mode)
+
+        shape = list(shape)
+        resolution = list(resolution)
+
+        new_shape = tuple(shape[old_axis] for old_axis in transpose_axes)
+        new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
+
+        return new_shape, new_resolution
+     
+def map_old_index_to_reoriented_index(
+    old_index: tuple[float, float, float],
+    old_shape: tuple[int, int, int],
+    mode: str,
+) -> tuple[float, float, float]:
+    x, y, z = old_index
+
+    if is_identity_reorientation(mode):
+        return x, y, z
+
+    transpose_axes, flip_axes = parse_reorientation_mode(mode)
+
+    old_values = [x, y, z]
+    old_shape_values = list(old_shape)
+
+    new_index = []
+
+    for new_axis, old_axis in enumerate(transpose_axes):
+        value = old_values[old_axis]
+
+        if new_axis in flip_axes:
+            value = old_shape_values[old_axis] - 1 - value
+
+        new_index.append(value)
+
+    return tuple(new_index)
+def build_2d_sform_for_volume(
+    width: float,
+    height: float,
+    pixel_size: list[float],
+    slice_position: int,
+    nb_slices: int,
+    thickness: float,
+    reorient: str = "none",
+    pad_delta: tuple[int, int] = (0, 0),
+) -> list[list[float]]:
+    pad_x, pad_y = pad_delta
+
+    old_shape = (int(width), int(height), int(nb_slices))
+    old_resolution = [float(pixel_size[0]), float(pixel_size[1]), float(thickness)]
+
+    new_shape, new_resolution = reorient_shape_and_resolution(
+        old_shape,
+        old_resolution,
+        reorient,
+    )
+
+    volume_affine = np.array(
+        build_centered_affine(
+            shape=new_shape,
+            resolution=new_resolution,
+        ),
+        dtype=float,
+    )
+
+    old_origin = (pad_x, pad_y, slice_position)
+    old_x_step = (pad_x + 1, pad_y, slice_position)
+    old_y_step = (pad_x, pad_y + 1, slice_position)
+    old_z_step = (pad_x, pad_y, slice_position + 1)
+
+    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape, reorient)
+    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape, reorient)
+    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape, reorient)
+    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape, reorient)
+
+    new_origin = np.array([*new_origin, 1.0])
+    new_x_step = np.array([*new_x_step, 1.0])
+    new_y_step = np.array([*new_y_step, 1.0])
+    new_z_step = np.array([*new_z_step, 1.0])
+
+    origin_phys = volume_affine @ new_origin
+    x_step_phys = volume_affine @ new_x_step
+    y_step_phys = volume_affine @ new_y_step
+    z_step_phys = volume_affine @ new_z_step
+
+    sform = np.eye(4, dtype=float)
+    sform[:3, 0] = x_step_phys[:3] - origin_phys[:3]
+    sform[:3, 1] = y_step_phys[:3] - origin_phys[:3]
+    sform[:3, 2] = z_step_phys[:3] - origin_phys[:3]
+    sform[:3, 3] = origin_phys[:3]
+
+    return sform.tolist()
+
+
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
@@ -339,9 +583,12 @@ def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
+    reorient: str = "none",
 ) -> dict:
     """
     Add SFormMatrix to a metadata dict using SliceIndex, Width, Height, PixelSize.
+    The SForm is computed in the same centered reference as the future 3D volume,
+    including the requested reorientation.
     """
     slice_index = meta.get("SliceIndex")
 
@@ -356,20 +603,22 @@ def add_sform_to_json_metadata(
     slice_position = slice_position_map[slice_index]
     nb_slices = len(slice_position_map)
 
-    sform = build_centered_2d_sform(
+    sform = build_2d_sform_for_volume(
         width=meta["Width"],
         height=meta["Height"],
         pixel_size=meta["PixelSize"],
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness=original_thickness,
+        reorient=reorient,
+        pad_delta=(0, 0),
     )
 
     meta["SFormMatrix"] = sform
-    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
+    meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixDescription"] = (
-        "Initial SForm matrix placing this 2D slice in a centered common volume reference. "
-        "No volume reorientation applied at conversion time."
+        f"SForm matrix placing this 2D slice in the centered common volume reference "
+        f"using reorient={reorient}."
     )
 
     return meta
@@ -378,7 +627,7 @@ def write_sform_to_nifti_and_json(
     nii_path,
     sform_matrix,
     description: str,
-    volume_reorient: str = None,
+    reorient: str = None,
 ) -> None:
 
 
@@ -400,8 +649,8 @@ def write_sform_to_nifti_and_json(
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = description
 
-    if volume_reorient is not None:
-        meta["SFormVolumeReorientationMode"] = volume_reorient
+    if reorient is not None:
+        meta["SFormVolumeReorientationMode"] = reorient
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=4)

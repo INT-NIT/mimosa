@@ -6,12 +6,12 @@ from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 
 class SlicePreprocessor:
-    def __init__(
-        self,input_root: str,output_root: str,original_thickness: float,  res_label: str,):     
+    def __init__(self,input_root: str,output_root: str,original_thickness: float,  res_label: str,reorient: str = "none",):     
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
         self.original_thickness = original_thickness
         self.res_label = res_label
+        self.reorient = reorient
         self.subject_max_sizes = {} # having track of max width and height for each subject 
         self.downsampled_root = self.input_root / "derivatives" / f"2D-downsampled_res-{self.res_label}"
         self.preproc_root = self.output_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
@@ -93,13 +93,16 @@ class SlicePreprocessor:
                 nii_path=nii_path,
                 sform_matrix=sform_matrix,
                 description=description,
-            )   
+                reorient=self.reorient,
+            ) 
 
     def process_one_slice(
         self,
         nii_path: Path,
         target_shape: tuple[int, int],
         subject_name: str,
+        slice_position: int,
+        nb_slices: int,
     ) -> Path:
         """
         Load one input NIfTI, pad it to target_shape,
@@ -146,22 +149,20 @@ class SlicePreprocessor:
 
         meta, _ = bmeta.load_metadata(nii_path)
 
-        if "SFormMatrix" in meta:
-            downsampled_sform = np.array(meta["SFormMatrix"], dtype=float)
-        else:
-            downsampled_sform = img.affine
-
-        preproc_sform = downsampled_sform.copy()
-
-        # The preproc image has padding before the real image.
-        # Its pixel (pad_x_before, pad_y_before) corresponds to the old downsampled pixel (0,0).
-        # Therefore the new pixel (0,0) is shifted backward in physical space.
-        preproc_sform[:3, 3] = (
-            downsampled_sform[:3, 3]
-            - pad_x_before * downsampled_sform[:3, 0]
-            - pad_y_before * downsampled_sform[:3, 1]
+        preproc_sform = np.array(
+            bmeta.build_2d_sform_for_volume(
+                width=target_width,
+                height=target_height,
+                pixel_size=meta["PixelSize"],
+                slice_position=slice_position,
+                nb_slices=nb_slices,
+                thickness=self.original_thickness,
+                reorient=self.reorient,
+                pad_delta=(0, 0),
+            ),
+            dtype=float,
         )
-
+        
         out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
         out_img.set_sform(preproc_sform, code=1)
         out_img.set_qform(preproc_sform, code=1)
@@ -174,7 +175,7 @@ class SlicePreprocessor:
         self.write_sform_to_nifti_and_json(
             nii_path=output_path,
             sform_matrix=preproc_sform,
-            description="SForm matrix copied from 2D-downsampled and adjusted for preprocessing padding",
+            description=f"SForm matrix recomputed for padded 2D-preproc using reorient={self.reorient}",
         )
 
         return output_path
@@ -190,13 +191,15 @@ if __name__ == "__main__":
     parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
     parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
     parser.add_argument("--res",required=True,help="Resolution label to preprocess, for example 4x")
+    parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
 
     proc = SlicePreprocessor(
         input_root=args.bids_root,
         output_root=args.bids_root,
         original_thickness=args.original_thickness,
-        res_label=args.res
+        res_label=args.res,
+        reorient=args.reorient,
     )
 
     downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
@@ -221,20 +224,41 @@ if __name__ == "__main__":
                 args.padding_delta,
                 subject_dir.name,
             )
+            sorted_subject_niftis = sorted(
+                subject_niftis,
+                key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
+            )
+
+            unique_slice_indices = sorted({
+                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
+                for p in sorted_subject_niftis
+                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
+            })
+
+            slice_position_map = {
+                slice_index: position
+                for position, slice_index in enumerate(unique_slice_indices)
+            }
+
+            nb_slices = len(unique_slice_indices)
 
             print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
 
-            for nii_path in subject_niftis:
+            for nii_path in sorted_subject_niftis:
                 output_path = proc.build_output_path(nii_path)
 
                 if output_path.exists():
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
-
+                meta, _ = bmeta.load_metadata(nii_path)
+                slice_index = int(bmeta.get_z_index(meta))
+                slice_position = slice_position_map[slice_index]
                 out = proc.process_one_slice(
                     nii_path=nii_path,
                     target_shape=target_shape,
                     subject_name=subject_dir.name,
+                    slice_position=slice_position,
+                    nb_slices=nb_slices,
                 )
 
                 print(f"  IN : {nii_path.name}")

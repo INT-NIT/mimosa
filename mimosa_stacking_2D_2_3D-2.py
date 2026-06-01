@@ -8,10 +8,10 @@ from BIDS import bids_manager as bm
 
 
 class VolumeBuilder3D:
-    def __init__(self, bids_root: str, original_thickness: float, volume_reorient: str="none",res_label: str = None,):
+    def __init__(self, bids_root: str, original_thickness: float, reorient: str="none",res_label: str = None,):
         self.bids_root = Path(bids_root).resolve()
         self.original_thickness = original_thickness
-        self.volume_reorient = volume_reorient
+        self.reorient = reorient
         self.res_label = res_label
 
         if self.res_label is None:
@@ -41,7 +41,7 @@ class VolumeBuilder3D:
         """
 
         meta, output_json = bmeta.load_metadata(output_nii_path)
-        meta["VolumeReorientationMode"] = self.volume_reorient
+        meta["VolumeReorientationMode"] = self.reorient
         meta["VolumeShape"] = [
             int(volume_shape[0]),
             int(volume_shape[1]),
@@ -61,169 +61,7 @@ class VolumeBuilder3D:
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4)
     
-    @staticmethod
-    def is_identity_reorientation(mode: str) -> bool:
-        if mode is None:
-            return True
-
-        mode = mode.strip().lower()
-        return mode in ("", "none", "no", "identity", "x,y,z")
-
-
-    @staticmethod
-    def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
-        """
-        Parse volume_reorient mode once.
-
-        Returns:
-            transpose_axes: old axes order used to create new volume
-            flip_axes: new axes to flip after transpose
-
-        Example:
-            "x,-z,-y"
-            transpose_axes = [0, 2, 1]
-            flip_axes = [1, 2]
-        """
-        if VolumeBuilder3D.is_identity_reorientation(mode):
-            return [0, 1, 2], []
-
-        mode = mode.strip().lower()
-
-        axes_map = {
-            "x": 0,
-            "y": 1,
-            "z": 2,
-        }
-
-        if "," in mode:
-            parts = [p.strip() for p in mode.split(",")]
-
-            if len(parts) != 3:
-                raise ValueError(
-                    f"Invalid volume reorientation mode: {mode}. "
-                    "Expected format like 'x,y,z' or 'x,-z,-y'."
-                )
-
-            transpose_axes = []
-            flip_axes = []
-
-            for new_axis, part in enumerate(parts):
-                if not part:
-                    raise ValueError(
-                        f"Invalid empty axis in volume reorientation mode: {mode}"
-                    )
-
-                if part.startswith("-"):
-                    axis_name = part[1:]
-                    do_flip = True
-                else:
-                    axis_name = part
-                    do_flip = False
-
-                if axis_name not in axes_map:
-                    raise ValueError(
-                        f"Invalid axis '{part}' in volume reorientation mode: {mode}. "
-                        "Allowed axes are x, y, z, -x, -y, -z."
-                    )
-
-                old_axis = axes_map[axis_name]
-                transpose_axes.append(old_axis)
-
-                if do_flip:
-                    flip_axes.append(new_axis)
-
-            if sorted(transpose_axes) != [0, 1, 2]:
-                raise ValueError(
-                    f"Invalid volume reorientation mode: {mode}. "
-                    "Each axis x, y, z must be used exactly once."
-                )
-
-            return transpose_axes, flip_axes
-
-        transpose_axes = [0, 1, 2]
-        flip_axes = []
-
-        operations = [op.strip() for op in mode.split("+") if op.strip()]
-
-        for op in operations:
-            if op == "flip_x":
-                flip_axes.append(0)
-
-            elif op == "flip_y":
-                flip_axes.append(1)
-
-            elif op == "flip_z":
-                flip_axes.append(2)
-
-            elif op == "swap_xy":
-                transpose_axes = [
-                    transpose_axes[1],
-                    transpose_axes[0],
-                    transpose_axes[2],
-                ]
-
-                flip_axes = [
-                    1 if axis == 0 else
-                    0 if axis == 1 else
-                    axis
-                    for axis in flip_axes
-                ]
-
-            elif op == "swap_xz":
-                transpose_axes = [
-                    transpose_axes[2],
-                    transpose_axes[1],
-                    transpose_axes[0],
-                ]
-
-                flip_axes = [
-                    2 if axis == 0 else
-                    0 if axis == 2 else
-                    axis
-                    for axis in flip_axes
-                ]
-
-            elif op == "swap_yz":
-                transpose_axes = [
-                    transpose_axes[0],
-                    transpose_axes[2],
-                    transpose_axes[1],
-                ]
-
-                flip_axes = [
-                    2 if axis == 1 else
-                    1 if axis == 2 else
-                    axis
-                    for axis in flip_axes
-                ]
-
-            else:
-                raise ValueError(
-                    f"Invalid volume reorientation operation: {op}. "
-                    "Allowed operations are: flip_x, flip_y, flip_z, "
-                    "swap_xy, swap_xz, swap_yz."
-                )
-
-        return transpose_axes, flip_axes
     
-    def reorient_shape_and_resolution(
-        self,
-        shape: tuple[int, int, int],
-        resolution: list[float],
-        mode: str,
-    ) -> tuple[tuple[int, int, int], list[float]]:
-        """
-        Reorient only shape and resolution, without creating a fake volume.
-        """
-        transpose_axes, _ = VolumeBuilder3D.parse_reorientation_mode(mode)
-
-        shape = list(shape)
-        resolution = list(resolution)
-
-        new_shape = tuple(shape[old_axis] for old_axis in transpose_axes)
-        new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
-
-        return new_shape, new_resolution
     
     def reorient_volume_3d(
         self,
@@ -234,10 +72,10 @@ class VolumeBuilder3D:
         """
         Reorient a 3D volume using the parsed reorientation mode.
         """
-        if VolumeBuilder3D.is_identity_reorientation(mode):
+        if bmeta.is_identity_reorientation(mode):
             return volume, resolution
 
-        transpose_axes, flip_axes = VolumeBuilder3D.parse_reorientation_mode(mode)
+        transpose_axes, flip_axes = bmeta.parse_reorientation_mode(mode)
 
         volume = np.transpose(volume, transpose_axes)
 
@@ -258,14 +96,14 @@ class VolumeBuilder3D:
             ),
             dtype=float,
         )
-    
+    """
     def reorient_existing_sform(
         self,
         sform: np.ndarray,
         old_shape: tuple[int, int, int],
         old_resolution: list[float],
         ) -> np.ndarray:
-        mode = self.volume_reorient
+        mode = self.reorient
 
         if VolumeBuilder3D.is_identity_reorientation(mode):
             return sform
@@ -290,7 +128,7 @@ class VolumeBuilder3D:
 
         return transform @ sform
     def update_2d_sforms_after_reorientation(self, root_2d: Path) -> None:
-        mode = self.volume_reorient
+        mode = self.reorient
 
         if VolumeBuilder3D.is_identity_reorientation(mode):
             print(f"No volume reorientation requested for {root_2d.name} — keeping existing 2D SFormMatrix.")
@@ -323,7 +161,7 @@ class VolumeBuilder3D:
                     print(f"WARNING: no SFormMatrix in {nii_path.name}, skipping")
                     continue
 
-                if meta.get("SFormVolumeReorientationMode") == self.volume_reorient:
+                if meta.get("SFormVolumeReorientationMode") == self.reorient:
                     continue
 
                 source_sform = meta.get("InitialSFormMatrix", meta["SFormMatrix"])
@@ -354,11 +192,13 @@ class VolumeBuilder3D:
                 bmeta.write_sform_to_nifti_and_json(
                     nii_path=nii_path,
                     sform_matrix=new_sform,
-                    description=f"SFormMatrix updated using volume_reorient={self.volume_reorient}",
-                    volume_reorient=self.volume_reorient,
+                    description=f"SFormMatrix updated using reorient={self.reorient}",
+                    reorient=self.reorient,
                 )
 
                 print(f"Updated SFormMatrix: {nii_path.name}")
+    """
+
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR  {subject_dir.name} {channel}")
@@ -410,25 +250,11 @@ class VolumeBuilder3D:
             data_2d = np.squeeze(data)
             stack_of_slices[:, :, i] = data_2d
 
-        #stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.volume_reorient)
-        #volume_shape = np.array(stack_of_slices.shape)
-
-        #new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
+        stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.reorient)
         volume_shape = np.array(stack_of_slices.shape)
 
-        if VolumeBuilder3D.is_identity_reorientation(self.volume_reorient):
-            affine_resolution = new_resolution
-        else:
-            _, affine_resolution = self.reorient_shape_and_resolution(
-                shape=tuple(volume_shape),
-                resolution=new_resolution,
-                mode=self.volume_reorient,
-            )
+        new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
 
-        new_affine = VolumeBuilder3D.build_new_affine_matrix(
-            tuple(volume_shape),
-            affine_resolution,
-        )
         # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         out_img.set_sform(new_affine, code=1)
@@ -465,7 +291,7 @@ if __name__ == "__main__":
         help="Resolution label to stack, for example 4x"
     )
     parser.add_argument(
-        "--volume_reorient",
+        "--reorient",
         required=False,
         default="none",
         help="3D volume reorientation: none, x,y,z, x,-z,-y, swap_yz+flip_y+flip_z, etc."
@@ -485,24 +311,25 @@ if __name__ == "__main__":
     builder = VolumeBuilder3D(
     bids_root=args.bids_root,
     original_thickness=args.original_thickness,
-    volume_reorient=args.volume_reorient,
+    reorient=args.reorient,
     res_label=args.res,
     )
-
-    #builder.update_2d_sforms_after_reorientation(
-        #builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
-    #)
-
-    #builder.update_2d_sforms_after_reorientation(
-        #builder.preproc_root
-    #)
-
     builder.build_all_volumes()
+
+    """ 
+    builder.update_2d_sforms_after_reorientation(
+        builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
+    )
+
+    builder.update_2d_sforms_after_reorientation(
+        builder.preproc_root
+    )
+"""
 
 """
 python mimosa_stacking_2D_2_3D-2.py \
   --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
   --res 4x \
-  --volume_reorient x,-z,-y \
+  --reorient x,-z,-y \
   --original_thickness 100
 """

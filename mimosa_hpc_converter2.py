@@ -21,6 +21,7 @@ def main():
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
     parser.add_argument("--original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
+    parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -141,6 +142,7 @@ def main():
                     reader=reader,
                     slice_position_map=slice_position_map,
                     original_thickness=args.original_thickness,
+                    reorient=args.reorient,
                 )
 
         except Exception as e:
