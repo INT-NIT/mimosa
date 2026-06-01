@@ -223,11 +223,14 @@ class VolumeBuilder3D:
         # Métadonnées de référence (première slice du groupe)
         first_meta = sorted_slices[0][2]
         downsampling_factor = bmeta.get_downsampling_factor(first_meta)
-        print("dowsnamplkungvegdfhrfhbhrfb",downsampling_factor)
-        original_res = bmeta.get_original_resolution(first_meta)
         res_label = f"{int(downsampling_factor)}x"
-        downsampled_res = original_res * downsampling_factor
 
+        pixel_size = first_meta.get("PixelSize")
+        if pixel_size is None:
+            raise ValueError(f"PixelSize not found in metadata for {sorted_slices[0][1].name}")
+
+        downsampled_res_x = float(pixel_size[0])
+        downsampled_res_y = float(pixel_size[1])
         #  Lire la taille des slices déjà paddées/réorientées
         first_img = nb.load(str(sorted_slices[0][1]))
         first_data = np.squeeze(first_img.get_fdata())
@@ -239,8 +242,11 @@ class VolumeBuilder3D:
         volume_shape = np.array((width, height, nb_slices))
 
         #  Construire la résolution et l’affine du volume final
-        new_resolution = [downsampled_res, downsampled_res, self.original_thickness]
-
+        new_resolution = [
+            downsampled_res_x,
+            downsampled_res_y,
+            self.original_thickness,
+        ]
         # float32 instead of default float64 to reduce memory usage by half
         # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
         # which have pixel values between 0 and 65535
