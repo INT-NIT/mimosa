@@ -414,18 +414,20 @@ class VolumeBuilder3D:
         #volume_shape = np.array(stack_of_slices.shape)
 
         #new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
-        
         volume_shape = np.array(stack_of_slices.shape)
 
-        new_shape, new_resolution = self.reorient_shape_and_resolution(
-            shape=tuple(volume_shape),
-            resolution=new_resolution,
-            mode=self.volume_reorient,
-        )
+        if VolumeBuilder3D.is_identity_reorientation(self.volume_reorient):
+            affine_resolution = new_resolution
+        else:
+            _, affine_resolution = self.reorient_shape_and_resolution(
+                shape=tuple(volume_shape),
+                resolution=new_resolution,
+                mode=self.volume_reorient,
+            )
 
         new_affine = VolumeBuilder3D.build_new_affine_matrix(
-            new_shape,
-            new_resolution,
+            tuple(volume_shape),
+            affine_resolution,
         )
         # Sauvegarder le volume
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
@@ -487,13 +489,13 @@ if __name__ == "__main__":
     res_label=args.res,
     )
 
-    builder.update_2d_sforms_after_reorientation(
-        builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
-    )
+    #builder.update_2d_sforms_after_reorientation(
+        #builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
+    #)
 
-    builder.update_2d_sforms_after_reorientation(
-        builder.preproc_root
-    )
+    #builder.update_2d_sforms_after_reorientation(
+        #builder.preproc_root
+    #)
 
     builder.build_all_volumes()
 
