@@ -26,6 +26,7 @@ def czi2bitmapHPC(
     original_thickness: float = 100,
 ):
     res_label = f"{downsampling_factor}x"
+    effective_downsampling_factor = 2 ** downsampling_factor 
     desc_label = "downsampled"
     czifile_path = os.path.join(pathin, czifilename)
 
@@ -46,7 +47,7 @@ def czi2bitmapHPC(
         raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
         deriv_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info) if write_nii else None
 
-        zoom_factor = float(1.0 / downsampling_factor)
+        zoom_factor = float(1.0 / effective_downsampling_factor)
 
         for scene_idx in range(len(scenes)):
             rect = scenes[scene_idx]
