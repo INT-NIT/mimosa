@@ -233,19 +233,13 @@ if __name__ == "__main__":
                 subject_niftis,
                 key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
             )
-
-            unique_slice_indices = sorted({
+            unique_indices = sorted({
                 int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
                 for p in sorted_subject_niftis
                 if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
             })
-
-            slice_position_map = {
-                slice_index: position
-                for position, slice_index in enumerate(unique_slice_indices)
-            }
-
-            nb_slices = len(unique_slice_indices)
+            nb_slices = len(unique_indices)
+            slice_position_map = {idx: pos for pos, idx in enumerate(unique_indices)}
 
             print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
 

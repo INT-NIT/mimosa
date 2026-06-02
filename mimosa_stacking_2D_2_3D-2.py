@@ -237,21 +237,7 @@ class VolumeBuilder3D:
         width = first_data.shape[0]
         height = first_data.shape[1]
 
-        # IMPORTANT: même mapping Z que dans le preprocessor 2D
-        all_subject_niftis = list(bm.iter_subject_niftis(subject_dir))
-
-        unique_slice_indices = sorted({
-            int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
-            for p in all_subject_niftis
-            if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
-        })
-
-        slice_position_map = {
-            slice_index: position
-            for position, slice_index in enumerate(unique_slice_indices)
-        }
-
-        nb_slices = len(unique_slice_indices)
+        nb_slices = len(sorted_slices)
 
         if nb_slices == 0:
             raise ValueError(f"NO GLOBAL SLICE INDEX FOUND FOR {subject_dir.name}")
@@ -268,24 +254,11 @@ class VolumeBuilder3D:
         # float32 instead of default float64 to reduce memory usage by half
         # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
         # which have pixel values between 0 and 65535
-        stack_of_slices = np.zeros((width, height, nb_slices), dtype=np.float32) 
-
-        for z_index, nii_path, meta in sorted_slices:
-            slice_position = slice_position_map[int(z_index)]
-
-            print(
-                "DEBUG STACK",
-                nii_path.name,
-                "SliceIndex=", z_index,
-                "slice_position=", slice_position,
-                "nb_slices=", nb_slices,
-            )
-
+        stack_of_slices = np.zeros((width, height, nb_slices), dtype=np.float32)
+        for position, (z_index, nii_path, meta) in enumerate(sorted_slices):
             img = nb.load(str(nii_path))
-            data = img.get_fdata()
-            data_2d = np.squeeze(data)
-
-            stack_of_slices[:, :, slice_position] = data_2d
+            data_2d = np.squeeze(img.get_fdata())
+            stack_of_slices[:, :, position] = data_2d 
 
         stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.reorient)
         volume_shape = np.array(stack_of_slices.shape)
