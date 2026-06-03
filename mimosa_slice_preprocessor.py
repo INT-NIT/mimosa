@@ -196,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
     parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
     parser.add_argument("--res",required=True,help="Resolution label to preprocess, for example 4x")
+    parser.add_argument("--yaml", type=str, default="metadata.yml")
     parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
 
@@ -206,7 +207,9 @@ if __name__ == "__main__":
         res_label=args.res,
         reorient=args.reorient,
     )
-
+    cfg = bmeta.load_metadata_config(args.yaml)
+    slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
+    nb_slices = len(slice_position_map)  # ← même source que le converter
     downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
     preproc_niftis = list(proc.preproc_root.rglob("*.nii.gz"))
 
@@ -233,13 +236,6 @@ if __name__ == "__main__":
                 subject_niftis,
                 key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
             )
-            unique_indices = sorted({
-                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
-                for p in sorted_subject_niftis
-                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
-            })
-            nb_slices = len(unique_indices)
-            slice_position_map = {idx: pos for pos, idx in enumerate(unique_indices)}
 
             print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
 
