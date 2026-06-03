@@ -477,7 +477,6 @@ def map_old_index_to_reoriented_index(
         new_index.append(value)
 
     return tuple(new_index)
-
 def build_2d_sform_for_volume(
     width: float,
     height: float,
@@ -487,45 +486,19 @@ def build_2d_sform_for_volume(
     thickness: float,
     reorient: str = "none",
     pad_delta: tuple[int, int] = (0, 0),
-    reference_width_um: float | None = None,
-    reference_height_um: float | None = None,
 ) -> list[list[float]]:
     pad_x, pad_y = pad_delta
 
-    pixel_x = float(pixel_size[0])
-    pixel_y = float(pixel_size[1])
-    thickness = float(thickness)
-
-    # Taille courante en "pixels théoriques" depuis le JSON
-    old_shape = (
-        float(width),
-        float(height),
-        float(nb_slices),
-    )
-
-    old_resolution = [
-        pixel_x,
-        pixel_y,
-        thickness,
-    ]
-
-    # Si aucune référence commune n'est donnée, on garde l'ancien comportement
-    if reference_width_um is None:
-        reference_width_um = float(width) * pixel_x
-
-    if reference_height_um is None:
-        reference_height_um = float(height) * pixel_y
-
-    # Ici on transforme la taille physique commune en shape équivalente
-    # dans la résolution courante.
-    reference_shape = (
-        float(reference_width_um) / pixel_x,
-        float(reference_height_um) / pixel_y,
-        float(nb_slices),
-    )
+    # ints pour les calculs d'index (flips)
+    old_shape_int = (int(width), int(height), int(nb_slices))
+    
+    # floats pour le calcul de l'origine physique → cohérent entre résolutions
+    old_shape_phys = (float(width), float(height), float(nb_slices))
+    
+    old_resolution = [float(pixel_size[0]), float(pixel_size[1]), float(thickness)]
 
     new_shape, new_resolution = reorient_shape_and_resolution(
-        reference_shape,
+        old_shape_phys,   # ← float ici
         old_resolution,
         reorient,
     )
@@ -543,13 +516,11 @@ def build_2d_sform_for_volume(
     old_y_step = (pad_x, pad_y + 1, slice_position)
     old_z_step = (pad_x, pad_y, slice_position + 1)
 
-    # Important :
-    # ici on garde old_shape pour les indices de la coupe courante.
-    # Mais l'origine du cadre vient de reference_shape via volume_affine.
-    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape, reorient)
-    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape, reorient)
-    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape, reorient)
-    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape, reorient)
+    # ← int ici pour les flips
+    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape_int, reorient)
+    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape_int, reorient)
+    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape_int, reorient)
+    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape_int, reorient)
 
     new_origin = np.array([*new_origin, 1.0])
     new_x_step = np.array([*new_x_step, 1.0])
@@ -568,7 +539,6 @@ def build_2d_sform_for_volume(
     sform[:3, 3] = origin_phys[:3]
 
     return sform.tolist()
-
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
@@ -636,8 +606,6 @@ def add_sform_to_json_metadata(
 
     slice_position = slice_position_map[slice_index]
     nb_slices = len(slice_position_map)
-    reference_width_um = float(meta["Width"]) * float(meta["PixelSize"][0])
-    reference_height_um = float(meta["Height"]) * float(meta["PixelSize"][1])
     sform = build_2d_sform_for_volume(
         width=meta["Width"],
         height=meta["Height"],
@@ -646,9 +614,7 @@ def add_sform_to_json_metadata(
         nb_slices=nb_slices,
         thickness=original_thickness,
         reorient=reorient,
-        pad_delta=(0, 0),
-        reference_width_um=reference_width_um,
-        reference_height_um=reference_height_um,
+        pad_delta=(0, 0)
     )
 
     meta["SFormMatrix"] = sform
