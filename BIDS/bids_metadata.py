@@ -489,7 +489,7 @@ def build_2d_sform_for_volume(
 ) -> list[list[float]]:
     pad_x, pad_y = pad_delta
 
-    old_shape = (int(width), int(height), int(nb_slices))
+    old_shape = (float(width), float(height), float(nb_slices))
     old_resolution = [float(pixel_size[0]), float(pixel_size[1]), float(thickness)]
 
     new_shape, new_resolution = reorient_shape_and_resolution(
