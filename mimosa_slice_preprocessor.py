@@ -37,25 +37,17 @@ class SlicePreprocessor:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
 
-    def get_slice_size_from_json(self, nii_path: Path) -> tuple[int, int]:
-        """
-            Read width and height of one slice from its JSON sidecar
-        """
-        meta, json_path=bmeta.load_metadata(nii_path)
-        width = meta.get("Width")
-        height = meta.get("Height")
-
-        if width is None or height is None:
-            raise ValueError(f"Width/Height NOT FOUND IN {json_path}")
-
-        return int(width), int(height)              
+    def get_slice_size_from_nifti(self, nii_path: Path) -> tuple[int, int]:
+        img = nb.load(str(nii_path))
+        data_2d = np.squeeze(img.get_fdata())
+        return int(data_2d.shape[0]), int(data_2d.shape[1])
     
     def compute_target_shape(self, nii_paths, padding_delta, subject_name):
         max_width = 0
         max_height = 0
 
         for nii_path in nii_paths:
-            width, height = self.get_slice_size_from_json(nii_path)
+            width, height = self.get_slice_size_from_nifti(nii_path)
 
             if width > max_width:
                 max_width = width
