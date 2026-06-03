@@ -606,11 +606,17 @@ def add_sform_to_json_metadata(
     nb_slices = len(slice_position_map)
     width_phys = meta.get("WidthPhysical")
     height_phys = meta.get("HeightPhysical")
+    pixel_size = meta["PixelSize"]
 
-    
+    if width_phys is not None and height_phys is not None:
+        virtual_width  = width_phys  / float(pixel_size[0])
+        virtual_height = height_phys / float(pixel_size[1])
+    else:
+        virtual_width  = round(meta["Width"])
+        virtual_height = round(meta["Height"])
     sform = build_2d_sform(
-        width=width_phys,
-        height=height_phys,
+        width=virtual_width,
+        height=virtual_height,
         pixel_size=meta["PixelSize"],
         slice_position=slice_position,
         nb_slices=nb_slices,
