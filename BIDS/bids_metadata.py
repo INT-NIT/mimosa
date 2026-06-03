@@ -607,8 +607,8 @@ def add_sform_to_json_metadata(
     slice_position = slice_position_map[slice_index]
     nb_slices = len(slice_position_map)
     sform = build_2d_sform_for_volume(
-        width=meta["Width"],
-        height=meta["Height"],
+        width=round(meta["Width"]),
+        height=round(meta["Height"]),
         pixel_size=meta["PixelSize"],
         slice_position=slice_position,
         nb_slices=nb_slices,
