@@ -453,7 +453,7 @@ def reorient_shape_and_resolution(
      
 def map_old_index_to_reoriented_index(
     old_index: tuple[float, float, float],
-    old_shape: tuple[int, int, int],
+    old_shape: tuple[float,float, float],
     mode: str,
 ) -> tuple[float, float, float]:
     x, y, z = old_index
