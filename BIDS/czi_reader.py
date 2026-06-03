@@ -212,11 +212,12 @@ class MimosaReader:
             y_px = float(rect[1])
             w_px = float(rect[2])
             h_px = float(rect[3])
-
+        
         # Position of the scene origin in slide coordinates, in micrometers
         x0_um = x_px * float(px_um_x)
         y0_um = y_px * float(px_um_y)
-
+        w_native_um = w_px * float(px_um_x)  # taille physique réelle
+        h_native_um = h_px * float(px_um_y) 
         # Size of the saved downsampled image, in pixels
         w_downsampled = int(w_px / float(downsampling_factor))
         h_downsampled = int(h_px / float(downsampling_factor))
@@ -228,8 +229,8 @@ class MimosaReader:
             [0.0, out_px_um_y, y0_um],
             [0.0, 0.0, 1.0],
         ]
-
-        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled
+        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled , w_native_um, h_native_um 
+    
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
 
@@ -259,7 +260,7 @@ class MimosaReader:
         manufacturer = self.get_manufacturer()
         px_um_x, px_um_y, unit = self.get_pixel_size_um()
         acq_sig = self.get_acq_signature()
-        chunk_mat, axes, out_pix, out_unit, w_downsampled, h_downsampled = self.get_chunk_transform_matrix(
+        chunk_mat, axes, out_pix, out_unit, w_downsampled, h_downsampled ,w_native_um, h_native_um = self.get_chunk_transform_matrix(
             rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor,slice_index=slice_idx
         )
 
@@ -274,6 +275,8 @@ class MimosaReader:
             "ChunkTransformationMatrixAxis": axes,
             "Width": w_downsampled,
             "Height": h_downsampled,
+            "WidthPhysical": w_native_um,   # ← nouveau
+            "HeightPhysical": h_native_um,
             "DownsamplingFactor": downsampling_factor
         }
 
