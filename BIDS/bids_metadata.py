@@ -489,9 +489,6 @@ def build_2d_sform_for_volume(
 ) -> list[list[float]]:
     pad_x, pad_y = pad_delta
 
-    # ints pour les calculs d'index (flips)
-    old_shape_int = (int(width), int(height), int(nb_slices))
-    
     # floats pour le calcul de l'origine physique → cohérent entre résolutions
     old_shape_phys = (float(width), float(height), float(nb_slices))
     
@@ -517,10 +514,10 @@ def build_2d_sform_for_volume(
     old_z_step = (pad_x, pad_y, slice_position + 1)
 
     # ← int ici pour les flips
-    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape_int, reorient)
-    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape_int, reorient)
-    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape_int, reorient)
-    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape_int, reorient)
+    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape_phys, reorient)
+    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape_phys, reorient)
+    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape_phys, reorient)
+    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape_phys, reorient)
 
     new_origin = np.array([*new_origin, 1.0])
     new_x_step = np.array([*new_x_step, 1.0])
