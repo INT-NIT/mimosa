@@ -218,8 +218,8 @@ class MimosaReader:
         y0_um = y_px * float(px_um_y)
 
         # Size of the saved downsampled image, in pixels
-        w_downsampled = w_px / float(downsampling_factor)
-        h_downsampled = h_px / float(downsampling_factor)
+        w_downsampled = int(w_px / float(downsampling_factor))
+        h_downsampled = int(h_px / float(downsampling_factor))
 
         # For now, keep ChunkTransformationMatrix as 2D.
         # SliceIndex stays as a separate metadata field.
