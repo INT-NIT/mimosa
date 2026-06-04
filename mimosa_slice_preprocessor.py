@@ -93,8 +93,7 @@ class SlicePreprocessor:
         nii_path: Path,
         target_shape: tuple[int, int],
         subject_name: str,
-        slice_position: int,
-        nb_slices: int,
+
     ) -> Path:
         """
         Load one input NIfTI, pad it to target_shape,
@@ -147,6 +146,9 @@ class SlicePreprocessor:
 
         meta, _ = bmeta.load_metadata(nii_path)
 
+        slice_position = int(meta["SlicePosition"])
+        nb_slices = int(meta["NumberOfSlices"])
+
         preproc_sform = np.array(
             bmeta.build_centered_slice_sform(
                 width=target_width,
@@ -190,7 +192,6 @@ if __name__ == "__main__":
     parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
     parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
     parser.add_argument("--res",required=True,help="Resolution label to preprocess, for example 4x")
-    parser.add_argument("--yaml", type=str, default="metadata.yml")
     parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
 
@@ -201,9 +202,7 @@ if __name__ == "__main__":
         res_label=args.res,
         reorient=args.reorient,
     )
-    cfg = bmeta.load_metadata_config(args.yaml)
-    slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
-    nb_slices = len(slice_position_map)  # ← même source que le converter
+    
     downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
     preproc_niftis = list(proc.preproc_root.rglob("*.nii.gz"))
 
@@ -240,21 +239,12 @@ if __name__ == "__main__":
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
                 meta, _ = bmeta.load_metadata(nii_path)
-                slice_index = int(bmeta.get_z_index(meta))
-                slice_position = slice_position_map[slice_index]
-                print(
-                    "DEBUG PREPROC",
-                    nii_path.name,
-                    "SliceIndex=", slice_index,
-                    "slice_position=", slice_position,
-                    "nb_slices=", nb_slices,
-                )
+                
                 out = proc.process_one_slice(
                     nii_path=nii_path,
                     target_shape=target_shape,
                     subject_name=subject_dir.name,
-                    slice_position=slice_position,
-                    nb_slices=nb_slices,
+                    
                 )
 
                 print(f"  IN : {nii_path.name}")

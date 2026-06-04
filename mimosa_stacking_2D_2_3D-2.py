@@ -201,81 +201,151 @@ class VolumeBuilder3D:
 
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
-            raise ValueError(f"NO SLICE FOUND FOR  {subject_dir.name} {channel}")
+            raise ValueError(f"NO SLICE FOUND FOR {subject_dir.name} {channel}")
 
-        #  Lire les métadonnées de toutes les slices et trier selon Z
+        # Read metadata for all slices.
+        # We use SlicePosition from JSON, not YAML and not enumerate().
         sorted_slices = []
         skipped_slices = []
 
         for nii_path in nii_paths:
             meta, _ = bmeta.load_metadata(nii_path)
-            z_index = bmeta.get_z_index(meta)
 
-            if z_index is None:
-                skipped_slices.append(nii_path.name)
+            slice_index = bmeta.get_z_index(meta)
+            slice_position = meta.get("SlicePosition")
+
+            if slice_index is None:
+                skipped_slices.append(f"{nii_path.name}: missing SliceIndex")
                 continue
 
-            sorted_slices.append((z_index, nii_path, meta))
-        sorted_slices.sort(key=lambda x: x[0])
+            if slice_position is None:
+                skipped_slices.append(f"{nii_path.name}: missing SlicePosition")
+                continue
+
+            sorted_slices.append((int(slice_position), int(slice_index), nii_path, meta))
+
+        if skipped_slices:
+            print("WARNING: skipped slices:")
+            for item in skipped_slices:
+                print(f"  - {item}")
 
         if not sorted_slices:
-            raise ValueError(f"NO VALID SLICE INDEX FOUND FOR {subject_dir.name} {channel}")        
-        # Métadonnées de référence (première slice du groupe)
-        first_meta = sorted_slices[0][2]
+            raise ValueError(f"NO VALID SLICE POSITION FOUND FOR {subject_dir.name} {channel}")
+
+        sorted_slices.sort(key=lambda x: x[0])
+
+        # Reference metadata from first valid slice.
+        first_meta = sorted_slices[0][3]
+
         downsampling_factor = bmeta.get_downsampling_factor(first_meta)
         res_label = f"{int(downsampling_factor)}x"
 
         pixel_size = first_meta.get("PixelSize")
         if pixel_size is None:
-            raise ValueError(f"PixelSize not found in metadata for {sorted_slices[0][1].name}")
+            raise ValueError(f"PixelSize not found in metadata for {sorted_slices[0][2].name}")
 
         downsampled_res_x = float(pixel_size[0])
         downsampled_res_y = float(pixel_size[1])
-        #  Lire la taille des slices déjà paddées/réorientées
-        first_img = nb.load(str(sorted_slices[0][1]))
+
+        # NumberOfSlices must come from JSON.
+        # This is written during the converter step from the YAML once.
+        nb_slices = first_meta.get("NumberOfSlices")
+        if nb_slices is None:
+            raise ValueError(
+                f"NumberOfSlices missing in {sorted_slices[0][2].name}. "
+                "Run the converter again so JSON sidecars contain NumberOfSlices."
+            )
+
+        nb_slices = int(nb_slices)
+
+        # Read the size of preprocessed padded slices.
+        first_img = nb.load(str(sorted_slices[0][2]))
         first_data = np.squeeze(first_img.get_fdata())
-        width = first_data.shape[0]
-        height = first_data.shape[1]
 
-        nb_slices = len(sorted_slices)
+        width = int(first_data.shape[0])
+        height = int(first_data.shape[1])
 
-        if nb_slices == 0:
-            raise ValueError(f"NO GLOBAL SLICE INDEX FOUND FOR {subject_dir.name}")
+        volume_shape = (width, height, nb_slices)
 
-        volume_shape = np.array((width, height, nb_slices))
+        # Allocate the full volume using NumberOfSlices.
+        # Some slice positions may remain empty if missing in this channel.
+        stack_of_slices = np.zeros(volume_shape, dtype=np.float32)
 
-
-        #  Construire la résolution et l’affine du volume final
         new_resolution = [
             downsampled_res_x,
             downsampled_res_y,
-            self.original_thickness,
+            float(self.original_thickness),
         ]
-        # float32 instead of default float64 to reduce memory usage by half
-        # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
-        # which have pixel values between 0 and 65535
-        for position, (z_index, nii_path, meta) in enumerate(sorted_slices):
+
+        filled_positions = set()
+
+        for slice_position, slice_index, nii_path, meta in sorted_slices:
+            if slice_position < 0 or slice_position >= nb_slices:
+                raise ValueError(
+                    f"Invalid SlicePosition={slice_position} in {nii_path.name}. "
+                    f"Expected value between 0 and {nb_slices - 1}."
+                )
+
+            if slice_position in filled_positions:
+                raise ValueError(
+                    f"Duplicate SlicePosition={slice_position} for channel {channel} "
+                    f"in subject {subject_dir.name}."
+                )
+
             img = nb.load(str(nii_path))
-            data_2d = np.squeeze(img.get_fdata())
-            stack_of_slices[:, :, position] = data_2d 
-        stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.reorient)
-        volume_shape = np.array(stack_of_slices.shape)
+            data_2d = np.squeeze(img.get_fdata()).astype(np.float32)
 
-        new_affine = VolumeBuilder3D.build_new_affine_matrix(tuple(volume_shape),new_resolution)
+            if data_2d.shape != (width, height):
+                raise ValueError(
+                    f"Shape mismatch in {nii_path.name}: got {data_2d.shape}, "
+                    f"expected {(width, height)}. Make sure preprocessing padded all slices "
+                    "to the same target shape."
+                )
 
-        # Sauvegarder le volume
+            stack_of_slices[:, :, slice_position] = data_2d
+            filled_positions.add(slice_position)
+
+        missing_positions = sorted(set(range(nb_slices)) - filled_positions)
+        if missing_positions:
+            print(
+                f"WARNING: {len(missing_positions)} empty slice positions for "
+                f"{subject_dir.name} {channel}: {missing_positions[:20]}"
+                + (" ..." if len(missing_positions) > 20 else "")
+            )
+
+        # Apply the requested 3D reorientation to the actual volume.
+        stack_of_slices, new_resolution = self.reorient_volume_3d(
+            stack_of_slices,
+            new_resolution,
+            self.reorient,
+        )
+
+        final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
+
+        # Build the affine in the same centered common reference.
+        new_affine = VolumeBuilder3D.build_new_affine_matrix(
+            final_volume_shape,
+            new_resolution,
+        )
+
+        # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         out_img.set_sform(new_affine, code=1)
         out_img.set_qform(new_affine, code=1)
         out_img.header.set_xyzt_units("micron")
+
         output_path = self.build_volume_output_path(subject_dir, channel, res_label)
         nb.save(out_img, str(output_path))
+
+        # Create JSON sidecar and update it.
         output_json = bmeta.get_json_path(output_path)
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump({}, f)
-        self.update_output_json(output_path, new_affine, tuple(volume_shape))
+
+        self.update_output_json(output_path, new_affine, final_volume_shape)
+
         return output_path
-    
+        
     def build_all_volumes(self):
         for subject_dir in bm.iter_subject_dirs(self.preproc_root):
             groups = bm.group_subject_niftis_by_channel(subject_dir)

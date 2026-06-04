@@ -611,16 +611,6 @@ def add_sform_to_json_metadata(
     original_thickness: float,
     reorient: str = "none",
 ) -> dict:
-    """
-    Add SFormMatrix to a metadata dict using a common centered volume reference.
-
-    This does NOT use ChunkTransformationMatrix.
-    The slice center is placed in a common reference:
-        X = 0
-        Y = 0
-        Z = centered slice position
-    """
-
     slice_index = meta.get("SliceIndex")
     if slice_index is None:
         return meta
@@ -635,8 +625,6 @@ def add_sform_to_json_metadata(
 
     pixel_size = meta["PixelSize"]
 
-    # Use physical size if available to avoid small differences caused by rounding.
-    # Then convert back to a virtual width/height in pixels for the current resolution.
     if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
         width = float(meta["WidthPhysical"]) / float(pixel_size[0])
         height = float(meta["HeightPhysical"]) / float(pixel_size[1])
@@ -654,6 +642,9 @@ def add_sform_to_json_metadata(
         reorient=reorient,
     )
 
+    meta["SlicePosition"] = int(slice_position)
+    meta["NumberOfSlices"] = int(nb_slices)
+
     meta["SFormMatrix"] = sform
     meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
@@ -664,7 +655,6 @@ def add_sform_to_json_metadata(
     )
 
     return meta
-
 def write_sform_to_nifti_and_json(
     nii_path,
     sform_matrix,
