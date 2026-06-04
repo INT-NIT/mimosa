@@ -432,7 +432,42 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
 
         return transpose_axes, flip_axes
 
-     
+ 
+def map_index_after_reorientation(
+    index: tuple[float, float, float],
+    shape: tuple[float, float, float],
+    reorient: str,
+) -> tuple[float, float, float]:
+    """
+    Map a voxel index from the original stacked volume to the reoriented volume.
+
+    This follows the same logic as:
+        np.transpose(volume, transpose_axes)
+        np.flip(volume, axis=flip_axes)
+
+    This function is needed because a flip depends on the volume shape:
+        new_index = shape - 1 - old_index
+    """
+    if is_identity_reorientation(reorient):
+        return index
+
+    transpose_axes, flip_axes = parse_reorientation_mode(reorient)
+
+    old_values = list(index)
+    old_shape = list(shape)
+
+    new_index = []
+
+    for new_axis, old_axis in enumerate(transpose_axes):
+        value = old_values[old_axis]
+
+        if new_axis in flip_axes:
+            value = old_shape[old_axis] - 1.0 - value
+
+        new_index.append(value)
+
+    return tuple(new_index)
+
 
 def build_centered_slice_sform(
     width: float,
@@ -444,95 +479,109 @@ def build_centered_slice_sform(
     reorient: str = "none",
 ) -> list[list[float]]:
     """
-    Build a 2D slice SForm in a common centered volume reference.
+    Build a 2D slice SForm in the same centered reference as the final 3D volume.
 
-    This function does NOT use microscope/chunk/stage coordinates.
+    This does NOT use microscope/chunk/stage coordinates.
 
-    The center of the slice is placed at:
-        X = 0
-        Y = 0
-        Z = centered slice position
+    The 2D slice is considered as a plane inside the original stacked volume:
+        voxel (i, j, 0) of the 2D image corresponds to
+        voxel (i, j, slice_position) in the 3D stack.
 
-    This makes the center stable across:
-        - resolutions
-        - padded / non-padded versions
-        - final 3D stacking
+    If reorient is applied, we map these voxel indices using the same logic
+    as the 3D stacking:
+        transpose + flip.
 
-    Important:
-    sform[:3, 3] is the physical position of voxel (0,0,0),
-    not the image center.
+    This makes the 2D SForm compatible with the final 3D volume.
     """
+    width = float(width)
+    height = float(height)
+    nb_slices = float(nb_slices)
 
     px = float(pixel_size[0])
     py = float(pixel_size[1])
     th = float(thickness)
 
-    width = float(width)
-    height = float(height)
+    original_shape = (width, height, nb_slices)
+    original_resolution = [px, py, th]
 
-    # Position of the slice center in the common 3D volume reference.
-    # Using (nb_slices - 1) / 2 keeps the middle slice centered around 0.
-    center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
+    # Shape and resolution of the final reoriented volume.
+    if is_identity_reorientation(reorient):
+        final_shape = original_shape
+        final_resolution = original_resolution
+    else:
+        transpose_axes, _ = parse_reorientation_mode(reorient)
+        final_shape = tuple(original_shape[old_axis] for old_axis in transpose_axes)
+        final_resolution = [original_resolution[old_axis] for old_axis in transpose_axes]
 
-    # Voxel directions before reorientation.
-    col_x = np.array([px, 0.0, 0.0], dtype=float)
-    col_y = np.array([0.0, py, 0.0], dtype=float)
-    col_z = np.array([0.0, 0.0, th], dtype=float)
-
-    # Translation = physical position of voxel (0,0,0).
-    # We place the image center at (0,0,center_z).
-    origin = np.array(
-        [
-            -width * px / 2.0,
-            -height * py / 2.0,
-            center_z,
-        ],
+    final_affine = np.array(
+        build_centered_affine(
+            shape=final_shape,
+            resolution=final_resolution,
+        ),
         dtype=float,
     )
 
-    # Apply reorientation as a physical axis transform.
-    # No shape - 1 here, because we are not mapping voxel indices.
-    # We are transforming physical vectors.
-    if not is_identity_reorientation(reorient):
-        transpose_axes, flip_axes = parse_reorientation_mode(reorient)
+    # 2D voxel origin in the original 3D stack.
+    old_origin = (0.0, 0.0, float(slice_position))
 
-        def reorient_vec(v: np.ndarray) -> np.ndarray:
-            v_new = np.array(
-                [v[transpose_axes[i]] for i in range(3)],
-                dtype=float,
-            )
-            for ax in flip_axes:
-                v_new[ax] *= -1.0
-            return v_new
+    # One step in 2D X, one step in 2D Y, and one step through slices.
+    old_x_step = (1.0, 0.0, float(slice_position))
+    old_y_step = (0.0, 1.0, float(slice_position))
+    old_z_step = (0.0, 0.0, float(slice_position) + 1.0)
 
-        col_x = reorient_vec(col_x)
-        col_y = reorient_vec(col_y)
-        col_z = reorient_vec(col_z)
-        origin = reorient_vec(origin)
+    # Map these indices to the final reoriented volume indices.
+    new_origin = map_index_after_reorientation(
+        old_origin,
+        original_shape,
+        reorient,
+    )
+    new_x_step = map_index_after_reorientation(
+        old_x_step,
+        original_shape,
+        reorient,
+    )
+    new_y_step = map_index_after_reorientation(
+        old_y_step,
+        original_shape,
+        reorient,
+    )
+    new_z_step = map_index_after_reorientation(
+        old_z_step,
+        original_shape,
+        reorient,
+    )
+
+    origin_phys = final_affine @ np.array([*new_origin, 1.0])
+    x_phys = final_affine @ np.array([*new_x_step, 1.0])
+    y_phys = final_affine @ np.array([*new_y_step, 1.0])
+    z_phys = final_affine @ np.array([*new_z_step, 1.0])
 
     sform = np.eye(4, dtype=float)
-    sform[:3, 0] = col_x
-    sform[:3, 1] = col_y
-    sform[:3, 2] = col_z
-    sform[:3, 3] = origin
+    sform[:3, 0] = x_phys[:3] - origin_phys[:3]
+    sform[:3, 1] = y_phys[:3] - origin_phys[:3]
+    sform[:3, 2] = z_phys[:3] - origin_phys[:3]
+    sform[:3, 3] = origin_phys[:3]
 
     return sform.tolist()
+
+
 
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
 ) -> list[list[float]]:
     """
-    Build a centered affine for a 2D slice or a 3D volume.
+    Build a centered affine for a 3D volume.
 
-    The image/volume is centered around physical coordinate (0,0,0).
+    The center voxel of the volume is centered around physical coordinate (0,0,0).
+    NIfTI voxel index (0,0,0) corresponds to the center of the first voxel.
     """
     shape = np.array(shape, dtype=float)
     resolution = np.array(resolution, dtype=float)
 
     affine = np.eye(4, dtype=float)
     affine[:3, :3] = np.diag(resolution)
-    affine[:3, 3] = -shape * resolution / 2.0
+    affine[:3, 3] = -(shape - 1.0) * resolution / 2.0
 
     return affine.tolist()
 
