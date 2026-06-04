@@ -477,8 +477,7 @@ def map_old_index_to_reoriented_index(
         new_index.append(value)
 
     return tuple(new_index)
-
-def build_2d_sform(
+def build_centered_slice_sform(
     width: float,
     height: float,
     pixel_size: list[float],
@@ -486,57 +485,82 @@ def build_2d_sform(
     nb_slices: int,
     thickness: float,
     reorient: str = "none",
-    pad_delta: tuple[int, int] = (0, 0),
 ) -> list[list[float]]:
-    pad_x, pad_y = pad_delta
+    """
+    Build a 2D slice SForm in a common centered volume reference.
 
-    # floats pour le calcul de l'origine physique → cohérent entre résolutions
-    old_shape_phys = (float(width), float(height), float(nb_slices))
-    
-    old_resolution = [float(pixel_size[0]), float(pixel_size[1]), float(thickness)]
+    This function does NOT use microscope/chunk/stage coordinates.
 
-    new_shape, new_resolution = reorient_shape_and_resolution(
-        old_shape_phys,   # ← float ici
-        old_resolution,
-        reorient,
-    )
+    The center of the slice is placed at:
+        X = 0
+        Y = 0
+        Z = centered slice position
 
-    volume_affine = np.array(
-        build_centered_affine(
-            shape=new_shape,
-            resolution=new_resolution,
-        ),
+    This makes the center stable across:
+        - resolutions
+        - padded / non-padded versions
+        - final 3D stacking
+
+    Important:
+    sform[:3, 3] is the physical position of voxel (0,0,0),
+    not the image center.
+    """
+
+    px = float(pixel_size[0])
+    py = float(pixel_size[1])
+    th = float(thickness)
+
+    width = float(width)
+    height = float(height)
+
+    # Position of the slice center in the common 3D volume reference.
+    # Using (nb_slices - 1) / 2 keeps the middle slice centered around 0.
+    center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
+
+    # Voxel directions before reorientation.
+    col_x = np.array([px, 0.0, 0.0], dtype=float)
+    col_y = np.array([0.0, py, 0.0], dtype=float)
+    col_z = np.array([0.0, 0.0, th], dtype=float)
+
+    # Translation = physical position of voxel (0,0,0).
+    # We place the image center at (0,0,center_z).
+    origin = np.array(
+        [
+            -width * px / 2.0,
+            -height * py / 2.0,
+            center_z,
+        ],
         dtype=float,
     )
 
-    old_origin = (pad_x, pad_y, slice_position)
-    old_x_step = (pad_x + 1, pad_y, slice_position)
-    old_y_step = (pad_x, pad_y + 1, slice_position)
-    old_z_step = (pad_x, pad_y, slice_position + 1)
+    # Apply reorientation as a physical axis transform.
+    # No shape - 1 here, because we are not mapping voxel indices.
+    # We are transforming physical vectors.
+    if not is_identity_reorientation(reorient):
+        transpose_axes, flip_axes = parse_reorientation_mode(reorient)
 
-    # ← int ici pour les flips
-    new_origin = map_old_index_to_reoriented_index(old_origin, old_shape_phys, reorient)
-    new_x_step = map_old_index_to_reoriented_index(old_x_step, old_shape_phys, reorient)
-    new_y_step = map_old_index_to_reoriented_index(old_y_step, old_shape_phys, reorient)
-    new_z_step = map_old_index_to_reoriented_index(old_z_step, old_shape_phys, reorient)
+        def reorient_vec(v: np.ndarray) -> np.ndarray:
+            v_new = np.array(
+                [v[transpose_axes[i]] for i in range(3)],
+                dtype=float,
+            )
+            for ax in flip_axes:
+                v_new[ax] *= -1.0
+            return v_new
 
-    new_origin = np.array([*new_origin, 1.0])
-    new_x_step = np.array([*new_x_step, 1.0])
-    new_y_step = np.array([*new_y_step, 1.0])
-    new_z_step = np.array([*new_z_step, 1.0])
-
-    origin_phys = volume_affine @ new_origin
-    x_step_phys = volume_affine @ new_x_step
-    y_step_phys = volume_affine @ new_y_step
-    z_step_phys = volume_affine @ new_z_step
+        col_x = reorient_vec(col_x)
+        col_y = reorient_vec(col_y)
+        col_z = reorient_vec(col_z)
+        origin = reorient_vec(origin)
 
     sform = np.eye(4, dtype=float)
-    sform[:3, 0] = x_step_phys[:3] - origin_phys[:3]
-    sform[:3, 1] = y_step_phys[:3] - origin_phys[:3]
-    sform[:3, 2] = z_step_phys[:3] - origin_phys[:3]
-    sform[:3, 3] = origin_phys[:3]
+    sform[:3, 0] = col_x
+    sform[:3, 1] = col_y
+    sform[:3, 2] = col_z
+    sform[:3, 3] = origin
 
     return sform.tolist()
+
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
@@ -581,69 +605,28 @@ def build_centered_2d_sform(
 
     return sform.tolist()
 
-def build_2d_sform_from_center(
-    center_x: float,
-    center_y: float,
-    center_z: float,
-    width_physical: float,
-    height_physical: float,
-    pixel_size: list[float],
-    thickness: float,
-    reorient: str = "none",
-) -> list[list[float]]:
-    """
-    Build SForm from the physical center of the slice.
-
-    The physical center is invariant across resolutions.
-    The SForm translation corresponds to voxel (0, 0, 0),
-    so we convert the center position into the physical position
-    of the first voxel/corner.
-    """
-
-    col_x = np.array([float(pixel_size[0]), 0.0, 0.0])
-    col_y = np.array([0.0, float(pixel_size[1]), 0.0])
-    col_z = np.array([0.0, 0.0, float(thickness)])
-
-    # Position of voxel (0,0,0), derived from the physical center.
-    origin = np.array([
-        center_x - width_physical / 2.0,
-        center_y - height_physical / 2.0,
-        center_z,
-    ])
-
-    if not is_identity_reorientation(reorient):
-        transpose_axes, flip_axes = parse_reorientation_mode(reorient)
-
-        def reorient_vec(v):
-            v_new = np.array([v[transpose_axes[i]] for i in range(3)])
-            for ax in flip_axes:
-                v_new[ax] = -v_new[ax]
-            return v_new
-
-        col_x = reorient_vec(col_x)
-        col_y = reorient_vec(col_y)
-        col_z = reorient_vec(col_z)
-        origin = reorient_vec(origin)
-
-    sform = np.eye(4, dtype=float)
-    sform[:3, 0] = col_x
-    sform[:3, 1] = col_y
-    sform[:3, 2] = col_z
-    sform[:3, 3] = origin
-
-    return sform.tolist()
-
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
     reorient: str = "none",
 ) -> dict:
+    """
+    Add SFormMatrix to a metadata dict using a common centered volume reference.
+
+    This does NOT use ChunkTransformationMatrix.
+    The slice center is placed in a common reference:
+        X = 0
+        Y = 0
+        Z = centered slice position
+    """
+
     slice_index = meta.get("SliceIndex")
     if slice_index is None:
         return meta
 
     slice_index = int(slice_index)
+
     if slice_index not in slice_position_map:
         return meta
 
@@ -651,35 +634,33 @@ def add_sform_to_json_metadata(
     nb_slices = len(slice_position_map)
 
     pixel_size = meta["PixelSize"]
-    chunk = meta["ChunkTransformationMatrix"]
 
-    # IMPORTANT :
-    # On utilise les tailles physiques déjà calculées,
-    # pas Width * PixelSize, car Width dépend de la résolution.
-    width_physical = float(meta["WidthPhysical"])
-    height_physical = float(meta["HeightPhysical"])
+    # Use physical size if available to avoid small differences caused by rounding.
+    # Then convert back to a virtual width/height in pixels for the current resolution.
+    if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
+        width = float(meta["WidthPhysical"]) / float(pixel_size[0])
+        height = float(meta["HeightPhysical"]) / float(pixel_size[1])
+    else:
+        width = float(meta["Width"])
+        height = float(meta["Height"])
 
-    center_x = float(chunk[0][2]) + width_physical / 2.0
-    center_y = float(chunk[1][2]) + height_physical / 2.0
-
-    # Centre de la coupe dans la pile Z
-    center_z = (slice_position - nb_slices / 2.0) * float(original_thickness)
-
-    sform = build_2d_sform_from_center(
-        center_x=center_x,
-        center_y=center_y,
-        center_z=center_z,
-        width_physical=width_physical,
-        height_physical=height_physical,
+    sform = build_centered_slice_sform(
+        width=width,
+        height=height,
         pixel_size=pixel_size,
+        slice_position=slice_position,
+        nb_slices=nb_slices,
         thickness=original_thickness,
         reorient=reorient,
     )
+
     meta["SFormMatrix"] = sform
     meta["SFormReorientationMode"] = reorient
+    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = (
-        f"SForm matrix placing this 2D slice using the physical center "
-        f"of the slice, invariant across resolutions, with reorient={reorient}."
+        "SForm matrix placing this 2D slice in a centered common volume reference. "
+        "Chunk/stage coordinates are not used. "
+        f"Slice center is resolution-invariant with reorient={reorient}."
     )
 
     return meta

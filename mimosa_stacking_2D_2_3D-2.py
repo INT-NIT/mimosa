@@ -254,12 +254,10 @@ class VolumeBuilder3D:
         # float32 instead of default float64 to reduce memory usage by half
         # (4 bytes vs 8 bytes per pixel) — float32 precision is sufficient for microscopy images
         # which have pixel values between 0 and 65535
-        stack_of_slices = np.zeros((width, height, nb_slices), dtype=np.float32)
         for position, (z_index, nii_path, meta) in enumerate(sorted_slices):
             img = nb.load(str(nii_path))
             data_2d = np.squeeze(img.get_fdata())
             stack_of_slices[:, :, position] = data_2d 
-
         stack_of_slices, new_resolution = self.reorient_volume_3d(stack_of_slices,new_resolution,self.reorient)
         volume_shape = np.array(stack_of_slices.shape)
 
