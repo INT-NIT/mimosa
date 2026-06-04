@@ -96,109 +96,7 @@ class VolumeBuilder3D:
             ),
             dtype=float,
         )
-    """
-    def reorient_existing_sform(
-        self,
-        sform: np.ndarray,
-        old_shape: tuple[int, int, int],
-        old_resolution: list[float],
-        ) -> np.ndarray:
-        mode = self.reorient
-
-        if VolumeBuilder3D.is_identity_reorientation(mode):
-            return sform
-
-        old_affine = VolumeBuilder3D.build_new_affine_matrix(
-            old_shape,
-            old_resolution,
-        )
-
-        new_shape, new_resolution = self.reorient_shape_and_resolution(
-            shape=old_shape,
-            resolution=old_resolution,
-            mode=mode,
-        )
-
-        new_affine = VolumeBuilder3D.build_new_affine_matrix(
-            new_shape,
-            new_resolution,
-        )
-
-        transform = new_affine @ np.linalg.inv(old_affine)
-
-        return transform @ sform
-    def update_2d_sforms_after_reorientation(self, root_2d: Path) -> None:
-        mode = self.reorient
-
-        if VolumeBuilder3D.is_identity_reorientation(mode):
-            print(f"No volume reorientation requested for {root_2d.name} — keeping existing 2D SFormMatrix.")
-            return
-
-        if not root_2d.exists():
-            return
-
-        for subject_dir in bm.iter_subject_dirs(root_2d):
-            nii_paths = list(bm.iter_subject_niftis(subject_dir))
-
-            if not nii_paths:
-                continue
-
-            unique_slice_indices = sorted({
-                int(bmeta.get_z_index(bmeta.load_metadata(p)[0]))
-                for p in nii_paths
-                if bmeta.get_z_index(bmeta.load_metadata(p)[0]) is not None
-            })
-
-            nb_slices = len(unique_slice_indices)
-
-            if nb_slices == 0:
-                continue
-
-            for nii_path in nii_paths:
-                meta, _ = bmeta.load_metadata(nii_path)
-
-                if "SFormMatrix" not in meta:
-                    print(f"WARNING: no SFormMatrix in {nii_path.name}, skipping")
-                    continue
-
-                if meta.get("SFormVolumeReorientationMode") == self.reorient:
-                    continue
-
-                source_sform = meta.get("InitialSFormMatrix", meta["SFormMatrix"])
-                sform = np.array(source_sform, dtype=float)
-
-                img = nb.load(str(nii_path))
-                data_shape = np.squeeze(img.get_fdata()).shape
-
-                width = int(data_shape[0])
-                height = int(data_shape[1])
-
-                res_x = float(np.linalg.norm(sform[:3, 0]))
-                res_y = float(np.linalg.norm(sform[:3, 1]))
-                res_z = float(np.linalg.norm(sform[:3, 2]))
-
-                if res_z == 0:
-                    res_z = float(self.original_thickness)
-
-                old_shape = (width, height, nb_slices)
-                old_resolution = [res_x, res_y, res_z]
-
-                new_sform = self.reorient_existing_sform(
-                    sform=sform,
-                    old_shape=old_shape,
-                    old_resolution=old_resolution,
-                )
-
-                bmeta.write_sform_to_nifti_and_json(
-                    nii_path=nii_path,
-                    sform_matrix=new_sform,
-                    description=f"SFormMatrix updated using reorient={self.reorient}",
-                    reorient=self.reorient,
-                )
-
-                print(f"Updated SFormMatrix: {nii_path.name}")
-    """
-
+    
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR {subject_dir.name} {channel}")
@@ -394,16 +292,7 @@ if __name__ == "__main__":
     )
     builder.build_all_volumes()
 
-    """ 
-    builder.update_2d_sforms_after_reorientation(
-        builder.bids_root / "derivatives" / f"2D-downsampled_res-{builder.res_label}"
-    )
-
-    builder.update_2d_sforms_after_reorientation(
-        builder.preproc_root
-    )
-"""
-
+   
 """
 python mimosa_stacking_2D_2_3D-2.py \
   --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \

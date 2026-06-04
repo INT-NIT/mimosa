@@ -238,7 +238,6 @@ if __name__ == "__main__":
                 if output_path.exists():
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
-                meta, _ = bmeta.load_metadata(nii_path)
                 
                 out = proc.process_one_slice(
                     nii_path=nii_path,

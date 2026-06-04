@@ -1,13 +1,11 @@
 import os
 import yaml
-import json  
+import json
 import re
 from pathlib import Path
 import shutil
 import numpy as np
 import nibabel as nb
-import json
-import numpy as np
 
 def load_metadata_config(config_path: Path) -> dict:
     with open(Path(config_path), "r", encoding="utf-8") as f:
@@ -433,50 +431,9 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
                 )
 
         return transpose_axes, flip_axes
-def reorient_shape_and_resolution(
-        shape: tuple[int, int, int],
-        resolution: list[float],
-        mode: str,
-    ) -> tuple[tuple[int, int, int], list[float]]:
-        """
-        Reorient only shape and resolution, without creating a fake volume.
-        """
-        transpose_axes, _ = parse_reorientation_mode(mode)
 
-        shape = list(shape)
-        resolution = list(resolution)
-
-        new_shape = tuple(shape[old_axis] for old_axis in transpose_axes)
-        new_resolution = [resolution[old_axis] for old_axis in transpose_axes]
-
-        return new_shape, new_resolution
      
-def map_old_index_to_reoriented_index(
-    old_index: tuple[float, float, float],
-    old_shape: tuple[float,float, float],
-    mode: str,
-) -> tuple[float, float, float]:
-    x, y, z = old_index
 
-    if is_identity_reorientation(mode):
-        return x, y, z
-
-    transpose_axes, flip_axes = parse_reorientation_mode(mode)
-
-    old_values = [x, y, z]
-    old_shape_values = list(old_shape)
-
-    new_index = []
-
-    for new_axis, old_axis in enumerate(transpose_axes):
-        value = old_values[old_axis]
-
-        if new_axis in flip_axes:
-            value = old_shape_values[old_axis] - 1 - value
-
-        new_index.append(value)
-
-    return tuple(new_index)
 def build_centered_slice_sform(
     width: float,
     height: float,
@@ -578,32 +535,6 @@ def build_centered_affine(
     affine[:3, 3] = -shape * resolution / 2.0
 
     return affine.tolist()
-
-def build_centered_2d_sform(
-    width: float,
-    height: float,
-    pixel_size: list[float],
-    slice_position: int,
-    nb_slices: int,
-    thickness: float,
-) -> list[list[float]]:
-    """
-    Build an initial SFormMatrix directly during HPC conversion.
-
-    The 2D image is centered in X/Y around 0.
-    Z is centered using the global number of slices.
-    """
-    sform = np.array(
-        build_centered_affine(
-            shape=(width, height, nb_slices),
-            resolution=[pixel_size[0], pixel_size[1], thickness],
-        ),
-        dtype=float,
-    )
-
-    sform[2, 3] += float(slice_position) * float(thickness)
-
-    return sform.tolist()
 
 def add_sform_to_json_metadata(
     meta: dict,
