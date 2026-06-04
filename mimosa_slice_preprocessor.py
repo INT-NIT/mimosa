@@ -178,9 +178,9 @@ class SlicePreprocessor:
         padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)
+        slice_position = int(meta["SlicePosition"])
 
-        slice_position = int(local_slice_position)
-        nb_slices = int(local_nb_slices)
+        nb_slices = int(meta.get("NumberOfSlices"))
 
         preproc_sform = np.array(
             bmeta.build_centered_slice_sform(
