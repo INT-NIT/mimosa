@@ -92,16 +92,20 @@ class SlicePreprocessor:
         self,
         nii_path: Path,
         target_shape: tuple[int, int],
-        subject_name: str,
-        slice_position: int,
-        nb_slices: int,
+        subject_name: str
     ) -> Path:
         """
         Load one input NIfTI, pad it to target_shape,
         save it to derivatives/2D-preproc, and copy its JSON sidecar.
 
         The downsampled file already has its SFormMatrix from the HPC converter.
-        For the preproc file, we adapt this SFormMatrix to account for padding.
+        For the preproc file, we preserve this SFormMatrix and only adapt it
+        to account for padding.
+
+        Important:
+        We do NOT recompute the SForm from target_width/target_height here,
+        because that would make the origin depend on pixel dimensions and
+        can create shifts between resolutions.
         """
         output_path = self.build_output_path(nii_path)
 
@@ -121,7 +125,8 @@ class SlicePreprocessor:
 
         if shift_x < 0 or shift_y < 0:
             raise ValueError(
-                f"Target shape {target_shape} smaller than the image {data_2d.shape} for {nii_path.name}"
+                f"Target shape {target_shape} smaller than the image "
+                f"{data_2d.shape} for {nii_path.name}"
             )
 
         pad_x_before = round(shift_x / 2)
@@ -140,26 +145,22 @@ class SlicePreprocessor:
         padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)
-        print(
-    "DEBUG SHAPE",
-    nii_path.name,
-    "nii_shape=", data_2d.shape,
-    "json Width/Height=", meta.get("Width"), meta.get("Height"),
-)
-        preproc_sform = np.array(
-            bmeta.build_2d_sform_for_volume(
-                width=target_width,
-                height=target_height,
-                pixel_size=meta["PixelSize"],
-                slice_position=slice_position,
-                nb_slices=nb_slices,
-                thickness=self.original_thickness,
-                reorient=self.reorient,
-                pad_delta=(0, 0),
-            ),
-            dtype=float,
+
+        if "SFormMatrix" not in meta:
+            raise ValueError(
+                f"No SFormMatrix found in JSON sidecar for {nii_path.name}. "
+                "The input file should already have a SFormMatrix from the converter."
+            )
+
+        input_sform = np.array(meta["SFormMatrix"], dtype=float)
+
+        preproc_sform = input_sform.copy()
+        preproc_sform[:3, 3] = (
+            input_sform[:3, 3]
+            - pad_x_before * input_sform[:3, 0]
+            - pad_y_before * input_sform[:3, 1]
         )
-        
+
         out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
         out_img.set_sform(preproc_sform, code=1)
         out_img.set_qform(preproc_sform, code=1)
@@ -172,11 +173,13 @@ class SlicePreprocessor:
         self.write_sform_to_nifti_and_json(
             nii_path=output_path,
             sform_matrix=preproc_sform,
-            description=f"SForm matrix recomputed for padded 2D-preproc using reorient={self.reorient}",
+            description=(
+                "SForm matrix preserved from input and adapted only for symmetric "
+                f"padding in 2D-preproc, with reorient={self.reorient}."
+            ),
         )
 
         return output_path
-
 
 
 
@@ -250,9 +253,7 @@ if __name__ == "__main__":
                 out = proc.process_one_slice(
                     nii_path=nii_path,
                     target_shape=target_shape,
-                    subject_name=subject_dir.name,
-                    slice_position=slice_position,
-                    nb_slices=nb_slices,
+                    subject_name=subject_dir.name
                 )
 
                 print(f"  IN : {nii_path.name}")
