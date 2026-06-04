@@ -585,11 +585,13 @@ def build_centered_affine(
 
     return affine.tolist()
 
+
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
     reorient: str = "none",
+    nb_slices: int = None,
 ) -> dict:
     """
     Add SFormMatrix to metadata using a centered common volume reference.
@@ -603,6 +605,9 @@ def add_sform_to_json_metadata(
 
     The SForm origin corresponds to voxel (0,0,0), not to the image center.
     The image center is placed at X=0, Y=0, and Z according to SlicePosition.
+    
+    nb_slices: total number of slices in the global volume. If None, falls back to
+               len(slice_position_map) — only correct if the YAML contains ALL slices.
     """
 
     slice_index = meta.get("SliceIndex")
@@ -615,28 +620,24 @@ def add_sform_to_json_metadata(
         return meta
 
     slice_position = int(slice_position_map[slice_index])
-    nb_slices = int(len(slice_position_map))
+
+    if nb_slices is None:
+        nb_slices = int(len(slice_position_map))
+    else:
+        nb_slices = int(nb_slices)
 
     pixel_size = meta["PixelSize"]
     px = float(pixel_size[0])
     py = float(pixel_size[1])
 
-    # Preferred case:
-    # WidthPhysical and HeightPhysical should come from the raw CZI scene:
-    # raw_scene_width_pixels  * raw_pixel_size_um
-    # raw_scene_height_pixels * raw_pixel_size_um
     if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
         width_physical = float(meta["WidthPhysical"])
         height_physical = float(meta["HeightPhysical"])
 
-        # build_centered_slice_sform expects width/height in pixels,
-        # so we convert physical size back to "virtual pixels" at the current resolution.
         width = width_physical / px
         height = height_physical / py
 
     else:
-        # Fallback:
-        # use the current exported image size in pixels.
         width = float(meta["Width"])
         height = float(meta["Height"])
 

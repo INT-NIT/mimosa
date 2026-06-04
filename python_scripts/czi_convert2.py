@@ -111,7 +111,8 @@ def czi2bitmapHPC(
                                 meta=meta_nii,
                                 slice_position_map=slice_position_map,
                                 original_thickness=original_thickness,
-                                reorient=reorient
+                                reorient=reorient,
+                                nb_slices=len(slice_position_map)
                             )
 
                         sform = np.array(meta_nii.get("SFormMatrix", np.eye(4)), dtype=float)
