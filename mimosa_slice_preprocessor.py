@@ -254,6 +254,14 @@ if __name__ == "__main__":
                 continue
             local_position_map = proc.build_local_slice_position_map(subject_niftis)
             local_nb_slices = len(local_position_map)
+            first_meta, _ = bmeta.load_metadata(subject_niftis[0])
+            number_of_slices_in_json = first_meta.get("NumberOfSlices", "NOT FOUND")
+            
+            print(f"Subject: {subject_dir.name}")
+            print(f"  local_nb_slices (fichiers présents)  = {local_nb_slices}")
+            print(f"  NumberOfSlices  (dans le JSON)        = {number_of_slices_in_json}")
+            print(f"  → {'OK ✓' if local_nb_slices == number_of_slices_in_json else 'DIFFÉRENT ← PROBLÈME !'}")
+
             target_shape = proc.compute_target_shape(
                 subject_niftis,
                 args.padding_delta,
