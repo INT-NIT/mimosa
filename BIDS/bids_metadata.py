@@ -542,6 +542,20 @@ def add_sform_to_json_metadata(
     original_thickness: float,
     reorient: str = "none",
 ) -> dict:
+    """
+    Add SFormMatrix to metadata using a centered common volume reference.
+
+    We do NOT use ChunkTransformationMatrix for placement.
+
+    For non-padded 2D-downsampled files:
+        - if WidthPhysical/HeightPhysical exist, they are used as the true physical size
+          of the scene, normally computed from the raw CZI scene size and raw pixel size.
+        - otherwise, physical size is approximated from Width/Height and PixelSize.
+
+    The SForm origin corresponds to voxel (0,0,0), not to the image center.
+    The image center is placed at X=0, Y=0, and Z according to SlicePosition.
+    """
+
     slice_index = meta.get("SliceIndex")
     if slice_index is None:
         return meta
@@ -551,17 +565,37 @@ def add_sform_to_json_metadata(
     if slice_index not in slice_position_map:
         return meta
 
-    slice_position = slice_position_map[slice_index]
-    nb_slices = len(slice_position_map)
+    slice_position = int(slice_position_map[slice_index])
+    nb_slices = int(len(slice_position_map))
 
     pixel_size = meta["PixelSize"]
+    px = float(pixel_size[0])
+    py = float(pixel_size[1])
 
+    # Preferred case:
+    # WidthPhysical and HeightPhysical should come from the raw CZI scene:
+    # raw_scene_width_pixels  * raw_pixel_size_um
+    # raw_scene_height_pixels * raw_pixel_size_um
     if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
-        width = float(meta["WidthPhysical"]) / float(pixel_size[0])
-        height = float(meta["HeightPhysical"]) / float(pixel_size[1])
+        width_physical = float(meta["WidthPhysical"])
+        height_physical = float(meta["HeightPhysical"])
+
+        # build_centered_slice_sform expects width/height in pixels,
+        # so we convert physical size back to "virtual pixels" at the current resolution.
+        width = width_physical / px
+        height = height_physical / py
+
     else:
+        # Fallback:
+        # use the current exported image size in pixels.
         width = float(meta["Width"])
         height = float(meta["Height"])
+
+        width_physical = width * px
+        height_physical = height * py
+
+        meta["WidthPhysical"] = width_physical
+        meta["HeightPhysical"] = height_physical
 
     sform = build_centered_slice_sform(
         width=width,
@@ -573,8 +607,8 @@ def add_sform_to_json_metadata(
         reorient=reorient,
     )
 
-    meta["SlicePosition"] = int(slice_position)
-    meta["NumberOfSlices"] = int(nb_slices)
+    meta["SlicePosition"] = slice_position
+    meta["NumberOfSlices"] = nb_slices
 
     meta["SFormMatrix"] = sform
     meta["SFormReorientationMode"] = reorient
@@ -582,10 +616,13 @@ def add_sform_to_json_metadata(
     meta["SFormMatrixDescription"] = (
         "SForm matrix placing this 2D slice in a centered common volume reference. "
         "Chunk/stage coordinates are not used. "
+        "For non-padded slices, the physical field of view is based on "
+        "WidthPhysical/HeightPhysical when available. "
         f"Slice center is resolution-invariant with reorient={reorient}."
     )
 
     return meta
+
 def write_sform_to_nifti_and_json(
     nii_path,
     sform_matrix,
