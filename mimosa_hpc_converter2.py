@@ -128,7 +128,7 @@ def main():
                     and r["participant_id"] == participant_id
                 ]) + 1
 
-                slide_id = f"sample-slide{slide_num:02d}"
+                slide_id = f"sample-slide{slide_num}"
 
                 # Pour le nom BIDS : _sample-slide01
                 # donc bids_info["sample"] = "slide01"
@@ -138,7 +138,7 @@ def main():
                     "sample_id": slide_id,
                     "participant_id": participant_id,
                     "sample_type": sample_type,
-                    "derived_from": derived_from,
+                    "anatomical_region": derived_from,
                     "source_filename": filename,
                 })
 

@@ -176,7 +176,7 @@ def build_bids_basename(bids_info, stain, suffix="FLUO"):
         f"sub-{bids_info['sub']}"
         f"_ses-{bids_info['ses']}"
         f"_sample-{sample}"
-        f"_chunk-{int(chunk):03d}"
+        f"_chunk-{int(chunk)}"
         f"_stain-{stain_clean}"
         f"_{suffix}"
     )

@@ -101,14 +101,48 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
 def write_samples_tsv(bids_root: Path, samples_rows: list) -> None:
     path = Path(bids_root) / "samples.tsv"
-    cols = ["sample_id", "participant_id", "sample_type", "derived_from", "source_filename"]
+
+    cols = [
+        "sample_id",
+        "participant_id",
+        "sample_type",
+        "anatomical_region",
+        "source_filename",
+    ]
+
     lines = ["\t".join(cols)]
+
     for r in samples_rows:
-        line = [str(r.get(c, "n/a")) for c in cols]
+        line = [
+            str(r.get("sample_id", "n/a")),
+            str(r.get("participant_id", "n/a")),
+            str(r.get("sample_type", "n/a")),
+            str(r.get("anatomical_region", "n/a")),
+            str(r.get("source_filename", "n/a")),
+        ]
         lines.append("\t".join(line))
+
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+    json_path = Path(bids_root) / "samples.json"
+    samples_json = {
+        "sample_type": {
+            "Description": "Type of sample from ENCODE Biosample Type."
+        },
+        "anatomical_region": {
+            "Description": "Anatomical region associated with the sample, for example midbrain, cerebellum, brainstem, cerebrum."
+        },
+        "source_filename": {
+            "Description": "Original source CZI filename."
+        },
+    }
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(samples_json, f, indent=2, ensure_ascii=False)
+
     print("samples.tsv created")
+    print("samples.json created")
 
 def write_micr_sidecar_json(image_path: Path, meta: dict) -> None:
     """writes the sidecar JSON file for a given image"""
