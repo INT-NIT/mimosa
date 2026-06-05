@@ -98,7 +98,7 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
         lines.append(f"{r['session_id']}\t{acq_time}")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-        
+
 def write_samples_tsv(bids_root: Path, samples_rows: list) -> None:
     path = Path(bids_root) / "samples.tsv"
     cols = ["sample_id", "participant_id", "sample_type", "derived_from", "source_filename"]
@@ -193,50 +193,82 @@ def has_slice_index(meta: dict) -> bool:
     return meta.get("SliceIndex") is not None
 
 def update_yaml_with_slices(yaml_path: Path) -> dict:
-    """reads metadata.yml and adds files + slice indices for each subject/sample.
-    Does not overwrite existing slices if already defined manually."""
+    """
+    Read metadata.yml and add slice indices for CZI files.
+
+    New behavior:
+    - If a sample/region already has a 'files' list, we keep only those files.
+      We only complete missing 'slices' from the filename.
+    - If a sample/region has no 'files' list, we scan all CZI files in the subject path.
+    - This avoids mixing files between regions such as midbrain, cerebellum, etc.
+    """
     yaml_path = Path(yaml_path)
+
     with open(yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = Path(entry["path"])
-        subject      = entry.get("subject", "Unknown")
+        subject = entry.get("subject", "Unknown")
 
         if not subject_path.exists():
             print(f"WARNING: {subject} path not found: {subject_path}")
             continue
 
-        # If no samples defined, create a default one
         if not entry.get("samples"):
-            entry["samples"] = [{"sample_id": "sample-Cx", "files": []}]
+            entry["samples"] = [
+                {
+                    "participant_id": f"sub-{subject}",
+                    "sample_type": "technical sample",
+                    "derived_from": "n/a",
+                    "files": [],
+                }
+            ]
 
         for sample in entry.get("samples", []):
-            sample_id = sample["sample_id"]
-            existing_files = sample.get("files", [])
-            files = []
+            region = sample.get("derived_from", sample.get("sample_id", "n/a"))
 
+            existing_files = sample.get("files", [])
+
+            # Case 1: files are already defined in YAML.
+            # We keep exactly these files and only fill missing slices.
+            if existing_files:
+                updated_files = []
+
+                for f in existing_files:
+                    filename = f.get("filename")
+                    if not filename:
+                        continue
+
+                    file_entry = {"filename": filename}
+
+                    if f.get("slices"):
+                        file_entry["slices"] = f["slices"]
+                    else:
+                        slices = extract_slices_from_filename(filename)
+                        if slices:
+                            file_entry["slices"] = slices
+
+                    updated_files.append(file_entry)
+
+                sample["files"] = updated_files
+                print(f"{subject} / {region} → {len(updated_files)} files kept from YAML")
+                continue
+
+            # Case 2: no files defined in YAML.
+            # We scan all CZI files.
+            files = []
             for filename in sorted(subject_path.rglob("*.czi")):
                 file_entry = {"filename": filename.name}
 
-                # Keep existing slices if already defined — don't overwrite manual slices !
-                existing_slices = next(
-                    (f.get("slices") for f in existing_files
-                     if f["filename"] == filename.name and f.get("slices")),
-                    None
-                )
-
-                if existing_slices:
-                    file_entry["slices"] = existing_slices  # ← keep manual slices
-                else:
-                    slices = extract_slices_from_filename(filename.name)
-                    if slices:
-                        file_entry["slices"] = slices
+                slices = extract_slices_from_filename(filename.name)
+                if slices:
+                    file_entry["slices"] = slices
 
                 files.append(file_entry)
 
             sample["files"] = files
-            print(f"{subject} / {sample_id} → {len(files)} files added")
+            print(f"{subject} / {region} → {len(files)} files added by scan")
 
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)

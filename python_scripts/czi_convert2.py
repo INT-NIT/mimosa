@@ -50,13 +50,12 @@ def czi2bitmapHPC(
             roi = (rect[0], rect[1], rect[2], rect[3])
 
             slice_idx = reader.get_slice_index_for_scene(scene_idx)
-
+            
             if slice_idx is None:
                 print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
                 continue
 
-            bids_info["section"] = slice_idx
-
+            bids_info["chunk"] = slice_idx
             channel_images = {}
             for c in range(nb_channels):
                 channel_images[c] = czidoc.read(roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor)

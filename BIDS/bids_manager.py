@@ -14,7 +14,6 @@ class BIDSSession:
     def __init__(self, bids_root_path: str):
         self.bids_root_path = bids_root_path
         self._ses_map = {}   
-        self._acq_map = {}   
         self._session_order = SESSION_ORDER_BY_ROOT.get(self.bids_root_path, {})
         
     def _get_last_index(self, entity: str, sub_path: str = None) -> int:
@@ -49,30 +48,22 @@ class BIDSSession:
 
         return self._ses_map[sub][session_key]
 
-    def _acq_index_for_signature(self, acq_sig: str) -> str:
-        """returns acq number for a given microscope signature"""
-        if acq_sig not in self._acq_map:
-            existing = self._get_last_index("acq")
-            acq_idx = f"{max(existing) + 1:02d}" if existing else "01"
-            self._acq_map[acq_sig] = acq_idx
-        return self._acq_map[acq_sig]
 
 
-    def get_bids_info(self, summary_meta, czi_id, section_idx):
+    def get_bids_info(self, summary_meta, czi_id, section_idx=None, sample_id=None):
         sub      = summary_meta.get("sub")
         acq_time = summary_meta.get("acq_time")
         acq_sig  = summary_meta.get("acq_sig", "Unknown")
 
         ses_idx = self._session_index_for_time(sub, acq_time)
-        acq_idx = self._acq_index_for_signature(acq_sig)
 
         return {
             "sub":            sub,
             "ses":            ses_idx,
             "acq_time":       acq_time,
-            "acq":            acq_idx,
             "acq_sig":        acq_sig,
-            "section":        section_idx,   # ← "176", "184"...
+            "sample":         sample_id,
+            "chunk":          section_idx,
             "bids_root_path": self.bids_root_path,
         }
 
@@ -169,11 +160,20 @@ def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: st
 
 def build_bids_basename(bids_info, stain, suffix="FLUO"):
     stain_clean = re.sub(r"[^a-zA-Z0-9]", "", stain)
+
+    sample = bids_info.get("sample")
+    chunk = bids_info.get("chunk")
+
+    if sample is None:
+        raise ValueError("Missing sample in bids_info")
+    if chunk is None:
+        raise ValueError("Missing chunk in bids_info")
+
     return (
         f"sub-{bids_info['sub']}"
         f"_ses-{bids_info['ses']}"
-        f"_sample-section{bids_info['section']}"  # ← "section176"
-        f"_acq-{bids_info['acq']}"
+        f"_sample-{sample}"
+        f"_chunk-{int(chunk):03d}"
         f"_stain-{stain_clean}"
         f"_{suffix}"
     )
