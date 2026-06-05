@@ -477,6 +477,8 @@ def build_centered_slice_sform(
     nb_slices: int,
     thickness: float,
     reorient: str = "none",
+    volume_width: float = None,
+    volume_height: float = None,
 ) -> list[list[float]]:
     """
     Build a 2D slice SForm in the same centered reference as the final 3D volume.
@@ -488,10 +490,14 @@ def build_centered_slice_sform(
         voxel (i, j, slice_position) in the 3D stack.
 
     If reorient is applied, we map these voxel indices using the same logic
-    as the 3D stacking:
-        transpose + flip.
+    as the 3D stacking: transpose + flip.
 
-    This makes the 2D SForm compatible with the final 3D volume.
+    volume_width and volume_height must be the maximum size across ALL slices
+    of this subject (before padding), so that the final_affine is identical
+    for every slice and all slices share the same physical Z reference.
+
+    If volume_width / volume_height are not provided, falls back to width / height
+    (correct only if all slices have the same size).
     """
     width = float(width)
     height = float(height)
@@ -501,7 +507,12 @@ def build_centered_slice_sform(
     py = float(pixel_size[1])
     th = float(thickness)
 
-    original_shape = (width, height, nb_slices)
+    # Use volume-level dimensions for the common reference frame.
+    # This ensures final_affine is identical for all slices of the subject.
+    vw = float(volume_width) if volume_width is not None else width
+    vh = float(volume_height) if volume_height is not None else height
+
+    original_shape = (vw, vh, nb_slices)
     original_resolution = [px, py, th]
 
     # Shape and resolution of the final reoriented volume.
@@ -552,9 +563,9 @@ def build_centered_slice_sform(
     )
 
     origin_phys = final_affine @ np.array([*new_origin, 1.0])
-    x_phys = final_affine @ np.array([*new_x_step, 1.0])
-    y_phys = final_affine @ np.array([*new_y_step, 1.0])
-    z_phys = final_affine @ np.array([*new_z_step, 1.0])
+    x_phys      = final_affine @ np.array([*new_x_step, 1.0])
+    y_phys      = final_affine @ np.array([*new_y_step, 1.0])
+    z_phys      = final_affine @ np.array([*new_z_step, 1.0])
 
     sform = np.eye(4, dtype=float)
     sform[:3, 0] = x_phys[:3] - origin_phys[:3]
@@ -563,7 +574,6 @@ def build_centered_slice_sform(
     sform[:3, 3] = origin_phys[:3]
 
     return sform.tolist()
-
 
 
 def build_centered_affine(
@@ -585,13 +595,14 @@ def build_centered_affine(
 
     return affine.tolist()
 
-
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
     reorient: str = "none",
     nb_slices: int = None,
+    volume_width: float = None,
+    volume_height: float = None,
 ) -> dict:
     """
     Add SFormMatrix to metadata using a centered common volume reference.
@@ -603,11 +614,13 @@ def add_sform_to_json_metadata(
           of the scene, normally computed from the raw CZI scene size and raw pixel size.
         - otherwise, physical size is approximated from Width/Height and PixelSize.
 
-    The SForm origin corresponds to voxel (0,0,0), not to the image center.
-    The image center is placed at X=0, Y=0, and Z according to SlicePosition.
-    
+    volume_width / volume_height: maximum scene size in pixels across ALL scenes of
+    this subject (after axis_swap, in the same axis convention as Width/Height in the
+    metadata). Must be passed so that all slices share the same final_affine reference.
+    If not provided, falls back to the per-slice size (incorrect when slices differ in size).
+
     nb_slices: total number of slices in the global volume. If None, falls back to
-               len(slice_position_map) — only correct if the YAML contains ALL slices.
+               len(slice_position_map).
     """
 
     slice_index = meta.get("SliceIndex")
@@ -631,20 +644,20 @@ def add_sform_to_json_metadata(
     py = float(pixel_size[1])
 
     if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
-        width_physical = float(meta["WidthPhysical"])
+        width_physical  = float(meta["WidthPhysical"])
         height_physical = float(meta["HeightPhysical"])
 
-        width = width_physical / px
+        width  = width_physical  / px
         height = height_physical / py
 
     else:
-        width = float(meta["Width"])
+        width  = float(meta["Width"])
         height = float(meta["Height"])
 
-        width_physical = width * px
+        width_physical  = width  * px
         height_physical = height * py
 
-        meta["WidthPhysical"] = width_physical
+        meta["WidthPhysical"]  = width_physical
         meta["HeightPhysical"] = height_physical
 
     sform = build_centered_slice_sform(
@@ -655,15 +668,17 @@ def add_sform_to_json_metadata(
         nb_slices=nb_slices,
         thickness=original_thickness,
         reorient=reorient,
+        volume_width=volume_width,
+        volume_height=volume_height,
     )
 
-    meta["SlicePosition"] = slice_position
-    meta["NumberOfSlices"] = nb_slices
+    meta["SlicePosition"]   = slice_position
+    meta["NumberOfSlices"]  = nb_slices
 
-    meta["SFormMatrix"] = sform
-    meta["SFormReorientationMode"] = reorient
-    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
-    meta["SFormMatrixDescription"] = (
+    meta["SFormMatrix"]             = sform
+    meta["SFormReorientationMode"]  = reorient
+    meta["SFormMatrixAxis"]         = ["X", "Y", "Z"]
+    meta["SFormMatrixDescription"]  = (
         "SForm matrix placing this 2D slice in a centered common volume reference. "
         "Chunk/stage coordinates are not used. "
         "For non-padded slices, the physical field of view is based on "
