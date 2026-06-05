@@ -41,6 +41,8 @@ def main():
         pipeline_names=[pipeline_name],
     )
     cfg = bmeta.load_metadata_config(args.yaml)
+    bmeta.update_yaml_with_slices(args.yaml)
+    cfg = bmeta.load_metadata_config(args.yaml)
     slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
     print("DEBUG CONVERT slice_position_map size =", len(slice_position_map))
     print("DEBUG CONVERT first slices =", list(slice_position_map.items())[:10])
