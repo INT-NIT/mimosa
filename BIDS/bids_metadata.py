@@ -85,7 +85,6 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
         print(f"dataset_description.json created for derivative '{folder}'")
         
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
-   
     sub_dir = os.path.join(bids_root, f"sub-{subject}")
     os.makedirs(sub_dir, exist_ok=True)
 
@@ -93,11 +92,13 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
     lines = ["session_id\tacq_time"]
     for r in ses_rows:
-        lines.append(f"{r['session_id']}\t{r['acq_time']}")
+        # Tronquer à YYYY-MM-DDTHH:MM:SS
+        acq_time = str(r["acq_time"])
+        acq_time = acq_time.split(".")[0]  # ← supprime les microsecondes et timezone
+        lines.append(f"{r['session_id']}\t{acq_time}")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print(f"sessions.tsv created: sub-{subject}/sessions.tsv")
-
+        
 def write_samples_tsv(bids_root: Path, samples_rows: list) -> None:
     path = Path(bids_root) / "samples.tsv"
     cols = ["sample_id", "participant_id", "sample_type", "derived_from", "source_filename"]
