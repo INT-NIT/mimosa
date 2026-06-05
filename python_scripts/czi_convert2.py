@@ -12,6 +12,7 @@ from BIDS import bids_manager as bm
 from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
+
 def czi2bitmapHPC(
     pathin: str,
     czifilename: str,
@@ -26,7 +27,7 @@ def czi2bitmapHPC(
     reorient: str = "none",
 ):
     res_label = f"{downsampling_factor}x"
-    effective_downsampling_factor = 2 ** downsampling_factor
+    effective_downsampling_factor = 2 ** downsampling_factor 
     desc_label = "downsampled"
     czifile_path = os.path.join(pathin, czifilename)
 
@@ -37,43 +38,21 @@ def czi2bitmapHPC(
     write_tif = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
+    
+
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
-        print("Rectangles de scènes", czidoc.scenes_bounding_rectangle)
+        print("Rectangles de scènes",czidoc.scenes_bounding_rectangle)
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
-        raw_folder   = bm.get_raw_micr_folder(bids_root_path, bids_info)
+        raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
         deriv_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info) if write_nii else None
 
         zoom_factor = float(1.0 / effective_downsampling_factor)
 
-        # ------------------------------------------------------------------
-        # Pre-compute the maximum scene size across ALL scenes of this file.
-        # After axis_swap (swapaxes(0,1)), the NIfTI Width = raw Height / ds
-        # and NIfTI Height = raw Width / ds.  We take the max over all scenes
-        # so that every slice shares the same final_affine reference frame.
-        # ------------------------------------------------------------------
-        volume_width  = 0.0
-        volume_height = 0.0
-        for s_idx in range(len(scenes)):
-            r = scenes[s_idx]
-            # r[2] = raw width in CZI pixels, r[3] = raw height in CZI pixels
-            # after zoom and swapaxes(0,1):
-            #   nifti axis-0 size = ceil(r[3] / ds)   (was height, becomes width after swap)
-            #   nifti axis-1 size = ceil(r[2] / ds)   (was width,  becomes height after swap)
-            w_after_swap = np.ceil(r[3] / effective_downsampling_factor)
-            h_after_swap = np.ceil(r[2] / effective_downsampling_factor)
-            if w_after_swap > volume_width:
-                volume_width  = w_after_swap
-            if h_after_swap > volume_height:
-                volume_height = h_after_swap
-
-        print(f"  volume_width={volume_width}, volume_height={volume_height} "
-              f"(max over {len(scenes)} scenes, after axis_swap)")
-
         for scene_idx in range(len(scenes)):
             rect = scenes[scene_idx]
-            roi  = (rect[0], rect[1], rect[2], rect[3])
+            roi = (rect[0], rect[1], rect[2], rect[3])
 
             slice_idx = reader.get_slice_index_for_scene(scene_idx)
 
@@ -85,15 +64,13 @@ def czi2bitmapHPC(
 
             channel_images = {}
             for c in range(nb_channels):
-                channel_images[c] = czidoc.read(
-                    roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor
-                )
+                channel_images[c] = czidoc.read(roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor)
 
             with alive_bar(nb_channels, force_tty=True, title=f"Scene {scene_idx}") as bar:
                 for c in range(nb_channels):
                     channel_name = f"C{c}"
                     stain = channel_name
-                    base  = bm.build_bids_basename(
+                    base = bm.build_bids_basename(
                         bids_info=bids_info,
                         stain=stain,
                         suffix="FLUO",
@@ -101,7 +78,6 @@ def czi2bitmapHPC(
 
                     if "_res-" not in base:
                         base = base.replace("_FLUO", f"_res-{res_label}_desc-{desc_label}_FLUO")
-
                     if write_tif:
                         out_path = os.path.join(raw_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
@@ -111,7 +87,7 @@ def czi2bitmapHPC(
                             downsampling_factor=effective_downsampling_factor,
                             is_nifti=False,
                             axis_swap=False,
-                            scene_idx=scene_idx,
+                            scene_idx=scene_idx
                         )
                         bmeta.write_micr_sidecar_json(out_path, meta_tiff)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
@@ -127,6 +103,7 @@ def czi2bitmapHPC(
                             is_nifti=True,
                             axis_swap=True,
                             scene_idx=scene_idx,
+
                         )
 
                         if slice_position_map is not None:
@@ -135,9 +112,7 @@ def czi2bitmapHPC(
                                 slice_position_map=slice_position_map,
                                 original_thickness=original_thickness,
                                 reorient=reorient,
-                                nb_slices=len(slice_position_map),
-                                volume_width=volume_width,
-                                volume_height=volume_height,
+                                nb_slices=len(slice_position_map)
                             )
 
                         sform = np.array(meta_nii.get("SFormMatrix", np.eye(4)), dtype=float)
