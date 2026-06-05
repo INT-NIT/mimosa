@@ -87,46 +87,13 @@ class SlicePreprocessor:
                 description=description,
                 reorient=self.reorient,
             ) 
-    def build_local_slice_position_map(self, nii_paths: list[Path]) -> dict[int, int]:
-        """
-        Build a compact local SlicePosition map from existing downsampled files.
 
-        We do not use YAML here.
-
-        Example:
-            existing global SlicePositions: [0, 4, 8, 20]
-            local map:
-                0  -> 0
-                4  -> 1
-                8  -> 2
-                20 -> 3
-        """
-        positions = []
-
-        for nii_path in nii_paths:
-            meta, _ = bmeta.load_metadata(nii_path)
-
-            if "SlicePosition" not in meta:
-                raise ValueError(
-                    f"SlicePosition missing in {nii_path.name}. "
-                    "Run the converter again to regenerate JSON sidecars."
-                )
-
-            positions.append(int(meta["SlicePosition"]))
-
-        unique_positions = sorted(set(positions))
-
-        return {
-            old_position: new_position
-            for new_position, old_position in enumerate(unique_positions)
-        }
     def process_one_slice(
         self,
         nii_path: Path,
         target_shape: tuple[int, int],
         subject_name: str,
-        local_slice_position: int,
-        local_nb_slices: int,
+
     ) -> Path:
         """
         Load one input NIfTI, pad it to target_shape,
@@ -178,9 +145,9 @@ class SlicePreprocessor:
         padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)
-        slice_position = int(meta["SlicePosition"])
 
-        nb_slices = int(meta.get("NumberOfSlices"))
+        slice_position = int(meta["SlicePosition"])
+        nb_slices = int(meta["NumberOfSlices"])
 
         preproc_sform = np.array(
             bmeta.build_centered_slice_sform(
@@ -252,15 +219,6 @@ if __name__ == "__main__":
 
             if not subject_niftis:
                 continue
-            local_position_map = proc.build_local_slice_position_map(subject_niftis)
-            local_nb_slices = len(local_position_map)
-            first_meta, _ = bmeta.load_metadata(subject_niftis[0])
-            number_of_slices_in_json = first_meta.get("NumberOfSlices", "NOT FOUND")
-            
-            print(f"Subject: {subject_dir.name}")
-            print(f"  local_nb_slices (fichiers présents)  = {local_nb_slices}")
-            print(f"  NumberOfSlices  (dans le JSON)        = {number_of_slices_in_json}")
-            print(f"  → {'OK ✓' if local_nb_slices == number_of_slices_in_json else 'DIFFÉRENT ← PROBLÈME !'}")
 
             target_shape = proc.compute_target_shape(
                 subject_niftis,
@@ -269,7 +227,7 @@ if __name__ == "__main__":
             )
             sorted_subject_niftis = sorted(
                 subject_niftis,
-                key=lambda p: int(bmeta.load_metadata(p)[0]["SlicePosition"])
+                key=lambda p: bmeta.get_z_index(bmeta.load_metadata(p)[0])
             )
 
             print(f"Subject: {subject_dir.name} — target shape: {target_shape}")
@@ -280,16 +238,12 @@ if __name__ == "__main__":
                 if output_path.exists():
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
-                meta, _ = bmeta.load_metadata(nii_path)
-                global_slice_position = int(meta["SlicePosition"])
-
-                local_slice_position = local_position_map[global_slice_position]
+                
                 out = proc.process_one_slice(
                     nii_path=nii_path,
                     target_shape=target_shape,
                     subject_name=subject_dir.name,
-                    local_slice_position=local_slice_position,
-                    local_nb_slices=local_nb_slices,
+                    
                 )
 
                 print(f"  IN : {nii_path.name}")
