@@ -89,10 +89,13 @@ def initialize_dataset(
         date_to_min_slice = {}
 
         for sample in entry.get("samples", []):
-            for file_entry in sample.get("files", []):
+            if not isinstance(sample, dict):
+                continue
+            for file_entry in (sample.get("files") or []):
+                if not isinstance(file_entry, dict):
+                    continue
                 filename = file_entry.get("filename")
                 slices = file_entry.get("slices", [])
-
                 if not filename or not slices:
                     continue
 

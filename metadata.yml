@@ -42,7 +42,7 @@ samples:
   - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA/
     subject: Una
     samples:
-      sample_type: technical sample 
+    - sample_type: technical sample 
       derived_from: midbrain 
       participant_id: sub-Una
       files:
