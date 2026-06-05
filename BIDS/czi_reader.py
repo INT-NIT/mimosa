@@ -7,64 +7,64 @@ class MimosaReader:
     correspondence_subject_sample = None
     
     @classmethod
-def load_correspondence_from_yaml(cls, cfg: dict) -> None:
-    """
-    Load subject/file/slice mapping from YAML.
+    def load_correspondence_from_yaml(cls, cfg: dict) -> None:
+        """
+        Load subject/file/slice mapping from YAML.
 
-    New YAML structure does not require sample_id.
-    The real BIDS sample label, e.g. slide01, is assigned later in
-    mimosa_hpc_converter2.py and stored in bids_info["sample"].
+        New YAML structure does not require sample_id.
+        The real BIDS sample label, e.g. slide01, is assigned later in
+        mimosa_hpc_converter2.py and stored in bids_info["sample"].
 
-    Here we only need:
-    - subject
-    - filename -> slices
-    - optionally filename -> derived_from / sample_type / participant_id
-    """
-    cls.correspondence_subject_sample = {}
+        Here we only need:
+        - subject
+        - filename -> slices
+        - optionally filename -> derived_from / sample_type / participant_id
+        """
+        cls.correspondence_subject_sample = {}
 
-    for entry in cfg.get("samples", {}).get("entries", []):
-        path = entry["path"].rstrip("/")
-        subject = entry.get("subject", "Unknown")
-        samples = entry.get("samples", [])
+        for entry in cfg.get("samples", {}).get("entries", []):
+            path = entry["path"].rstrip("/")
+            subject = entry.get("subject", "Unknown")
+            samples = entry.get("samples", [])
 
-        files_map = {}
-        file_regions = {}
-        file_sample_types = {}
-        file_participants = {}
+            files_map = {}
+            file_regions = {}
+            file_sample_types = {}
+            file_participants = {}
 
-        for sample in samples:
-            if not isinstance(sample, dict):
-                continue
-
-            derived_from = sample.get("derived_from", "n/a")
-            sample_type = sample.get("sample_type", "technical sample")
-            participant_id = sample.get("participant_id", f"sub-{subject}")
-
-            for f in sample.get("files") or []:
-                if not isinstance(f, dict):
+            for sample in samples:
+                if not isinstance(sample, dict):
                     continue
 
-                filename = f.get("filename")
-                if not filename:
-                    continue
+                derived_from = sample.get("derived_from", "n/a")
+                sample_type = sample.get("sample_type", "technical sample")
+                participant_id = sample.get("participant_id", f"sub-{subject}")
 
-                files_map[filename] = f.get("slices", [])
-                file_regions[filename] = derived_from
-                file_sample_types[filename] = sample_type
-                file_participants[filename] = participant_id
+                for f in sample.get("files") or []:
+                    if not isinstance(f, dict):
+                        continue
 
-        cls.correspondence_subject_sample[path] = {
-            "subject": subject,
+                    filename = f.get("filename")
+                    if not filename:
+                        continue
 
-            # Fallback only. The real sample used in filenames is set later
-            # in bids_info["sample"] as slide01, slide02, etc.
-            "sample": "slide",
+                    files_map[filename] = f.get("slices", [])
+                    file_regions[filename] = derived_from
+                    file_sample_types[filename] = sample_type
+                    file_participants[filename] = participant_id
 
-            "files": files_map,
-            "file_regions": file_regions,
-            "file_sample_types": file_sample_types,
-            "file_participants": file_participants,
-        }
+            cls.correspondence_subject_sample[path] = {
+                "subject": subject,
+
+                # Fallback only. The real sample used in filenames is set later
+                # in bids_info["sample"] as slide01, slide02, etc.
+                "sample": "slide",
+
+                "files": files_map,
+                "file_regions": file_regions,
+                "file_sample_types": file_sample_types,
+                "file_participants": file_participants,
+            }
     def __init__(self, file_path):
         self.path = Path(file_path)
         self.metadata = None
