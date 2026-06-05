@@ -212,10 +212,10 @@ def get_raw_micr_folder(bids_root_path: str, bids_info: dict) -> str:
     return folder_path
 
 
-def get_derivative_folder(bids_root_path: str, pipeline_name: str, bids_info: dict, res_label) -> str:
+def get_derivative_folder(bids_root_path: str, bids_info: dict, res_label) -> str:
     folder_path = os.path.join(
         bids_root_path,
-        "derivatives","2D","downsampled"
+        "derivatives","2D","downsampled",
         f"sub-{bids_info['sub']}",
         f"ses-{bids_info['ses']}",
         "micr",
