@@ -80,7 +80,6 @@ def initialize_dataset(
     bids_root_path: str,
     yaml_path: str = "metadata.yml",
     output_format: str = "both",
-    pipeline_names: list[str] | None = None,
 ) -> str:
     bids_root_path = os.path.abspath(bids_root_path)
     os.makedirs(bids_root_path, exist_ok=True)
@@ -147,9 +146,8 @@ def initialize_dataset(
     if output_format in ("nii", "both"):
         bmeta.create_derivatives_descriptions(
             bids_root_path,
-            cfg,
-            pipeline_names=pipeline_names,
-        )
+            cfg        
+            )
     print(f"Dataset initialized in {bids_root_path}")
     return bids_root_path
 
@@ -214,14 +212,14 @@ def get_raw_micr_folder(bids_root_path: str, bids_info: dict) -> str:
     return folder_path
 
 
-def get_derivative_folder(bids_root_path: str, pipeline_name: str, bids_info: dict) -> str:
+def get_derivative_folder(bids_root_path: str, pipeline_name: str, bids_info: dict, res_label) -> str:
     folder_path = os.path.join(
         bids_root_path,
-        "derivatives",
-        pipeline_name,
+        "derivatives","2D","downsampled"
         f"sub-{bids_info['sub']}",
         f"ses-{bids_info['ses']}",
         "micr",
+        f"res-{res_label}",
     )
     os.makedirs(folder_path, exist_ok=True)
     return folder_path

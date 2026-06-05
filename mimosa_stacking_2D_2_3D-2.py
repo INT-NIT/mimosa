@@ -15,11 +15,10 @@ class VolumeBuilder3D:
         self.res_label = res_label
 
         if self.res_label is None:
-            self.preproc_root = self.bids_root / "derivatives" / "2D-preproc"
-            self.stacking_root = self.bids_root / "derivatives" / "3D-stacking"
+            raise ValueError("res_label is required")
         else:
-            self.preproc_root = self.bids_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
-            self.stacking_root = self.bids_root / "derivatives" / f"3D-stacking_res-{self.res_label}"
+            self.preproc_root  = self.bids_root / "derivatives" / "2D" / "padded" / f"res-{self.res_label}"
+            self.stacking_root = self.bids_root / "derivatives" / "3D" / "stacking"
                 
     def build_volume_output_path(
         self,
@@ -27,7 +26,7 @@ class VolumeBuilder3D:
         channel: str,
         res_label: str | None = None,
     ) -> Path:
-        output_dir = self.stacking_root / subject_dir.name / "micr"
+        output_dir = self.stacking_root / subject_dir.name / "micr" / f"res-{res_label}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if res_label is not None:

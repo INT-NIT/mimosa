@@ -13,8 +13,8 @@ class SlicePreprocessor:
         self.res_label = res_label
         self.reorient = reorient
         self.subject_max_sizes = {} # having track of max width and height for each subject 
-        self.downsampled_root = self.input_root / "derivatives" / f"2D-downsampled_res-{self.res_label}"
-        self.preproc_root = self.output_root / "derivatives" / f"2D-preproc_res-{self.res_label}"
+        self.downsampled_root = self.input_root / "derivatives" / "2D" / "downsampled" / f"res-{self.res_label}"
+        self.preproc_root     = self.output_root / "derivatives" / "2D" / "padded" /  f"res-{self.res_label}"
         if not self.downsampled_root.exists():
             raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
 
@@ -29,9 +29,9 @@ class SlicePreprocessor:
         name = relative_path.name
 
         if "_desc-downsampled_" in name:
-            name = name.replace("_desc-downsampled_", "_desc-preproc_")
+            name = name.replace("_desc-downsampled_", "_desc-padded_")
         elif "_FLUO.nii.gz" in name:
-            name = name.replace("_FLUO.nii.gz", "_desc-preproc_FLUO.nii.gz")
+            name = name.replace("_FLUO.nii.gz", "_desc-padded_FLUO.nii.gz")
 
         output_path = self.preproc_root / relative_path.parent / name
         output_path.parent.mkdir(parents=True, exist_ok=True)

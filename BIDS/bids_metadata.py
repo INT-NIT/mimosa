@@ -59,50 +59,29 @@ def create_participants_files(bids_root: Path, cfg: dict) -> None:
         f.write("\n".join(lines))
     print("participants.tsv created")
 
-def create_derivatives_descriptions(
-    bids_root: str,
-    cfg: dict,
-    pipeline_names: list[str] | None = None,
-) -> None:
-
+def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
     derivs = cfg.get("derivatives", {})
     if not derivs:
         raise ValueError("Key 'derivatives' missing in YAML")
 
-    if pipeline_names is None:
-        pipelines_to_create = list(derivs.keys())
-    else:
-        pipelines_to_create = pipeline_names
-
-    for pipeline in pipelines_to_create:
-        base_pipeline = pipeline.split("_res-")[0]
-
-        if base_pipeline not in derivs:
-            raise ValueError(
-                f"Derivative '{base_pipeline}' missing in YAML. "
-                f"Needed to create '{pipeline}'."
-            )
-
-        info = derivs[base_pipeline]
-
-        deriv_path = Path(bids_root) / "derivatives" / pipeline
+    for folder in ["2D", "3D"]:
+        deriv_path = Path(bids_root) / "derivatives" / folder
         deriv_path.mkdir(parents=True, exist_ok=True)
 
         desc_path = deriv_path / "dataset_description.json"
         if desc_path.exists():
             continue
 
+        info = derivs.get(folder, {})
         desc = info.get("dataset_description", {})
         if not desc:
-            raise ValueError(
-                f"Key 'dataset_description' missing for derivative '{base_pipeline}' in YAML"
-            )
+            print(f"WARNING: no dataset_description for derivative '{folder}' in YAML, skipping")
+            continue
 
         with open(desc_path, "w", encoding="utf-8") as f:
             json.dump(desc, f, indent=2, ensure_ascii=False)
 
-        print(f"dataset_description.json created for derivative '{pipeline}'")
-
+        print(f"dataset_description.json created for derivative '{folder}'")
 
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
    

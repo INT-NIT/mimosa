@@ -20,14 +20,13 @@ def czi2bitmapHPC(
     bids_info: dict,
     downsampling_factor: int,
     output_format: str,
-    pipeline_name: str = "2D-downsampled",
+    res_label: str ,
     reader=None,
     slice_position_map=None,
     original_thickness: float = 100,
     reorient: str = "none",
 ):
-    res_label = f"{downsampling_factor}x"
-    effective_downsampling_factor = 2 ** downsampling_factor 
+    effective_downsampling_factor = 2 ** downsampling_factor
     desc_label = "downsampled"
     czifile_path = os.path.join(pathin, czifilename)
 
@@ -38,16 +37,12 @@ def czi2bitmapHPC(
     write_tif = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
-    
-
     with pyczi.open_czi(czifile_path) as czidoc:
         scenes = czidoc.scenes_bounding_rectangle
-        print("Rectangles de scènes",czidoc.scenes_bounding_rectangle)
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
-        deriv_folder = bm.get_derivative_folder(bids_root_path, pipeline_name, bids_info) if write_nii else None
-
+        deriv_folder = bm.get_derivative_folder(bids_root_path, bids_info, res_label) if write_nii else None
         zoom_factor = float(1.0 / effective_downsampling_factor)
 
         for scene_idx in range(len(scenes)):

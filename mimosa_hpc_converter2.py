@@ -32,13 +32,11 @@ def main():
 
     downsampling_factor = args.downsampling_factor
     res_label = f"{downsampling_factor}x"
-    pipeline_name = f"2D-downsampled_res-{res_label}"
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
         yaml_path=args.yaml,
         output_format=output_format,
-        pipeline_names=[pipeline_name],
     )
     cfg = bmeta.load_metadata_config(args.yaml)
     bmeta.update_yaml_with_slices(args.yaml)
@@ -142,7 +140,7 @@ def main():
                     bids_info,
                     downsampling_factor,
                     output_format,
-                    pipeline_name=pipeline_name,
+                    res_label=res_label,  
                     reader=reader,
                     slice_position_map=slice_position_map,
                     original_thickness=args.original_thickness,
@@ -166,7 +164,7 @@ def main():
         )
 
         bmeta.write_subject_sessions_tsv(
-            os.path.join(bids_root_path, "derivatives", pipeline_name),
+            os.path.join(bids_root_path, "derivatives", "2D","downsampled"),
             sub,
             rows,
         )
