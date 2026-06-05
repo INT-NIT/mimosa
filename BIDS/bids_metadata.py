@@ -194,13 +194,25 @@ def has_slice_index(meta: dict) -> bool:
 
 def update_yaml_with_slices(yaml_path: Path) -> dict:
     """
-    Read metadata.yml and add slice indices for CZI files.
+    Read metadata.yml and add CZI files + slice indices for each sample/region.
 
-    New behavior:
-    - If a sample/region already has a 'files' list, we keep only those files.
-      We only complete missing 'slices' from the filename.
-    - If a sample/region has no 'files' list, we scan all CZI files in the subject path.
-    - This avoids mixing files between regions such as midbrain, cerebellum, etc.
+    Expected YAML structure:
+
+    samples:
+      entries:
+        - path: /path/to/czi/folder
+          subject: Una
+          samples:
+            - sample_type: technical sample
+              derived_from: midbrain
+              participant_id: sub-Una
+              files:
+
+    Behavior:
+    - If files is empty/null, scan the subject path and add all .czi files.
+    - If files already contains filenames, keep only those files.
+    - For each file, fill slices from the filename when possible.
+    - Existing manual slices are preserved.
     """
     yaml_path = Path(yaml_path)
 
@@ -226,15 +238,13 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
             ]
 
         for sample in entry.get("samples", []):
-            region = sample.get("derived_from", sample.get("sample_id", "n/a"))
+            region = sample.get("derived_from", "n/a")
+            existing_files = sample.get("files") or []
 
-            existing_files = sample.get("files", [])
+            updated_files = []
 
-            # Case 1: files are already defined in YAML.
-            # We keep exactly these files and only fill missing slices.
             if existing_files:
-                updated_files = []
-
+                # Keep only files already listed in this sample/region.
                 for f in existing_files:
                     filename = f.get("filename")
                     if not filename:
@@ -251,27 +261,37 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
                     updated_files.append(file_entry)
 
-                sample["files"] = updated_files
-                print(f"{subject} / {region} → {len(updated_files)} files kept from YAML")
-                continue
+                print(
+                    f"{subject} / {region} → "
+                    f"{len(updated_files)} files kept from YAML"
+                )
 
-            # Case 2: no files defined in YAML.
-            # We scan all CZI files.
-            files = []
-            for filename in sorted(subject_path.rglob("*.czi")):
-                file_entry = {"filename": filename.name}
+            else:
+                # files: null or files: [] => scan all .czi files in the subject path.
+                for czi_path in sorted(subject_path.rglob("*.czi")):
+                    file_entry = {"filename": czi_path.name}
 
-                slices = extract_slices_from_filename(filename.name)
-                if slices:
-                    file_entry["slices"] = slices
+                    slices = extract_slices_from_filename(czi_path.name)
+                    if slices:
+                        file_entry["slices"] = slices
 
-                files.append(file_entry)
+                    updated_files.append(file_entry)
 
-            sample["files"] = files
-            print(f"{subject} / {region} → {len(files)} files added by scan")
+                print(
+                    f"{subject} / {region} → "
+                    f"{len(updated_files)} files added by scan"
+                )
+
+            sample["files"] = updated_files
 
     with open(yaml_path, "w", encoding="utf-8") as f:
-        yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        yaml.dump(
+            cfg,
+            f,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        )
 
     return cfg
 
