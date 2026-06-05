@@ -532,8 +532,7 @@ def build_centered_affine(
 
     affine = np.eye(4, dtype=float)
     affine[:3, :3] = np.diag(resolution)
-    affine[:3, 3] = -shape * resolution / 2.0
-
+    affine[:3, 3] = -(shape - 1.0) * resolution / 2.0
     return affine.tolist()
 
 def add_sform_to_json_metadata(
