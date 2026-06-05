@@ -8,7 +8,7 @@ from BIDS import bids_manager as bm
 
 
 class VolumeBuilder3D:
-    def __init__(self, bids_root: str, original_thickness: float, reorient: str="none",res_label: str = None,):
+    def __init__(self, bids_root: str, original_thickness: float, reorient: str = "none", res_label: str = None):
         self.bids_root = Path(bids_root).resolve()
         self.original_thickness = original_thickness
         self.reorient = reorient
@@ -16,10 +16,16 @@ class VolumeBuilder3D:
 
         if self.res_label is None:
             raise ValueError("res_label is required")
-        else:
-            self.preproc_root  = self.bids_root / "derivatives" / "2D" / "padded" / f"res-{self.res_label}"
-            self.stacking_root = self.bids_root / "derivatives" / "3D" / "stacking"
-                
+
+        self.preproc_root  = self.bids_root / "derivatives" / "2D" / "padded" 
+        self.stacking_root = self.bids_root / "derivatives" / "3D" / "stacking"
+
+        self.stacking_root.mkdir(parents=True, exist_ok=True)
+
+        d3_desc = self.bids_root / "derivatives" / "3D" / "dataset_description.json"
+        if not d3_desc.exists():
+            with open(d3_desc, "w") as f:
+                json.dump({"Name": "3D stacking", "BIDSVersion": "1.8.0", "PipelineDescription": {"Name": "3D-stacking"}}, f, indent=2)
     def build_volume_output_path(
         self,
         subject_dir: Path,
@@ -134,8 +140,7 @@ class VolumeBuilder3D:
         # Reference metadata from first valid slice.
         first_meta = sorted_slices[0][3]
 
-        downsampling_factor = bmeta.get_downsampling_factor(first_meta)
-        res_label = f"{int(downsampling_factor)}x"
+       
 
         pixel_size = first_meta.get("PixelSize")
         if pixel_size is None:
@@ -231,7 +236,7 @@ class VolumeBuilder3D:
         out_img.set_qform(new_affine, code=1)
         out_img.header.set_xyzt_units("micron")
 
-        output_path = self.build_volume_output_path(subject_dir, channel, res_label)
+        output_path = self.build_volume_output_path(subject_dir, channel, self.res_label)
         nb.save(out_img, str(output_path))
 
         # Create JSON sidecar and update it.
@@ -248,6 +253,9 @@ class VolumeBuilder3D:
             groups = bm.group_subject_niftis_by_channel(subject_dir)
 
             for channel, nii_paths in groups.items():
+                nii_paths = [p for p in nii_paths if f"_res-{self.res_label}_" in p.name]
+                if not nii_paths:
+                    continue
                 out = self.build_one_volume(subject_dir, channel, nii_paths)
                 print("VOLUME:", out)
     

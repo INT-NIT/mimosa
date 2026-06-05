@@ -64,7 +64,8 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
     if not derivs:
         raise ValueError("Key 'derivatives' missing in YAML")
 
-    for folder in ["2D", "3D"]:
+    # Créer seulement 2D ici — 3D sera créé par le script stacking
+    for folder in ["2D"]:
         deriv_path = Path(bids_root) / "derivatives" / folder
         deriv_path.mkdir(parents=True, exist_ok=True)
 
@@ -75,14 +76,14 @@ def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
         info = derivs.get(folder, {})
         desc = info.get("dataset_description", {})
         if not desc:
-            print(f"WARNING: no dataset_description for derivative '{folder}' in YAML, skipping")
+            print(f"WARNING: no dataset_description for '{folder}' in YAML, skipping")
             continue
 
         with open(desc_path, "w", encoding="utf-8") as f:
             json.dump(desc, f, indent=2, ensure_ascii=False)
 
         print(f"dataset_description.json created for derivative '{folder}'")
-
+        
 def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict]) -> None:
    
     sub_dir = os.path.join(bids_root, f"sub-{subject}")

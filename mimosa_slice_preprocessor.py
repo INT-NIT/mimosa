@@ -13,8 +13,8 @@ class SlicePreprocessor:
         self.res_label = res_label
         self.reorient = reorient
         self.subject_max_sizes = {} # having track of max width and height for each subject 
-        self.downsampled_root = self.input_root / "derivatives" / "2D" / "downsampled" / f"res-{self.res_label}"
-        self.preproc_root     = self.output_root / "derivatives" / "2D" / "padded" /  f"res-{self.res_label}"
+        self.downsampled_root = self.input_root / "derivatives" / "2D" / "downsampled" 
+        self.preproc_root     = self.output_root / "derivatives" / "2D" / "padded" 
         if not self.downsampled_root.exists():
             raise FileNotFoundError(f"Repository not found : {self.downsampled_root}")
 
@@ -203,8 +203,8 @@ if __name__ == "__main__":
         reorient=args.reorient,
     )
     
-    downsampled_niftis = list(proc.downsampled_root.rglob("*.nii.gz"))
-    preproc_niftis = list(proc.preproc_root.rglob("*.nii.gz"))
+    downsampled_niftis = [p for p in proc.downsampled_root.rglob("*.nii.gz") if f"_res-{args.res}_" in p.name]
+    preproc_niftis     = [p for p in proc.preproc_root.rglob("*.nii.gz")     if f"_res-{args.res}_" in p.name]
 
     print(f"Downsampled: {len(downsampled_niftis)} files")
     print(f"Preproc:     {len(preproc_niftis)} files")
@@ -215,8 +215,10 @@ if __name__ == "__main__":
         print("Preproc incomplete or missing — running SlicePreprocessor...")
 
         for subject_dir in bm.iter_subject_dirs(proc.downsampled_root):
-            subject_niftis = list(bm.iter_subject_niftis(subject_dir))
-
+            subject_niftis = [
+                p for p in bm.iter_subject_niftis(subject_dir)
+                if f"_res-{args.res}_" in p.name
+            ]
             if not subject_niftis:
                 continue
 
