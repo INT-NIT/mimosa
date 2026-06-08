@@ -2,7 +2,7 @@
 
 import os
 import numpy as np
-from PIL import Image
+import tifffile
 from pylibCZIrw import czi as pyczi
 
 
@@ -29,10 +29,10 @@ channels = (0, 1)
 
 
 # ============================================================
-# 2. FONCTION DE CONVERSION TOTAL BOUNDING BOX -> TIFF SIMPLE
+# 2. FONCTION DE CONVERSION TOTAL BOUNDING BOX -> OME-TIFF
 # ============================================================
 
-def convert_czi_total_bbox_to_tiff(
+def convert_czi_total_bbox_to_ome_tiff(
     pathin,
     czifilename,
     pathout,
@@ -42,13 +42,17 @@ def convert_czi_total_bbox_to_tiff(
     channels=(0, 1),
 ):
     """
-    Convertit toute la lame CZI en TIFF simple en utilisant total_bounding_rectangle.
+    Convertit toute la lame CZI en OME-TIFF en utilisant total_bounding_rectangle.
 
     Différence avec ton notebook original :
         avant : scenes_bounding_rectangle[i]
         ici  : total_bounding_rectangle
 
     Donc le résultat est une grande mosaïque globale de toute la lame.
+
+    Cette version écrit un fichier OME-TIFF par canal :
+        fichier_totalbbox_ds8_C0.ome.tiff
+        fichier_totalbbox_ds8_C1.ome.tiff
     """
 
     os.makedirs(pathout, exist_ok=True)
@@ -163,15 +167,29 @@ def convert_czi_total_bbox_to_tiff(
                 + str(downsampling_factor)
                 + "_C"
                 + str(channel)
-                + ".tiff"
+                + ".ome.tiff"
             )
 
             output_path = os.path.join(pathout, output_name)
 
-            im = Image.fromarray(mosaic_image.astype(np.uint16))
-            im.save(output_path)
+            tifffile.imwrite(
+                output_path,
+                mosaic_image.astype(np.uint16),
+                bigtiff=True,
+                ome=True,
+                metadata={
+                    "axes": "YX",
+                },
+            )
 
             print("\nSaved:", output_path)
+
+            # Vérification rapide
+            with tifffile.TiffFile(output_path) as tf:
+                print("is_ome:", tf.is_ome)
+                print("is_bigtiff:", tf.is_bigtiff)
+                print("shape:", tf.series[0].shape)
+                print("axes:", tf.series[0].axes)
 
 
 # ============================================================
@@ -179,7 +197,7 @@ def convert_czi_total_bbox_to_tiff(
 # ============================================================
 
 if __name__ == "__main__":
-    convert_czi_total_bbox_to_tiff(
+    convert_czi_total_bbox_to_ome_tiff(
         pathin=rootdir,
         czifilename=czifilename,
         pathout=outdir,
