@@ -165,7 +165,7 @@ class SlicePreprocessor:
         out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
         out_img.set_sform(preproc_sform, code=1)
         out_img.set_qform(preproc_sform, code=1)
-        out_img.header.set_xyzt_units("micron")
+        out_img.header.set_xyzt_units("mm")
         nb.save(out_img, str(output_path))
 
         bmeta.copy_json_sidecar(nii_path, output_path)

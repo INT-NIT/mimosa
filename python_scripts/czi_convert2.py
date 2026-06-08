@@ -113,7 +113,7 @@ def czi2bitmapHPC(
                         img = nib.Nifti1Image(arr, sform)
                         img.set_sform(sform, code=1)
                         img.set_qform(sform, code=1)
-                        img.header.set_xyzt_units("micron")
+                        img.header.set_xyzt_units("mm")
 
                         nib.save(img, out_path)
 

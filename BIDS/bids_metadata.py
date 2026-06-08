@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 import nibabel as nb
 
+UM_TO_MM=1.0/1000
 def load_metadata_config(config_path: Path) -> dict:
     with open(Path(config_path), "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -530,9 +531,9 @@ def build_centered_slice_sform(
     not the image center.
     """
 
-    px = float(pixel_size[0])
-    py = float(pixel_size[1])
-    th = float(thickness)
+    px = float(pixel_size[0]) * UM_TO_MM
+    py = float(pixel_size[1]) * UM_TO_MM
+    th = float(thickness) * UM_TO_MM
 
     width = float(width)
     height = float(height)
@@ -595,7 +596,7 @@ def build_centered_affine(
     The image/volume is centered around physical coordinate (0,0,0).
     """
     shape = np.array(shape, dtype=float)
-    resolution = np.array(resolution, dtype=float)
+    resolution = np.array(resolution, dtype=float) *UM_TO_MM
 
     affine = np.eye(4, dtype=float)
     affine[:3, :3] = np.diag(resolution)
@@ -706,12 +707,12 @@ def write_sform_to_nifti_and_json(
     out_img = nb.Nifti1Image(data, sform_matrix, header)
     out_img.set_sform(sform_matrix, code=1)
     out_img.set_qform(sform_matrix, code=1)
-    out_img.header.set_xyzt_units("micron")
+    out_img.header.set_xyzt_units("mm")
     nb.save(out_img, str(nii_path))
 
     meta, json_path = load_metadata(nii_path)
-
     meta["SFormMatrix"] = sform_matrix.tolist()
+    meta["SFormMatrixUnits"] = "mm"
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = description
 

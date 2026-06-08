@@ -62,7 +62,7 @@ class VolumeBuilder3D:
         meta["AffineMatrix"] = new_affine.tolist()
 
         meta["OriginalThickness"] = self.original_thickness
-
+        meta["VoxelResolutionUnits"] = "mm"
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=4)
     
@@ -234,7 +234,7 @@ class VolumeBuilder3D:
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         out_img.set_sform(new_affine, code=1)
         out_img.set_qform(new_affine, code=1)
-        out_img.header.set_xyzt_units("micron")
+        out_img.header.set_xyzt_units("mm")
 
         output_path = self.build_volume_output_path(subject_dir, channel, self.res_label)
         nb.save(out_img, str(output_path))
