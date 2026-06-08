@@ -10,9 +10,9 @@ import numpy as np
 import tifffile
 from pylibCZIrw import czi as pyczi
 
-import bids_metadata as bmeta
-import bids_manager as bm
-from czi_reader import MimosaReader
+from BIDS import bids_metadata as bmeta
+from BIDS import bids_manager as bm
+from BIDS.czi_reader import MimosaReader
 
 
 # ============================================================
