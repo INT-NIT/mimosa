@@ -9,6 +9,10 @@ from pylibCZIrw import czi as pyczi
 
 
 def get_dtype_from_czi(czidoc, channel=0):
+    """
+    Récupère le type de pixel du canal CZI et le convertit en dtype numpy.
+    """
+
     pixel_type = czidoc.get_channel_pixel_type(channel)
     pixel_type = str(pixel_type).lower()
 
@@ -48,15 +52,34 @@ def extract_2d_channel_from_read(arr):
     return arr
 
 
-def convert_czi_total_bbox_to_tiff(
+def write_ome_tiff_single_channel(output_path, mosaic):
+    """
+    Écrit une mosaïque 2D en OME-TIFF avec axes YX.
+
+    Cette version est volontairement simple pour être compatible avec FIJI/Bio-Formats.
+    """
+
+    tifffile.imwrite(
+        output_path,
+        mosaic,
+        bigtiff=True,
+        ome=True,
+        metadata={
+            "axes": "YX",
+        },
+    )
+
+
+def convert_czi_total_bbox_to_ome_tiff(
     input_czi,
     output_dir,
-    downsample_factor=8,
+    downsample_factor=1,
     patch_size=4096,
     channels=None,
+    verbose_roi=False,
 ):
     """
-    Convertit une lame CZI en utilisant le bounding box global.
+    Convertit une lame CZI en OME-TIFF en utilisant le bounding box global.
 
     input_czi:
         chemin du fichier .czi
@@ -66,7 +89,8 @@ def convert_czi_total_bbox_to_tiff(
 
     downsample_factor:
         facteur de downsample.
-        Exemple : 8 signifie qu'on garde 1 pixel sur 8.
+        1 = pas de downsampling.
+        8 = garde 1 pixel sur 8.
 
     patch_size:
         taille des patchs lus dans le CZI en pixels x1.
@@ -76,6 +100,10 @@ def convert_czi_total_bbox_to_tiff(
         liste des canaux à convertir.
         Exemple : [0] ou [0, 1].
         Si None, le script essaie de convertir tous les canaux trouvés.
+
+    verbose_roi:
+        True pour afficher chaque ROI lue.
+        False pour éviter trop d'affichages.
     """
 
     os.makedirs(output_dir, exist_ok=True)
@@ -122,7 +150,8 @@ def convert_czi_total_bbox_to_tiff(
                         patch_h,
                     )
 
-                    print(f"C{channel} ROI:", roi)
+                    if verbose_roi:
+                        print(f"C{channel} ROI:", roi)
 
                     patch = czidoc.read(
                         roi=roi,
@@ -131,7 +160,10 @@ def convert_czi_total_bbox_to_tiff(
 
                     patch_2d = extract_2d_channel_from_read(patch)
 
-                    patch_ds = patch_2d[::downsample_factor, ::downsample_factor]
+                    if downsample_factor == 1:
+                        patch_ds = patch_2d
+                    else:
+                        patch_ds = patch_2d[::downsample_factor, ::downsample_factor]
 
                     out_x0 = x0 // downsample_factor
                     out_y0 = y0 // downsample_factor
@@ -143,39 +175,44 @@ def convert_czi_total_bbox_to_tiff(
 
             output_path = os.path.join(
                 output_dir,
-                f"{base_name}_totalbbox_ds{downsample_factor}_C{channel}.tiff",
+                f"{base_name}_totalbbox_ds{downsample_factor}_C{channel}.ome.tiff",
             )
 
-            tifffile.imwrite(
-                output_path,
-                mosaic,
-                bigtiff=True,
-                compression="zlib",
-            )
+            write_ome_tiff_single_channel(output_path, mosaic)
 
             print("Written:", output_path)
+
+            # Vérification rapide
+            with tifffile.TiffFile(output_path) as tf:
+                print("is_ome:", tf.is_ome)
+                print("is_bigtiff:", tf.is_bigtiff)
+                print("shape:", tf.series[0].shape)
+                print("axes:", tf.series[0].axes)
 
 
 def main():
     if len(sys.argv) < 3:
         print("Usage:")
-        print("  python convert_czi_total_bbox.py input.czi output_dir")
+        print("  python convert_czi_total_bbox_ome.py input.czi output_dir")
         print("")
         print("Options:")
-        print("  --ds 8")
+        print("  --ds 1")
         print("  --patch 4096")
         print("  --channels 0,1")
+        print("  --verbose-roi")
         print("")
-        print("Exemple:")
-        print("  python convert_czi_total_bbox.py lame.czi ./out --ds 8 --channels 0,1")
+        print("Exemples:")
+        print("  python convert_czi_total_bbox_ome.py lame.czi ./out --ds 1 --channels 0")
+        print("  python convert_czi_total_bbox_ome.py lame.czi ./out --ds 8 --channels 0,1")
         sys.exit(1)
 
     input_czi = sys.argv[1]
     output_dir = sys.argv[2]
 
-    downsample_factor = 8
+    downsample_factor = 1
     patch_size = 4096
     channels = None
+    verbose_roi = False
 
     args = sys.argv[3:]
 
@@ -193,15 +230,20 @@ def main():
             channels = [int(x) for x in args[i + 1].split(",")]
             i += 2
 
+        elif args[i] == "--verbose-roi":
+            verbose_roi = True
+            i += 1
+
         else:
             raise ValueError(f"Argument inconnu : {args[i]}")
 
-    convert_czi_total_bbox_to_tiff(
+    convert_czi_total_bbox_to_ome_tiff(
         input_czi=input_czi,
         output_dir=output_dir,
         downsample_factor=downsample_factor,
         patch_size=patch_size,
         channels=channels,
+        verbose_roi=verbose_roi,
     )
 
 
