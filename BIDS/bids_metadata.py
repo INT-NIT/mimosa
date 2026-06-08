@@ -678,6 +678,7 @@ def add_sform_to_json_metadata(
     meta["NumberOfSlices"] = nb_slices
 
     meta["SFormMatrix"] = sform
+    meta["SFormMatrixUnits"] = "mm"
     meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = (
@@ -713,6 +714,7 @@ def write_sform_to_nifti_and_json(
     meta, json_path = load_metadata(nii_path)
     meta["SFormMatrix"] = sform_matrix.tolist()
     meta["SFormMatrixUnits"] = "mm"
+
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = description
 
