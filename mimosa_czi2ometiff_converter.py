@@ -4,10 +4,13 @@ import argparse
 import json
 import math
 import re
+import uuid
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
 import tifffile
+from alive_progress import alive_bar
 from pylibCZIrw import czi as pyczi
 
 from BIDS import bids_metadata as bmeta
@@ -77,8 +80,7 @@ def get_subject_entries(cfg: dict):
         slices
         sample_info
 
-    The subject/session are NOT taken from YAML here.
-    They are computed later using MimosaReader + BIDSSession,
+    Subject/session are computed later using MimosaReader + BIDSSession,
     like in mimosa_hpc_converter2.py.
     """
     for entry in cfg.get("samples", {}).get("entries", []):
@@ -116,7 +118,7 @@ def build_raw_bids_output_path(
 
     Example:
         sub-Una/ses-01/micr/
-        sub-Una_ses-01_sample-slide01_stain-C0_FLU.ome.tiff
+        sub-Una_ses-01_sample-slide01_stain-C0_FLUO.ome.tiff
     """
     out_dir = (
         Path(bids_root)
@@ -134,7 +136,7 @@ def build_raw_bids_output_path(
         f"_ses-{session}"
         f"_sample-{sample_label}"
         f"_stain-{stain_clean}"
-        f"_FLU.ome.tiff"
+        f"_FLUO.ome.tiff"
     )
 
     return out_dir / filename
@@ -144,10 +146,31 @@ def rect_to_xywh(rect):
     """
     Return x, y, w, h from a pylibCZIrw rectangle object or tuple/list.
     """
-    try:
+    if hasattr(rect, "x") and hasattr(rect, "y") and hasattr(rect, "w") and hasattr(rect, "h"):
         return int(rect.x), int(rect.y), int(rect.w), int(rect.h)
-    except AttributeError:
+
+    if isinstance(rect, (tuple, list)) and len(rect) >= 4:
         return int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3])
+
+    raise TypeError(f"Unsupported rectangle type: {type(rect)} value={rect}")
+
+
+def iter_scene_rectangles(scenes):
+    """
+    Iterate over scene rectangles whether scenes_bounding_rectangle is a list or a dict.
+
+    Some pylibCZIrw versions return:
+        [rect0, rect1, ...]
+
+    Others return:
+        {0: rect0, 1: rect1, ...}
+    """
+    if isinstance(scenes, dict):
+        for scene_idx, rect in sorted(scenes.items()):
+            yield int(scene_idx), rect
+    else:
+        for scene_idx, rect in enumerate(scenes):
+            yield int(scene_idx), rect
 
 
 def build_scene_positions_metadata(
@@ -166,7 +189,7 @@ def build_scene_positions_metadata(
 
     scene_positions = []
 
-    for scene_idx, rect in enumerate(scenes):
+    for scene_idx, rect in iter_scene_rectangles(scenes):
         x, y, w, h = rect_to_xywh(rect)
 
         output_x = int(round((x - total_x) / downsampling_factor))
@@ -195,6 +218,174 @@ def build_scene_positions_metadata(
         )
 
     return scene_positions
+
+
+def build_ome_xml_with_scene_positions(
+    image_name: str,
+    width: int,
+    height: int,
+    channel: int,
+    scenes,
+    total_bbox,
+    downsampling_factor: int,
+    pixel_type: str = "uint16",
+) -> str:
+    """
+    Build an OME-XML string containing basic image metadata
+    plus scene positions as a MapAnnotation.
+
+    The scene positions are stored inside the OME-XML, in:
+        StructuredAnnotations / MapAnnotation
+
+    CZI coordinates are in original x1 CZI pixels.
+    Output coordinates are in downsampled mosaic pixels.
+    """
+
+    ome_ns = "http://www.openmicroscopy.org/Schemas/OME/2016-06"
+    xsi_ns = "http://www.w3.org/2001/XMLSchema-instance"
+
+    ET.register_namespace("", ome_ns)
+    ET.register_namespace("xsi", xsi_ns)
+
+    ome = ET.Element(
+        f"{{{ome_ns}}}OME",
+        {
+            f"{{{xsi_ns}}}schemaLocation": (
+                "http://www.openmicroscopy.org/Schemas/OME/2016-06 "
+                "http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd"
+            ),
+            "UUID": f"urn:uuid:{uuid.uuid4()}",
+        },
+    )
+
+    image = ET.SubElement(
+        ome,
+        f"{{{ome_ns}}}Image",
+        {
+            "ID": "Image:0",
+            "Name": image_name,
+        },
+    )
+
+    pixels = ET.SubElement(
+        image,
+        f"{{{ome_ns}}}Pixels",
+        {
+            "ID": "Pixels:0",
+            "DimensionOrder": "XYCZT",
+            "Type": pixel_type,
+            "SizeX": str(int(width)),
+            "SizeY": str(int(height)),
+            "SizeC": "1",
+            "SizeZ": "1",
+            "SizeT": "1",
+        },
+    )
+
+    channel_el = ET.SubElement(
+        pixels,
+        f"{{{ome_ns}}}Channel",
+        {
+            "ID": "Channel:0:0",
+            "Name": f"C{channel}",
+            "SamplesPerPixel": "1",
+        },
+    )
+
+    ET.SubElement(channel_el, f"{{{ome_ns}}}LightPath")
+
+    ET.SubElement(
+        pixels,
+        f"{{{ome_ns}}}TiffData",
+        {
+            "IFD": "0",
+            "FirstC": "0",
+            "FirstZ": "0",
+            "FirstT": "0",
+        },
+    )
+
+    annotation_id = "Annotation:ScenePositions"
+
+    ET.SubElement(
+        image,
+        f"{{{ome_ns}}}AnnotationRef",
+        {
+            "ID": annotation_id,
+        },
+    )
+
+    structured_annotations = ET.SubElement(
+        ome,
+        f"{{{ome_ns}}}StructuredAnnotations",
+    )
+
+    map_annotation = ET.SubElement(
+        structured_annotations,
+        f"{{{ome_ns}}}MapAnnotation",
+        {
+            "ID": annotation_id,
+            "Namespace": "MIMOSA:ScenePositions",
+        },
+    )
+
+    value = ET.SubElement(
+        map_annotation,
+        f"{{{ome_ns}}}Value",
+    )
+
+    def add_kv(key: str, val) -> None:
+        m = ET.SubElement(
+            value,
+            f"{{{ome_ns}}}M",
+            {
+                "K": str(key),
+            },
+        )
+        m.text = str(val)
+
+    total_x, total_y, total_w, total_h = rect_to_xywh(total_bbox)
+
+    add_kv("TotalBoundingBox.X", total_x)
+    add_kv("TotalBoundingBox.Y", total_y)
+    add_kv("TotalBoundingBox.Width", total_w)
+    add_kv("TotalBoundingBox.Height", total_h)
+    add_kv("TotalBoundingBox.Units", "pixels")
+    add_kv("DownsamplingFactor", downsampling_factor)
+
+    scene_positions = build_scene_positions_metadata(
+        scenes=scenes,
+        total_bbox=total_bbox,
+        downsampling_factor=downsampling_factor,
+    )
+
+    add_kv("SceneCount", len(scene_positions))
+
+    for scene in scene_positions:
+        idx = int(scene["SceneIndex"])
+
+        czi_box = scene["CziBoundingBox"]
+        out_box = scene["OutputBoundingBox"]
+
+        add_kv(f"Scene:{idx}.CziBoundingBox.X", czi_box["X"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Y", czi_box["Y"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Width", czi_box["Width"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Height", czi_box["Height"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Units", "pixels")
+
+        add_kv(f"Scene:{idx}.OutputBoundingBox.X", out_box["X"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Y", out_box["Y"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Width", out_box["Width"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Height", out_box["Height"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Units", "pixels")
+
+    xml_bytes = ET.tostring(
+        ome,
+        encoding="utf-8",
+        xml_declaration=True,
+    )
+
+    return xml_bytes.decode("utf-8")
 
 
 def make_sidecar_metadata(
@@ -294,8 +485,6 @@ def downsample_patch_nearest(patch: np.ndarray, factor: int) -> np.ndarray:
 
     Same simple logic as:
         patch[::factor, ::factor]
-
-    factor must be one of 2, 4, 6, 8.
     """
     return patch[::factor, ::factor]
 
@@ -320,7 +509,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     Convert one CZI to raw BIDS OME-TIFF using total_bounding_rectangle.
 
     Output:
-        sub-Una_ses-01_sample-slide01_stain-C0_FLU.ome.tiff
+        sub-Una_ses-01_sample-slide01_stain-C0_FLUO.ome.tiff
 
     No:
         chunk-
@@ -372,6 +561,8 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
         print("mosaic width =", mosaic_image_width)
         print("mosaic height =", mosaic_image_height)
 
+        total_patches = nb_patch_w * nb_patch_h
+
         for channel in channels:
             stain_label = f"C{channel}"
 
@@ -387,59 +578,68 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 dtype=np.uint16,
             )
 
-            for x_idx in range(nb_patch_w):
-                for y_idx in range(nb_patch_h):
-                    src_x0 = x_idx * patch_width_full
-                    src_y0 = y_idx * patch_height_full
+            with alive_bar(
+                total_patches,
+                force_tty=True,
+                title=f"{sample_label} {stain_label} ds{downsampling_factor}x",
+            ) as bar:
 
-                    patch_width = min(patch_width_full, bbox_w - src_x0)
-                    patch_height = min(patch_height_full, bbox_h - src_y0)
+                for x_idx in range(nb_patch_w):
+                    for y_idx in range(nb_patch_h):
+                        src_x0 = x_idx * patch_width_full
+                        src_y0 = y_idx * patch_height_full
 
-                    if patch_width <= 0 or patch_height <= 0:
-                        continue
+                        patch_width = min(patch_width_full, bbox_w - src_x0)
+                        patch_height = min(patch_height_full, bbox_h - src_y0)
 
-                    roi = (
-                        bbox_x + src_x0,
-                        bbox_y + src_y0,
-                        patch_width,
-                        patch_height,
-                    )
+                        if patch_width <= 0 or patch_height <= 0:
+                            bar()
+                            continue
 
-                    patch = czidoc.read(
-                        roi=roi,
-                        plane={"C": channel},
-                    )
+                        roi = (
+                            bbox_x + src_x0,
+                            bbox_y + src_y0,
+                            patch_width,
+                            patch_height,
+                        )
 
-                    patch = np.asarray(patch)
+                        patch = czidoc.read(
+                            roi=roi,
+                            plane={"C": channel},
+                        )
 
-                    if patch.ndim == 3:
-                        patch = patch[..., 0]
-                    else:
-                        patch = np.squeeze(patch)
+                        patch = np.asarray(patch)
 
-                    patch_res = downsample_patch_nearest(
-                        patch=patch,
-                        factor=downsampling_factor,
-                    )
+                        if patch.ndim == 3:
+                            patch = patch[..., 0]
+                        else:
+                            patch = np.squeeze(patch)
 
-                    out_x0 = int(round(src_x0 / downsampling_factor))
-                    out_y0 = int(round(src_y0 / downsampling_factor))
+                        patch_res = downsample_patch_nearest(
+                            patch=patch,
+                            factor=downsampling_factor,
+                        )
 
-                    out_x1 = out_x0 + patch_res.shape[1]
-                    out_y1 = out_y0 + patch_res.shape[0]
+                        out_x0 = int(round(src_x0 / downsampling_factor))
+                        out_y0 = int(round(src_y0 / downsampling_factor))
 
-                    # Safety crop in case rounding produces one-pixel overflow.
-                    if out_x1 > mosaic_image_width:
-                        crop_w = mosaic_image_width - out_x0
-                        patch_res = patch_res[:, :crop_w]
-                        out_x1 = mosaic_image_width
+                        out_x1 = out_x0 + patch_res.shape[1]
+                        out_y1 = out_y0 + patch_res.shape[0]
 
-                    if out_y1 > mosaic_image_height:
-                        crop_h = mosaic_image_height - out_y0
-                        patch_res = patch_res[:crop_h, :]
-                        out_y1 = mosaic_image_height
+                        # Safety crop in case rounding produces one-pixel overflow.
+                        if out_x1 > mosaic_image_width:
+                            crop_w = mosaic_image_width - out_x0
+                            patch_res = patch_res[:, :crop_w]
+                            out_x1 = mosaic_image_width
 
-                    mosaic_image[out_y0:out_y1, out_x0:out_x1] = patch_res
+                        if out_y1 > mosaic_image_height:
+                            crop_h = mosaic_image_height - out_y0
+                            patch_res = patch_res[:crop_h, :]
+                            out_y1 = mosaic_image_height
+
+                        mosaic_image[out_y0:out_y1, out_x0:out_x1] = patch_res
+
+                        bar()
 
             output_path = build_raw_bids_output_path(
                 bids_root=bids_root,
@@ -449,12 +649,24 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 stain_label=stain_label,
             )
 
+            ome_xml = build_ome_xml_with_scene_positions(
+                image_name=output_path.name,
+                width=mosaic_image.shape[1],
+                height=mosaic_image.shape[0],
+                channel=channel,
+                scenes=scenes,
+                total_bbox=bbox,
+                downsampling_factor=downsampling_factor,
+                pixel_type="uint16",
+            )
+
             tifffile.imwrite(
                 str(output_path),
                 mosaic_image.astype(np.uint16),
                 bigtiff=True,
-                ome=True,
-                metadata={"axes": "YX"},
+                description=ome_xml,
+                metadata=None,
+                photometric="minisblack",
             )
 
             print("Written:", output_path)
@@ -579,6 +791,8 @@ def main():
             subject = bids_info["sub"]
             session_id = bids_info["ses"]
 
+            print("BIDS info:", bids_info)
+
             bm.create_sourcedata_links(
                 str(input_czi),
                 subject,
@@ -605,7 +819,7 @@ def main():
                         "sample_type",
                         "technical sample",
                     ),
-                    "anatomical_region": item["sample_info"].get(
+                    "derived_from": item["sample_info"].get(
                         "derived_from",
                         "n/a",
                     ),
@@ -661,7 +875,9 @@ if __name__ == "__main__":
 
 
 """
-python convert_totalbbox_raw_bids.py \\
+Example:
+
+python mimosa_czi2ometiff_converter.py \\
   --y metadata.yml \\
   --bids_root /envau/work/nit/users/boudlal.h/BIDS-test \\
   --ds 8 \\
