@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 
@@ -170,8 +171,8 @@ def build_scene_positions_metadata(
 
         output_x = int(round((x - total_x) / downsampling_factor))
         output_y = int(round((y - total_y) / downsampling_factor))
-        output_w = int(round(w / downsampling_factor))
-        output_h = int(round(h / downsampling_factor))
+        output_w = int(math.ceil(w / downsampling_factor))
+        output_h = int(math.ceil(h / downsampling_factor))
 
         scene_positions.append(
             {
@@ -224,7 +225,6 @@ def make_sidecar_metadata(
 
     anatomical_region = sample_info.get("derived_from", "n/a")
     sample_type = sample_info.get("sample_type", "n/a")
-    participant_id = sample_info.get("participant_id", "n/a")
 
     return {
         "SourceFile": source_czi.name,
@@ -245,7 +245,6 @@ def make_sidecar_metadata(
 
         "SampleType": sample_type,
         "AnatomicalRegion": anatomical_region,
-
 
         "TotalBoundingBox": {
             "X": total_x,
@@ -287,6 +286,18 @@ def get_next_slide_label(
             count += 1
 
     return f"slide{count + 1:02d}"
+
+
+def downsample_patch_nearest(patch: np.ndarray, factor: int) -> np.ndarray:
+    """
+    Downsample patch by keeping one pixel every factor pixels.
+
+    Same simple logic as:
+        patch[::factor, ::factor]
+
+    factor must be one of 2, 4, 6, 8.
+    """
+    return patch[::factor, ::factor]
 
 
 # ============================================================
@@ -345,14 +356,11 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
         patch_width_full = int(patch_size)
         patch_height_full = int(patch_size)
 
-        downsampled_patch_w = max(1, int(patch_width_full / downsampling_factor))
-        downsampled_patch_h = max(1, int(patch_height_full / downsampling_factor))
+        nb_patch_w = int(math.ceil(bbox_w / patch_width_full))
+        nb_patch_h = int(math.ceil(bbox_h / patch_height_full))
 
-        nb_patch_w = int(bbox_w / patch_width_full)
-        nb_patch_h = int(bbox_h / patch_height_full)
-
-        mosaic_image_width = round(float(bbox_w) / downsampling_factor + 0.5)
-        mosaic_image_height = round(float(bbox_h) / downsampling_factor + 0.5)
+        mosaic_image_width = int(math.ceil(bbox_w / downsampling_factor))
+        mosaic_image_height = int(math.ceil(bbox_h / downsampling_factor))
 
         print("\nPatch information:")
         print("patch_width_full =", patch_width_full)
@@ -379,23 +387,20 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 dtype=np.uint16,
             )
 
-            for x in range(0, nb_patch_w + 1):
-                for y in range(0, nb_patch_h + 1):
-                    patch_width = patch_width_full
-                    patch_height = patch_height_full
+            for x_idx in range(nb_patch_w):
+                for y_idx in range(nb_patch_h):
+                    src_x0 = x_idx * patch_width_full
+                    src_y0 = y_idx * patch_height_full
 
-                    if y == nb_patch_h:
-                        patch_height = bbox_h - (patch_height_full * y)
-
-                    if x == nb_patch_w:
-                        patch_width = bbox_w - (patch_width_full * x)
+                    patch_width = min(patch_width_full, bbox_w - src_x0)
+                    patch_height = min(patch_height_full, bbox_h - src_y0)
 
                     if patch_width <= 0 or patch_height <= 0:
                         continue
 
                     roi = (
-                        bbox_x + patch_width_full * x,
-                        bbox_y + patch_height_full * y,
+                        bbox_x + src_x0,
+                        bbox_y + src_y0,
                         patch_width,
                         patch_height,
                     )
@@ -412,19 +417,27 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                     else:
                         patch = np.squeeze(patch)
 
-                    if downsampling_factor == 1:
-                        patch_res = patch
-                    else:
-                        patch_res = patch[
-                            ::downsampling_factor,
-                            ::downsampling_factor,
-                        ]
+                    patch_res = downsample_patch_nearest(
+                        patch=patch,
+                        factor=downsampling_factor,
+                    )
 
-                    out_y0 = y * downsampled_patch_h
-                    out_x0 = x * downsampled_patch_w
+                    out_x0 = int(round(src_x0 / downsampling_factor))
+                    out_y0 = int(round(src_y0 / downsampling_factor))
 
-                    out_y1 = out_y0 + patch_res.shape[0]
                     out_x1 = out_x0 + patch_res.shape[1]
+                    out_y1 = out_y0 + patch_res.shape[0]
+
+                    # Safety crop in case rounding produces one-pixel overflow.
+                    if out_x1 > mosaic_image_width:
+                        crop_w = mosaic_image_width - out_x0
+                        patch_res = patch_res[:, :crop_w]
+                        out_x1 = mosaic_image_width
+
+                    if out_y1 > mosaic_image_height:
+                        crop_h = mosaic_image_height - out_y0
+                        patch_res = patch_res[:crop_h, :]
+                        out_y1 = mosaic_image_height
 
                     mosaic_image[out_y0:out_y1, out_x0:out_x1] = patch_res
 
@@ -481,7 +494,7 @@ def main():
     )
 
     parser.add_argument(
-        "--metadata",
+        "--y",
         required=True,
         help="Path to metadata.yml",
     )
@@ -495,8 +508,9 @@ def main():
     parser.add_argument(
         "--ds",
         type=int,
+        choices=[2, 4, 6, 8],
         default=8,
-        help="Downsampling factor. 1 means no downsampling.",
+        help="Downsampling factor. Allowed values: 2, 4, 6, 8.",
     )
 
     parser.add_argument(
@@ -514,11 +528,9 @@ def main():
 
     args = parser.parse_args()
 
-    metadata_path = Path(args.metadata)
+    metadata_path = Path(args.y)
     channels = parse_channels(args.channels)
 
-    # Same idea as mimosa_hpc_converter2.py:
-    # initialize BIDS dataset and session order.
     bids_root = Path(
         bm.initialize_dataset(
             bids_root_path=args.bids_root,
@@ -527,7 +539,6 @@ def main():
         )
     )
 
-    # This also updates metadata.yml if files/slices were missing.
     cfg = bmeta.update_yaml_with_slices(metadata_path)
 
     session = bm.BIDSSession(str(bids_root))
@@ -647,3 +658,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+"""
+python convert_totalbbox_raw_bids.py \\
+  --y metadata.yml \\
+  --bids_root /envau/work/nit/users/boudlal.h/BIDS-test \\
+  --ds 8 \\
+  --channels 0
+"""
