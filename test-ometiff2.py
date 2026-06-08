@@ -18,7 +18,7 @@ czifilename = "mon_fichier.czi"
 # 8 = garde 1 pixel sur 8
 downsampling_factor = 8
 
-# Comme dans le notebook
+# Comme dans ton notebook
 patch_factor = 4
 full_patch_w_h = 1536
 
@@ -29,7 +29,7 @@ channels = (0, 1)
 
 
 # ============================================================
-# 2. FONCTION DE CONVERSION TOTAL BOUNDING BOX
+# 2. FONCTION DE CONVERSION TOTAL BOUNDING BOX -> TIFF SIMPLE
 # ============================================================
 
 def convert_czi_total_bbox_to_tiff(
@@ -42,15 +42,11 @@ def convert_czi_total_bbox_to_tiff(
     channels=(0, 1),
 ):
     """
-    Convertit toute la lame CZI en utilisant total_bounding_rectangle.
+    Convertit toute la lame CZI en TIFF simple en utilisant total_bounding_rectangle.
 
-    C'est la même logique que le notebook original, mais au lieu de faire :
-
-        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
-
-    on fait :
-
-        bbox = czidoc.total_bounding_rectangle
+    Différence avec ton notebook original :
+        avant : scenes_bounding_rectangle[i]
+        ici  : total_bounding_rectangle
 
     Donc le résultat est une grande mosaïque globale de toute la lame.
     """
@@ -65,7 +61,6 @@ def convert_czi_total_bbox_to_tiff(
 
     with pyczi.open_czi(czifile_scenes) as czidoc:
 
-        # Ici on prend toute la lame, pas les scènes séparées
         bbox = czidoc.total_bounding_rectangle
 
         print("\nTotal bounding rectangle:")
@@ -105,7 +100,7 @@ def convert_czi_total_bbox_to_tiff(
 
             mosaic_image = np.zeros(
                 (int(mosaic_image_height), int(mosaic_image_width)),
-                dtype="uint16",
+                dtype=np.uint16,
             )
 
             for x in range(0, nb_patch_w + 1):
@@ -120,11 +115,10 @@ def convert_czi_total_bbox_to_tiff(
                     if x == nb_patch_w:
                         patch_width = bbox.w - (patch_width_full * x)
 
-                    # Si on tombe exactement sur le bord, patch_width ou patch_height peut être 0
                     if patch_width <= 0 or patch_height <= 0:
                         continue
 
-                    my_roi_patched = (
+                    roi = (
                         bbox.x + patch_width_full * x,
                         bbox.y + patch_height_full * y,
                         patch_width,
@@ -135,36 +129,35 @@ def convert_czi_total_bbox_to_tiff(
                         "C" + str(channel),
                         "x =", x,
                         "y =", y,
-                        "roi =", my_roi_patched,
+                        "roi =", roi,
                     )
 
-                    ch = czidoc.read(
-                        roi=my_roi_patched,
+                    patch = czidoc.read(
+                        roi=roi,
                         plane={"C": channel},
                     )
 
-                    # czidoc.read retourne souvent une image de forme (Y, X, 1)
-                    ch = np.asarray(ch)
+                    patch = np.asarray(patch)
 
-                    if ch.ndim == 3:
-                        ch = ch[..., 0]
+                    if patch.ndim == 3:
+                        patch = patch[..., 0]
                     else:
-                        ch = np.squeeze(ch)
+                        patch = np.squeeze(patch)
 
                     if downsampling_factor == 1:
-                        ch_res = ch
+                        patch_res = patch
                     else:
-                        ch_res = ch[::downsampling_factor, ::downsampling_factor]
+                        patch_res = patch[::downsampling_factor, ::downsampling_factor]
 
                     out_y0 = y * downsampled_patch_h
                     out_x0 = x * downsampled_patch_w
 
-                    out_y1 = out_y0 + ch_res.shape[0]
-                    out_x1 = out_x0 + ch_res.shape[1]
+                    out_y1 = out_y0 + patch_res.shape[0]
+                    out_x1 = out_x0 + patch_res.shape[1]
 
-                    mosaic_image[out_y0:out_y1, out_x0:out_x1] = ch_res
+                    mosaic_image[out_y0:out_y1, out_x0:out_x1] = patch_res
 
-            filename = (
+            output_name = (
                 base_name
                 + "_totalbbox_ds"
                 + str(downsampling_factor)
@@ -173,7 +166,7 @@ def convert_czi_total_bbox_to_tiff(
                 + ".tiff"
             )
 
-            output_path = os.path.join(pathout, filename)
+            output_path = os.path.join(pathout, output_name)
 
             im = Image.fromarray(mosaic_image.astype(np.uint16))
             im.save(output_path)
