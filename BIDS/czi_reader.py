@@ -306,10 +306,10 @@ class MimosaReader:
             "AcquisitionDate": self.get_session(),
             "ChunkTransformationMatrix": chunk_mat,
             "ChunkTransformationMatrixAxis": axes,
-            "Width": w_downsampled,
-            "Height": h_downsampled,
-            "WidthPhysical": w_native_um,   # ← nouveau
-            "HeightPhysical": h_native_um,
+            "WidthPixels-DS": w_downsampled,
+            "HeightPixels-DS": h_downsampled,
+            "WidthPhysical-Native": w_native_um,   
+            "HeightPhysical-Native": h_native_um,
             "DownsamplingFactor": downsampling_factor
         }
 
