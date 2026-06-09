@@ -531,19 +531,21 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
             # Step 1 : écrire un fichier temporaire pour récupérer l'XML correct généré par tifffile
             with tempfile.NamedTemporaryFile(suffix=".tiff", delete=False) as tmp:
                 tmp_path = tmp.name
-
             tifffile.imwrite(
                 tmp_path,
                 mosaic_image.astype(np.uint16),
                 photometric="minisblack",
+                ome=True,                        
                 metadata={"axes": "YX"},
             )
+
 
             with tifffile.TiffFile(tmp_path) as tf:
                 xml_str = tf.ome_metadata
 
             os.unlink(tmp_path)
-
+            if xml_str is None:
+                raise RuntimeError(f"tifffile did not generate OME-XML for {output_path.name}")
             # Step 2 : injecter les positions de scènes dans l'XML correct
             enriched_xml = inject_scene_positions_into_ome_xml(
                 existing_xml=xml_str,
@@ -585,7 +587,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 print("axes:", tf.series[0].axes)
 
 
-                
+
 # ============================================================
 # Main
 # ============================================================
