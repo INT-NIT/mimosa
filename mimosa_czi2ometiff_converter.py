@@ -395,6 +395,8 @@ def inject_scene_positions_into_ome_xml(
 # Conversion
 # ============================================================
 
+
+
 def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     input_czi: Path,
     bids_root: Path,
@@ -407,17 +409,9 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     channels: tuple[int, ...],
     patch_size: int = 6144,
 ):
-    """
-    Convert one CZI to raw BIDS OME-TIFF using total_bounding_rectangle.
+    import tempfile
+    import os
 
-    Output:
-        sub-Una_ses-01_sample-slide01_stain-C0_FLUO.ome.tiff
-
-    No:
-        chunk-
-        res-
-        desc-
-    """
     input_czi = Path(input_czi)
     bids_root = Path(bids_root)
 
@@ -469,10 +463,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
             stain_label = f"C{channel}"
 
             print("\n" + "-" * 80)
-            print(
-                f"Converting sample={sample_label}, "
-                f"SliceIndices={slice_indices}, stain={stain_label}"
-            )
+            print(f"Converting sample={sample_label}, SliceIndices={slice_indices}, stain={stain_label}")
             print("-" * 80)
 
             mosaic_image = np.zeros(
@@ -485,7 +476,6 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 force_tty=True,
                 title=f"{sample_label} {stain_label} ds{downsampling_factor}x",
             ) as bar:
-
                 for x_idx in range(nb_patch_w):
                     for y_idx in range(nb_patch_h):
                         src_x0 = x_idx * patch_width_full
@@ -505,11 +495,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                             patch_height,
                         )
 
-                        patch = czidoc.read(
-                            roi=roi,
-                            plane={"C": channel},
-                        )
-
+                        patch = czidoc.read(roi=roi, plane={"C": channel})
                         patch = np.asarray(patch)
 
                         if patch.ndim == 3:
@@ -517,30 +503,21 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                         else:
                             patch = np.squeeze(patch)
 
-                        patch_res = downsample_patch_nearest(
-                            patch=patch,
-                            factor=downsampling_factor,
-                        )
+                        patch_res = downsample_patch_nearest(patch=patch, factor=downsampling_factor)
 
                         out_x0 = int(round(src_x0 / downsampling_factor))
                         out_y0 = int(round(src_y0 / downsampling_factor))
-
                         out_x1 = out_x0 + patch_res.shape[1]
                         out_y1 = out_y0 + patch_res.shape[0]
 
-                        # Safety crop in case rounding produces one-pixel overflow.
                         if out_x1 > mosaic_image_width:
-                            crop_w = mosaic_image_width - out_x0
-                            patch_res = patch_res[:, :crop_w]
+                            patch_res = patch_res[:, :mosaic_image_width - out_x0]
                             out_x1 = mosaic_image_width
-
                         if out_y1 > mosaic_image_height:
-                            crop_h = mosaic_image_height - out_y0
-                            patch_res = patch_res[:crop_h, :]
+                            patch_res = patch_res[:mosaic_image_height - out_y0, :]
                             out_y1 = mosaic_image_height
 
                         mosaic_image[out_y0:out_y1, out_x0:out_x1] = patch_res
-
                         bar()
 
             output_path = build_raw_bids_output_path(
@@ -551,26 +528,38 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 stain_label=stain_label,
             )
 
-            
-            tifffile.imwrite(
-                str(output_path),
-                mosaic_image.astype(np.uint16),
-                bigtiff=True,
-                photometric="minisblack",
-                metadata={"axes": "YX", "Channel": {"Name": f"C{channel}"}},
-            )
-            with tifffile.TiffFile(str(output_path)) as tf:
-                existing_xml = tf.ome_metadata
+            # Step 1 : écrire un fichier temporaire pour récupérer l'XML correct généré par tifffile
+            with tempfile.NamedTemporaryFile(suffix=".tiff", delete=False) as tmp:
+                tmp_path = tmp.name
 
-            # Étape 3 : enrichir l'OME-XML avec les positions de scènes
+            tifffile.imwrite(
+                tmp_path,
+                mosaic_image.astype(np.uint16),
+                photometric="minisblack",
+                metadata={"axes": "YX"},
+            )
+
+            with tifffile.TiffFile(tmp_path) as tf:
+                xml_str = tf.ome_metadata
+
+            os.unlink(tmp_path)
+
+            # Step 2 : injecter les positions de scènes dans l'XML correct
             enriched_xml = inject_scene_positions_into_ome_xml(
-                existing_xml=existing_xml,
+                existing_xml=xml_str,
                 scenes=scenes,
                 total_bbox=bbox,
                 downsampling_factor=downsampling_factor,
             )
-            with tifffile.TiffFile(str(output_path), mode="r+b") as tf:
-                tf.pages[0].tags["ImageDescription"].overwrite(enriched_xml)
+
+            # Step 3 : écrire le vrai fichier BigTIFF avec l'XML enrichi
+            with tifffile.TiffWriter(str(output_path), bigtiff=True) as tif:
+                tif.write(
+                    mosaic_image.astype(np.uint16),
+                    photometric="minisblack",
+                    description=enriched_xml,
+                    metadata=None,
+                )
 
             print("Written:", output_path)
 
@@ -596,6 +585,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 print("axes:", tf.series[0].axes)
 
 
+                
 # ============================================================
 # Main
 # ============================================================
