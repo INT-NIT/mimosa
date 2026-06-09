@@ -220,174 +220,6 @@ def build_scene_positions_metadata(
     return scene_positions
 
 
-def build_ome_xml_with_scene_positions(
-    image_name: str,
-    width: int,
-    height: int,
-    channel: int,
-    scenes,
-    total_bbox,
-    downsampling_factor: int,
-    pixel_type: str = "uint16",
-) -> str:
-    """
-    Build an OME-XML string containing basic image metadata
-    plus scene positions as a MapAnnotation.
-
-    The scene positions are stored inside the OME-XML, in:
-        StructuredAnnotations / MapAnnotation
-
-    CZI coordinates are in original x1 CZI pixels.
-    Output coordinates are in downsampled mosaic pixels.
-    """
-
-    ome_ns = "http://www.openmicroscopy.org/Schemas/OME/2016-06"
-    xsi_ns = "http://www.w3.org/2001/XMLSchema-instance"
-
-    ET.register_namespace("", ome_ns)
-    ET.register_namespace("xsi", xsi_ns)
-
-    ome = ET.Element(
-        f"{{{ome_ns}}}OME",
-        {
-            f"{{{xsi_ns}}}schemaLocation": (
-                "http://www.openmicroscopy.org/Schemas/OME/2016-06 "
-                "http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd"
-            ),
-            "UUID": f"urn:uuid:{uuid.uuid4()}",
-        },
-    )
-
-    image = ET.SubElement(
-        ome,
-        f"{{{ome_ns}}}Image",
-        {
-            "ID": "Image:0",
-            "Name": image_name,
-        },
-    )
-
-    pixels = ET.SubElement(
-        image,
-        f"{{{ome_ns}}}Pixels",
-        {
-            "ID": "Pixels:0",
-            "DimensionOrder": "XYCZT",
-            "Type": pixel_type,
-            "SizeX": str(int(width)),
-            "SizeY": str(int(height)),
-            "SizeC": "1",
-            "SizeZ": "1",
-            "SizeT": "1",
-        },
-    )
-
-    channel_el = ET.SubElement(
-        pixels,
-        f"{{{ome_ns}}}Channel",
-        {
-            "ID": "Channel:0:0",
-            "Name": f"C{channel}",
-            "SamplesPerPixel": "1",
-        },
-    )
-
-    ET.SubElement(channel_el, f"{{{ome_ns}}}LightPath")
-
-    ET.SubElement(
-        pixels,
-        f"{{{ome_ns}}}TiffData",
-        {
-            "IFD": "0",
-            "FirstC": "0",
-            "FirstZ": "0",
-            "FirstT": "0",
-        },
-    )
-
-    annotation_id = "Annotation:ScenePositions"
-
-    ET.SubElement(
-        image,
-        f"{{{ome_ns}}}AnnotationRef",
-        {
-            "ID": annotation_id,
-        },
-    )
-
-    structured_annotations = ET.SubElement(
-        ome,
-        f"{{{ome_ns}}}StructuredAnnotations",
-    )
-
-    map_annotation = ET.SubElement(
-        structured_annotations,
-        f"{{{ome_ns}}}MapAnnotation",
-        {
-            "ID": annotation_id,
-            "Namespace": "MIMOSA:ScenePositions",
-        },
-    )
-
-    value = ET.SubElement(
-        map_annotation,
-        f"{{{ome_ns}}}Value",
-    )
-
-    def add_kv(key: str, val) -> None:
-        m = ET.SubElement(
-            value,
-            f"{{{ome_ns}}}M",
-            {
-                "K": str(key),
-            },
-        )
-        m.text = str(val)
-
-    total_x, total_y, total_w, total_h = rect_to_xywh(total_bbox)
-
-    add_kv("TotalBoundingBox.X", total_x)
-    add_kv("TotalBoundingBox.Y", total_y)
-    add_kv("TotalBoundingBox.Width", total_w)
-    add_kv("TotalBoundingBox.Height", total_h)
-    add_kv("TotalBoundingBox.Units", "pixels")
-    add_kv("DownsamplingFactor", downsampling_factor)
-
-    scene_positions = build_scene_positions_metadata(
-        scenes=scenes,
-        total_bbox=total_bbox,
-        downsampling_factor=downsampling_factor,
-    )
-
-    add_kv("SceneCount", len(scene_positions))
-
-    for scene in scene_positions:
-        idx = int(scene["SceneIndex"])
-
-        czi_box = scene["CziBoundingBox"]
-        out_box = scene["OutputBoundingBox"]
-
-        add_kv(f"Scene:{idx}.CziBoundingBox.X", czi_box["X"])
-        add_kv(f"Scene:{idx}.CziBoundingBox.Y", czi_box["Y"])
-        add_kv(f"Scene:{idx}.CziBoundingBox.Width", czi_box["Width"])
-        add_kv(f"Scene:{idx}.CziBoundingBox.Height", czi_box["Height"])
-        add_kv(f"Scene:{idx}.CziBoundingBox.Units", "pixels")
-
-        add_kv(f"Scene:{idx}.OutputBoundingBox.X", out_box["X"])
-        add_kv(f"Scene:{idx}.OutputBoundingBox.Y", out_box["Y"])
-        add_kv(f"Scene:{idx}.OutputBoundingBox.Width", out_box["Width"])
-        add_kv(f"Scene:{idx}.OutputBoundingBox.Height", out_box["Height"])
-        add_kv(f"Scene:{idx}.OutputBoundingBox.Units", "pixels")
-
-    xml_bytes = ET.tostring(
-        ome,
-        encoding="utf-8",
-        xml_declaration=True,
-    )
-
-    return xml_bytes.decode("utf-8")
-
-
 def make_sidecar_metadata(
     source_czi: Path,
     total_bbox,
@@ -487,7 +319,78 @@ def downsample_patch_nearest(patch: np.ndarray, factor: int) -> np.ndarray:
     """
     return patch[::factor, ::factor]
 
+def inject_scene_positions_into_ome_xml(
+    existing_xml: str,
+    scenes,
+    total_bbox,
+    downsampling_factor: int,
+) -> str:
+    """
+    Inject scene positions as a MapAnnotation into the OME-XML generated by tifffile.
+    Does NOT touch SizeX, SizeY, or TiffData — only adds a StructuredAnnotations block.
+    """
+    ome_ns = "http://www.openmicroscopy.org/Schemas/OME/2016-06"
+    ET.register_namespace("", ome_ns)
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
 
+    root = ET.fromstring(existing_xml)
+
+    # Find or create StructuredAnnotations
+    sa = root.find(f"{{{ome_ns}}}StructuredAnnotations")
+    if sa is None:
+        sa = ET.SubElement(root, f"{{{ome_ns}}}StructuredAnnotations")
+
+    annotation_id = "Annotation:ScenePositions"
+
+    # Add AnnotationRef to Image:0
+    image = root.find(f"{{{ome_ns}}}Image")
+    if image is not None:
+        ET.SubElement(image, f"{{{ome_ns}}}AnnotationRef", {"ID": annotation_id})
+
+    # Build MapAnnotation
+    map_annotation = ET.SubElement(
+        sa,
+        f"{{{ome_ns}}}MapAnnotation",
+        {"ID": annotation_id, "Namespace": "MIMOSA:ScenePositions"},
+    )
+    value = ET.SubElement(map_annotation, f"{{{ome_ns}}}Value")
+
+    def add_kv(key: str, val) -> None:
+        m = ET.SubElement(value, f"{{{ome_ns}}}M", {"K": str(key)})
+        m.text = str(val)
+
+    total_x, total_y, total_w, total_h = rect_to_xywh(total_bbox)
+    add_kv("TotalBoundingBox.X", total_x)
+    add_kv("TotalBoundingBox.Y", total_y)
+    add_kv("TotalBoundingBox.Width", total_w)
+    add_kv("TotalBoundingBox.Height", total_h)
+    add_kv("TotalBoundingBox.Units", "pixels")
+    add_kv("DownsamplingFactor", downsampling_factor)
+
+    scene_positions = build_scene_positions_metadata(
+        scenes=scenes,
+        total_bbox=total_bbox,
+        downsampling_factor=downsampling_factor,
+    )
+    add_kv("SceneCount", len(scene_positions))
+
+    for scene in scene_positions:
+        idx = int(scene["SceneIndex"])
+        czi_box = scene["CziBoundingBox"]
+        out_box = scene["OutputBoundingBox"]
+        add_kv(f"Scene:{idx}.CziBoundingBox.X", czi_box["X"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Y", czi_box["Y"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Width", czi_box["Width"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Height", czi_box["Height"])
+        add_kv(f"Scene:{idx}.CziBoundingBox.Units", "pixels")
+        add_kv(f"Scene:{idx}.OutputBoundingBox.X", out_box["X"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Y", out_box["Y"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Width", out_box["Width"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Height", out_box["Height"])
+        add_kv(f"Scene:{idx}.OutputBoundingBox.Units", "pixels")
+
+    xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return xml_bytes.decode("utf-8")
 # ============================================================
 # Conversion
 # ============================================================
@@ -648,25 +551,26 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 stain_label=stain_label,
             )
 
-            ome_xml = build_ome_xml_with_scene_positions(
-                image_name=output_path.name,
-                width=mosaic_image.shape[1],
-                height=mosaic_image.shape[0],
-                channel=channel,
-                scenes=scenes,
-                total_bbox=bbox,
-                downsampling_factor=downsampling_factor,
-                pixel_type="uint16",
-            )
-
+            
             tifffile.imwrite(
                 str(output_path),
                 mosaic_image.astype(np.uint16),
                 bigtiff=True,
-                description=ome_xml,
-                metadata=None,
                 photometric="minisblack",
+                metadata={"axes": "YX", "Channel": {"Name": f"C{channel}"}},
             )
+            with tifffile.TiffFile(str(output_path)) as tf:
+                existing_xml = tf.ome_metadata
+
+            # Étape 3 : enrichir l'OME-XML avec les positions de scènes
+            enriched_xml = inject_scene_positions_into_ome_xml(
+                existing_xml=existing_xml,
+                scenes=scenes,
+                total_bbox=bbox,
+                downsampling_factor=downsampling_factor,
+            )
+            with tifffile.TiffFile(str(output_path), mode="r+b") as tf:
+                tf.pages[0].tags["ImageDescription"].overwrite(enriched_xml)
 
             print("Written:", output_path)
 
