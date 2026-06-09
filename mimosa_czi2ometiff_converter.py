@@ -423,12 +423,11 @@ def make_sidecar_metadata(
         "ImageType": "OME-TIFF",
         "Axes": "YX",
 
-        "ChannelIndex": int(channel),
         "Stain": f"C{channel}",
 
         "DownsamplingFactor": int(downsampling_factor),
 
-        "Width": int(width),
+        "Width": int(width), # final width of the final image OME-TIFF after downsampling 
         "Height": int(height),
 
         "SampleLabel": sample_label,
@@ -437,7 +436,7 @@ def make_sidecar_metadata(
         "SampleType": sample_type,
         "AnatomicalRegion": anatomical_region,
 
-        "TotalBoundingBox": {
+        "TotalBoundingBox": { # cadre global de toute la lame avant downsampling 
             "X": total_x,
             "Y": total_y,
             "Width": total_w,
@@ -720,7 +719,7 @@ def main():
     parser.add_argument(
         "--ds",
         type=int,
-        choices=[2, 4, 6, 8],
+        choices=[1 , 2, 4, 6, 8],
         default=8,
         help="Downsampling factor. Allowed values: 2, 4, 6, 8.",
     )
