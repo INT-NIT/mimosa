@@ -141,7 +141,6 @@ class SlicePreprocessor:
             mode="constant",
             constant_values=0,
         )
-
         padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)

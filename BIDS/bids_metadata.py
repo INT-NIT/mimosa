@@ -580,8 +580,6 @@ def build_centered_affine(
     affine[:3, 3]  = -(shape * resolution) / 2.0
 
     return affine.tolist()
-
-
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
@@ -591,15 +589,11 @@ def add_sform_to_json_metadata(
     """
     Add SFormMatrix to metadata using a centered common volume reference.
 
-    The SForm origin is the geometric center of the exported image:
-        origin_x = -(Width  * pixel_size_x) / 2   in mm
-        origin_y = -(Height * pixel_size_y) / 2   in mm
+    Origin is the geometric center of the exported image:
+        origin_x = -(WidthPixels-DS  * pixel_size_x) / 2   in mm
+        origin_y = -(HeightPixels-DS * pixel_size_y) / 2   in mm
 
-    This works for both non-padded (downsampled) and padded slices because:
-        - non-padded : Width * px ≈ width_physical_um * UM_TO_MM
-        - padded     : content is symmetrically padded so the geometric
-                       center of the exported image = physical center of content.
-
+    Works for both non-padded and padded slices.
     Z position is derived from slice_position in the global stack.
     """
 
@@ -616,10 +610,25 @@ def add_sform_to_json_metadata(
 
     pixel_size = meta["PixelSize"]
 
+    # Width/Height in pixels of the exported (downsampled) image
+    exported_width  = meta.get("WidthPixels-DS")
+    exported_height = meta.get("HeightPixels-DS")
+
+    if exported_width is None or exported_height is None:
+        # Fallback for old JSONs that used "Width"/"Height"
+        exported_width  = meta.get("Width")
+        exported_height = meta.get("Height")
+
+    if exported_width is None or exported_height is None:
+        raise ValueError(
+            f"Cannot find exported image dimensions in metadata for SliceIndex={slice_index}. "
+            "Expected 'WidthPixels-DS'/'HeightPixels-DS' or 'Width'/'Height'."
+        )
+
     sform = build_centered_slice_sform(
         pixel_size      = pixel_size,
-        exported_width  = int(meta["Width"]),
-        exported_height = int(meta["Height"]),
+        exported_width  = int(exported_width),
+        exported_height = int(exported_height),
         slice_position  = slice_position,
         nb_slices       = nb_slices,
         thickness       = original_thickness,
@@ -636,12 +645,11 @@ def add_sform_to_json_metadata(
         "SForm matrix placing this 2D slice in a centered common volume reference. "
         "Chunk/stage coordinates are not used. "
         "Origin is the geometric center of the exported image "
-        "(Width * PixelSize / 2), valid for both non-padded and padded slices. "
+        "(WidthPixels-DS * PixelSize / 2), valid for both non-padded and padded slices. "
         f"reorient={reorient}."
     )
 
     return meta
-
 def write_sform_to_nifti_and_json(
     nii_path,
     sform_matrix,
