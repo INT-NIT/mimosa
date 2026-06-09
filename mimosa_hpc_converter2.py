@@ -20,8 +20,8 @@ def main():
     parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="downsampling factor e.x: 4 ")
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
-    parser.add_argument("--original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
-    parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
+    parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
+    parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -42,9 +42,6 @@ def main():
     bmeta.update_yaml_with_slices(args.yaml)
     cfg = bmeta.load_metadata_config(args.yaml)
     slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
-    print("DEBUG CONVERT slice_position_map size =", len(slice_position_map))
-    print("DEBUG CONVERT first slices =", list(slice_position_map.items())[:10])
-    print("DEBUG CONVERT last slices =", list(slice_position_map.items())[-10:])
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
@@ -106,12 +103,6 @@ def main():
                     f"    Subject: {summary['sub']}, "
                     f"Date: {summary['acq_time']}, "
                     f"Sample: {summary['sample']}"
-                )
-
-                bm.create_sourcedata_links(
-                    full_input_path,
-                    summary["sub"],
-                    bids_root_path,
                 )
 
                 bids_info = session.get_bids_info(

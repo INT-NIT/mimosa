@@ -41,8 +41,7 @@ def czi2bitmapHPC(
         scenes = czidoc.scenes_bounding_rectangle
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
-        raw_folder = bm.get_raw_micr_folder(bids_root_path, bids_info)
-        deriv_folder = bm.get_derivative_folder(bids_root_path, bids_info, res_label) if write_nii else None
+        deriv_folder = bm.get_derivative_folder(bids_root_path, bids_info, res_label) if (write_nii or write_tif) else None
         zoom_factor = float(1.0 / effective_downsampling_factor)
 
         for scene_idx in range(len(scenes)):
@@ -73,7 +72,7 @@ def czi2bitmapHPC(
                     if "_res-" not in base:
                         base = base.replace("_FLUO", f"_res-{res_label}_desc-{desc_label}_FLUO")
                     if write_tif:
-                        out_path = os.path.join(raw_folder, base + ".tif")
+                        out_path = os.path.join(deriv_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
                         meta_tiff = reader.get_converted_file_metadata(
                             rect=rect,

@@ -264,23 +264,23 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="3D volume stacking from 2D preprocessed slices")
     parser.add_argument(
-        "--bids_root",
+        "-bids_root",
         required=True,
         help="Path to BIDS root folder"
     )
     parser.add_argument(
-        "--res",
+        "-res",
         required=True,
         help="Resolution label to stack, for example 4x"
     )
     parser.add_argument(
-        "--reorient",
+        "-reorient",
         required=False,
         default="none",
         help="3D volume reorientation: none, x,y,z, x,-z,-y, swap_yz+flip_y+flip_z, etc."
     )
     parser.add_argument(
-        "--original_thickness",
+        "-original_thickness",
         required=False,
         type=float,
         default=200,
@@ -302,8 +302,8 @@ if __name__ == "__main__":
    
 """
 python mimosa_stacking_2D_2_3D-2.py \
-  --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
-  --res 4x \
-  --reorient x,-z,-y \
-  --original_thickness 100
+  -bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
+  -res 4x \
+  -reorient x,-z,-y \
+  -original_thickness 100
 """

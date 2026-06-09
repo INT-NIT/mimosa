@@ -391,12 +391,9 @@ def inject_scene_positions_into_ome_xml(
 
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
-# ============================================================
+
+
 # Conversion
-# ============================================================
-
-
-
 def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     input_czi: Path,
     bids_root: Path,
@@ -585,10 +582,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 print("is_bigtiff:", tf.is_bigtiff)
                 print("shape:", tf.series[0].shape)
                 print("axes:", tf.series[0].axes)
-                
-# ============================================================
-# Main
-# ============================================================
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -599,19 +593,19 @@ def main():
     )
 
     parser.add_argument(
-        "--y",
+        "-y",
         required=True,
         help="Path to metadata.yml",
     )
 
     parser.add_argument(
-        "--bids_root",
+        "-bids_root",
         required=True,
         help="Output BIDS root.",
     )
 
     parser.add_argument(
-        "--ds",
+        "-df",
         type=int,
         choices=[1 , 2, 4, 6, 8],
         default=8,
@@ -619,13 +613,13 @@ def main():
     )
 
     parser.add_argument(
-        "--channels",
+        "-channels",
         default="0,1",
         help="Channels to convert, for example: 0 or 0,1",
     )
 
     parser.add_argument(
-        "--patch_size",
+        "-patch_size",
         type=int,
         default=6144,
         help="Patch size in x1 pixels used to read the CZI by blocks.",
@@ -771,8 +765,8 @@ if __name__ == "__main__":
 Example:
 
 python mimosa_czi2ometiff_converter.py \
-  --y metadata.yml \
-  --bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
-  --ds 8 \
-  --channels 0
+  -y metadata.yml \
+  -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
+  -ds 8 \
+  -channels 0
 """

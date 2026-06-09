@@ -188,11 +188,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="2D slice preprocessing")
-    parser.add_argument("--bids_root", required=True, help="Path to BIDS root folder")
-    parser.add_argument("--padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
-    parser.add_argument("--original_thickness", required=False, type=float, default=200, help="Histological section thickness")
-    parser.add_argument("--res",required=True,help="Resolution label to preprocess, for example 4x")
-    parser.add_argument("--reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
+    parser.add_argument("-bids_root", required=True, help="Path to BIDS root folder")
+    parser.add_argument("-padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
+    parser.add_argument("-original_thickness", required=False, type=float, default=200, help="Histological section thickness")
+    parser.add_argument("-res",required=True,help="Resolution label to preprocess, for example 4x")
+    parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
 
     proc = SlicePreprocessor(
@@ -252,8 +252,8 @@ if __name__ == "__main__":
                 print(f"  OUT: {out.name}")
 """
 python mimosa_slice_preprocessor.py \
-  --bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
-  --res 4x \
-  --padding_delta 100 \
-  --original_thickness 100
+  -bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
+  -res 4x \
+  -padding_delta 100 \
+  -original_thickness 100
 """
