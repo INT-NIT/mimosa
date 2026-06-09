@@ -576,7 +576,15 @@ def build_centered_slice_sform(
         col_x = reorient_vec(col_x)
         col_y = reorient_vec(col_y)
         col_z = reorient_vec(col_z)
-        origin = reorient_vec(origin)
+
+        # Reorienter seulement le centre XY — pas center_z
+        origin_xy = np.array([-width * px / 2.0, -height * py / 2.0, 0.0], dtype=float)
+        origin_xy = reorient_vec(origin_xy)
+
+        # Placer center_z dans la bonne composante après transpose, sans flip
+        new_z_axis = transpose_axes.index(2)
+        origin = origin_xy.copy()
+        origin[new_z_axis] = center_z  # ← sans flip du signe
 
     sform = np.eye(4, dtype=float)
     sform[:3, 0] = col_x
