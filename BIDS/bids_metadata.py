@@ -531,8 +531,8 @@ def build_centered_slice_sform(
     center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
 
     origin = np.array([
-        -(float(exported_width)  * px) / 2.0,
-        -(float(exported_height) * py) / 2.0,
+        -((float(exported_width)  - 1.0) * px) / 2.0,
+        -((float(exported_height) - 1.0) * py) / 2.0,
         center_z,
     ], dtype=float)
 
@@ -577,8 +577,7 @@ def build_centered_affine(
 
     affine = np.eye(4, dtype=float)
     affine[:3, :3] = np.diag(resolution)
-    affine[:3, 3]  = -(shape * resolution) / 2.0
-
+    affine[:3, 3] = -((shape - 1.0) * resolution) / 2.0
     return affine.tolist()
 def add_sform_to_json_metadata(
     meta: dict,
