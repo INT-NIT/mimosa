@@ -151,13 +151,15 @@ class SlicePreprocessor:
 
         preproc_sform = np.array(
             bmeta.build_centered_slice_sform(
-                width=target_width,
-                height=target_height,
-                pixel_size=meta["PixelSize"],
-                slice_position=slice_position,
-                nb_slices=nb_slices,
-                thickness=self.original_thickness,
-                reorient=self.reorient,
+                width_physical_um  = float(meta["WidthPhysical"]),
+                height_physical_um = float(meta["HeightPhysical"]),
+                pixel_size         = meta["PixelSize"],
+                exported_width     = target_width,
+                exported_height    = target_height,
+                slice_position     = slice_position,
+                nb_slices          = nb_slices,
+                thickness          = self.original_thickness,
+                reorient           = self.reorient,
             ),
             dtype=float,
         )
