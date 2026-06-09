@@ -163,12 +163,6 @@ def main():
         ]
 
         bmeta.write_subject_sessions_tsv(
-            bids_root_path,
-            sub,
-            rows,
-        )
-
-        bmeta.write_subject_sessions_tsv(
             os.path.join(bids_root_path, "derivatives", "2D","downsampled"),
             sub,
             rows,
