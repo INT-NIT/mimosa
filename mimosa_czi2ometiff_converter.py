@@ -876,9 +876,9 @@ if __name__ == "__main__":
 """
 Example:
 
-python mimosa_czi2ometiff_converter.py \\
-  --y metadata.yml \\
-  --bids_root /envau/work/nit/users/boudlal.h/BIDS-test \\
-  --ds 8 \\
+python mimosa_czi2ometiff_converter.py \
+  --y metadata.yml \
+  --bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
+  --ds 8 \
   --channels 0
 """
