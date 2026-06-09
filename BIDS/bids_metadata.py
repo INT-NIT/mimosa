@@ -500,12 +500,13 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
 
         return transpose_axes, flip_axes
 
-     
 
 def build_centered_slice_sform(
-    width: float,
-    height: float,
+    width_physical_um: float,
+    height_physical_um: float,
     pixel_size: list[float],
+    exported_width: int,
+    exported_height: int,
     slice_position: int,
     nb_slices: int,
     thickness: float,
@@ -514,68 +515,61 @@ def build_centered_slice_sform(
     """
     Build a 2D slice SForm in a common centered volume reference.
 
-    This function does NOT use microscope/chunk/stage coordinates.
+    The physical center of the slice is derived from the raw native dimensions:
+        center_x = width_physical_um  / 2.0  (in mm)
+        center_y = height_physical_um / 2.0  (in mm)
 
-    The center of the slice is placed at:
-        X = 0
-        Y = 0
-        Z = centered slice position
+    width_physical_um and height_physical_um come from the raw CZI scene:
+        rect.w * native_pixel_size_um  (before any downsampling)
 
-    This makes the center stable across:
-        - resolutions
-        - padded / non-padded versions
-        - final 3D stacking
+    This makes the center resolution-invariant: the same physical center
+    is used regardless of the downsampling factor applied to the exported image.
 
-    Important:
-    sform[:3, 3] is the physical position of voxel (0,0,0),
-    not the image center.
+    The SForm origin = physical position of voxel (0,0,0) = top-left corner
+    of the exported image, placed so that the image center coincides with
+    (center_x, center_y) in the common reference frame.
+
+    Z position is derived from slice_position in the global stack:
+        center_z = (slice_position - (nb_slices - 1) / 2) * thickness_mm
     """
 
-    px = float(pixel_size[0]) * UM_TO_MM
+    px = float(pixel_size[0]) * UM_TO_MM   # exported pixel size in mm
     py = float(pixel_size[1]) * UM_TO_MM
-    th = float(thickness) * UM_TO_MM
+    th = float(thickness)     * UM_TO_MM   # slice thickness in mm
 
-    width = float(width)
-    height = float(height)
+    # Physical center of the slice from raw native dimensions
+    center_x = float(width_physical_um)  * UM_TO_MM / 2.0
+    center_y = float(height_physical_um) * UM_TO_MM / 2.0
 
-    # Position of the slice center in the common 3D volume reference.
-    # Using (nb_slices - 1) / 2 keeps the middle slice centered around 0.
+    # Z position of this slice in the centered common volume reference
     center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
 
-    # Voxel directions before reorientation.
-    col_x = np.array([px, 0.0, 0.0], dtype=float)
-    col_y = np.array([0.0, py, 0.0], dtype=float)
-    col_z = np.array([0.0, 0.0, th], dtype=float)
-
-    # Translation = physical position of voxel (0,0,0).
-    # We place the image center at (0,0,center_z).
-    origin = np.array(
-    [
-        -(width - 1.0) * px / 2.0,
-        -(height - 1.0) * py / 2.0,
+    # Origin = physical position of voxel (0,0,0)
+    # The exported image center is placed at (center_x, center_y, center_z).
+    # Since width_physical_um is a continuous physical size (not pixel count),
+    # no half-pixel correction is needed here.
+    origin = np.array([
+        -center_x,
+        -center_y,
         center_z,
-    ],
-    dtype=float,
-)
+    ], dtype=float)
 
-    # Apply reorientation as a physical axis transform.
-    # No shape - 1 here, because we are not mapping voxel indices.
-    # We are transforming physical vectors.
+    col_x = np.array([px,  0.0, 0.0], dtype=float)
+    col_y = np.array([0.0,  py, 0.0], dtype=float)
+    col_z = np.array([0.0, 0.0,  th], dtype=float)
+
     if not is_identity_reorientation(reorient):
         transpose_axes, flip_axes = parse_reorientation_mode(reorient)
 
         def reorient_vec(v: np.ndarray) -> np.ndarray:
-            v_new = np.array(
-                [v[transpose_axes[i]] for i in range(3)],
-                dtype=float,
-            )
+            v_new = np.array([v[transpose_axes[i]] for i in range(3)], dtype=float)
             for ax in flip_axes:
                 v_new[ax] *= -1.0
             return v_new
 
-        col_x = reorient_vec(col_x)
-        col_y = reorient_vec(col_y)
-        col_z = reorient_vec(col_z)
+        col_x  = reorient_vec(col_x)
+        col_y  = reorient_vec(col_y)
+        col_z  = reorient_vec(col_z)
         origin = reorient_vec(origin)
 
     sform = np.eye(4, dtype=float)
@@ -612,15 +606,16 @@ def add_sform_to_json_metadata(
     """
     Add SFormMatrix to metadata using a centered common volume reference.
 
-    We do NOT use ChunkTransformationMatrix for placement.
+    The physical center of each slice is derived from WidthPhysical/HeightPhysical,
+    which are computed in czi_reader.py as:
+        w_native_um = rect.w * native_pixel_size_um   (raw CZI scene, before downsampling)
+        h_native_um = rect.h * native_pixel_size_um
 
-    For non-padded 2D-downsampled files:
-        - if WidthPhysical/HeightPhysical exist, they are used as the true physical size
-          of the scene, normally computed from the raw CZI scene size and raw pixel size.
-        - otherwise, physical size is approximated from Width/Height and PixelSize.
+    This makes the slice center resolution-invariant:
+    the same physical center is used regardless of the downsampling factor.
 
-    The SForm origin corresponds to voxel (0,0,0), not to the image center.
-    The image center is placed at X=0, Y=0, and Z according to SlicePosition.
+    The SForm origin = voxel (0,0,0) = top-left corner of the exported image.
+    The image center is placed at X=0, Y=0, Z=f(slice_position).
     """
 
     slice_index = meta.get("SliceIndex")
@@ -628,65 +623,55 @@ def add_sform_to_json_metadata(
         return meta
 
     slice_index = int(slice_index)
-
     if slice_index not in slice_position_map:
         return meta
 
     slice_position = int(slice_position_map[slice_index])
-    nb_slices = int(len(slice_position_map))
+    nb_slices      = int(len(slice_position_map))
 
     pixel_size = meta["PixelSize"]
-    px = float(pixel_size[0])
-    py = float(pixel_size[1])
 
-    # Preferred case:
-    # WidthPhysical and HeightPhysical should come from the raw CZI scene:
-    # raw_scene_width_pixels  * raw_pixel_size_um
-    # raw_scene_height_pixels * raw_pixel_size_um
+    # --- Taille physique brute (resolution-invariante) ---
+    # WidthPhysical vient de czi_reader : rect.w * native_pixel_size_um
+    # C'est la taille réelle de la scène CZI avant tout downsampling.
     if meta.get("WidthPhysical") is not None and meta.get("HeightPhysical") is not None:
-        width_physical = float(meta["WidthPhysical"])
-        height_physical = float(meta["HeightPhysical"])
-
-        # build_centered_slice_sform expects width/height in pixels,
-        # so we convert physical size back to "virtual pixels" at the current resolution.
-        width = width_physical / px
-        height = height_physical / py
-
+        width_physical_um  = float(meta["WidthPhysical"])
+        height_physical_um = float(meta["HeightPhysical"])
     else:
-        # Fallback:
-        # use the current exported image size in pixels.
-        width = float(meta["Width"])
-        height = float(meta["Height"])
-
-        width_physical = width * px
-        height_physical = height * py
-
-        meta["WidthPhysical"] = width_physical
-        meta["HeightPhysical"] = height_physical
+        # Fallback uniquement si le convertisseur n'a pas fourni WidthPhysical.
+        # Approximation : taille exportée * pixel size exporté.
+        # ATTENTION : pas resolution-invariant, à éviter.
+        px = float(pixel_size[0])
+        py = float(pixel_size[1])
+        width_physical_um  = float(meta["Width"])  * px
+        height_physical_um = float(meta["Height"]) * py
+        meta["WidthPhysical"]  = width_physical_um
+        meta["HeightPhysical"] = height_physical_um
 
     sform = build_centered_slice_sform(
-        width=width,
-        height=height,
-        pixel_size=pixel_size,
-        slice_position=slice_position,
-        nb_slices=nb_slices,
-        thickness=original_thickness,
-        reorient=reorient,
+        width_physical_um  = width_physical_um,
+        height_physical_um = height_physical_um,
+        pixel_size         = pixel_size,
+        exported_width     = int(meta["Width"]),
+        exported_height    = int(meta["Height"]),
+        slice_position     = slice_position,
+        nb_slices          = nb_slices,
+        thickness          = original_thickness,
+        reorient           = reorient,
     )
 
-    meta["SlicePosition"] = slice_position
-    meta["NumberOfSlices"] = nb_slices
-
-    meta["SFormMatrix"] = sform
-    meta["SFormMatrixUnits"] = "mm"
-    meta["SFormReorientationMode"] = reorient
-    meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
-    meta["SFormMatrixDescription"] = (
+    meta["SlicePosition"]            = slice_position
+    meta["NumberOfSlices"]           = nb_slices
+    meta["SFormMatrix"]              = sform
+    meta["SFormMatrixUnits"]         = "mm"
+    meta["SFormReorientationMode"]   = reorient
+    meta["SFormMatrixAxis"]          = ["X", "Y", "Z"]
+    meta["SFormMatrixDescription"]   = (
         "SForm matrix placing this 2D slice in a centered common volume reference. "
         "Chunk/stage coordinates are not used. "
-        "For non-padded slices, the physical field of view is based on "
-        "WidthPhysical/HeightPhysical when available. "
-        f"Slice center is resolution-invariant with reorient={reorient}."
+        "Physical center is derived from WidthPhysical/HeightPhysical "
+        "(raw CZI scene dimensions * native pixel size), making the center "
+        f"resolution-invariant across all downsampling factors. reorient={reorient}."
     )
 
     return meta
