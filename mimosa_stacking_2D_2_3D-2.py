@@ -54,9 +54,9 @@ class VolumeBuilder3D:
         ]
 
         meta["VoxelResolution"] = [
-            float(new_affine[0, 0]),
-            float(new_affine[1, 1]),
-            float(new_affine[2, 2]),
+            float(np.linalg.norm(new_affine[:3, 0])),
+            float(np.linalg.norm(new_affine[:3, 1])),
+            float(np.linalg.norm(new_affine[:3, 2])),
         ]
 
         meta["AffineMatrix"] = new_affine.tolist()
@@ -93,19 +93,30 @@ class VolumeBuilder3D:
         return volume, new_resolution
     
     @staticmethod
-    def build_new_affine_matrix(
-        volume_shape: tuple[int, int, int],
-        resolution: list[float],
-        reorient: str = "none",
+    def build_affine_from_padded_slice(
+        padded_slice_path: Path,
     ) -> np.ndarray:
-        return np.array(
-            bmeta.build_centered_affine(
-                shape=volume_shape,
-                resolution=resolution,
-                reorient=reorient,
-            ),
-            dtype=float,
-        )
+        """
+        Build the 3D volume affine from the SForm of a padded 2D slice.
+
+        The padded slices already contain the correct spatial reference.
+        Therefore, the volume should reuse the same affine convention.
+        """
+
+        img = nb.load(str(padded_slice_path))
+
+        affine = img.get_sform()
+        if affine is None or not np.any(affine):
+            affine = img.affine.copy()
+
+        affine = np.array(affine, dtype=float)
+
+        if affine.shape != (4, 4):
+            raise ValueError(
+                f"Invalid SForm shape in {padded_slice_path.name}: {affine.shape}"
+            )
+
+        return affine
     
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
@@ -221,21 +232,15 @@ class VolumeBuilder3D:
             )
 
         # Apply the requested 3D reorientation to the actual volume.
-        stack_of_slices, new_resolution = self.reorient_volume_3d(
-            stack_of_slices,
-            new_resolution,
-            self.reorient,
-        )
-
         final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
 
-        # Build the affine in the same centered common reference.
-        new_affine = VolumeBuilder3D.build_new_affine_matrix(
-            final_volume_shape,
-            new_resolution,
-            reorient=self.reorient,
-        )
+        reference_padded_slice = sorted_slices[0][2]
 
+        new_affine = VolumeBuilder3D.build_affine_from_padded_slice(
+
+            reference_padded_slice
+
+        )
         # When axes are flipped, the data is reversed but build_centered_affine
         # always produces a positive diagonal. We must encode the flips in the
         # affine (negative diagonal + positive origin) so that the 3D volume
