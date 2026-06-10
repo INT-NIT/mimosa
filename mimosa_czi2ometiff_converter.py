@@ -727,7 +727,7 @@ def main():
                 slice_indices=item["slices"],
                 sample_info=item["sample_info"],
                 sample_label=sample_label,
-                downsampling_factor=args.ds,
+                downsampling_factor=args.df,
                 channels=channels,
                 patch_size=args.patch_size,
             )

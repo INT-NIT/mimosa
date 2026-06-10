@@ -633,8 +633,8 @@ def build_centered_affine(
     if not is_identity_reorientation(reorient):
         _, flip_axes = parse_reorientation_mode(reorient)
         for ax in flip_axes:
-            affine[ax, ax] *= -1.0          # diagonal négatif
-            affine[ax, 3]  = -affine[ax, 3] # origine devient positive
+            affine[ax, ax] *= -1.0          
+            affine[ax, 3]  = -affine[ax, 3] 
 
     return affine.tolist()
     
