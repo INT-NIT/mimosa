@@ -93,11 +93,16 @@ class VolumeBuilder3D:
         return volume, new_resolution
     
     @staticmethod
-    def build_new_affine_matrix(volume_shape: tuple[int, int, int], resolution: list[float]) -> np.ndarray:
+    def build_new_affine_matrix(
+        volume_shape: tuple[int, int, int],
+        resolution: list[float],
+        reorient: str = "none",
+    ) -> np.ndarray:
         return np.array(
             bmeta.build_centered_affine(
                 shape=volume_shape,
                 resolution=resolution,
+                reorient=reorient,
             ),
             dtype=float,
         )
@@ -228,6 +233,7 @@ class VolumeBuilder3D:
         new_affine = VolumeBuilder3D.build_new_affine_matrix(
             final_volume_shape,
             new_resolution,
+            reorient=self.reorient,
         )
 
         # When axes are flipped, the data is reversed but build_centered_affine
@@ -235,11 +241,7 @@ class VolumeBuilder3D:
         # affine (negative diagonal + positive origin) so that the 3D volume
         # and the 2D slices (whose sforms encode flips via reorient_vec) share
         # the same physical coordinate convention — otherwise viewers interpolate.
-        if not bmeta.is_identity_reorientation(self.reorient):
-            _, flip_axes = bmeta.parse_reorientation_mode(self.reorient)
-            for ax in flip_axes:
-                new_affine[ax, ax] *= -1
-                new_affine[ax, 3]  *= -1
+    
 
         # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)

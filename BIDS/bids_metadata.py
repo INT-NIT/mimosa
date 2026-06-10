@@ -614,18 +614,28 @@ def build_centered_slice_sform(
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
+    reorient: str = "none",
 ) -> list[list[float]]:
     """
-    Build a centered affine for a 3D volume.
-    The volume is centered around physical coordinate (0,0,0).
-    resolution is expected in µm, converted internally to mm.
+    Build a centered affine for a 3D volume, encoding axis flips.
+
+    For flipped axes: diagonal is negative, origin is positive.
+    This ensures physical center = (0,0,0) regardless of flips,
+    and matches the convention used in build_centered_slice_sform.
     """
-    shape      = np.array(shape,      dtype=float)
-    resolution = np.array(resolution, dtype=float) * UM_TO_MM
+    shape_arr      = np.array(shape,      dtype=float)
+    resolution_mm  = np.array(resolution, dtype=float) * UM_TO_MM
 
     affine = np.eye(4, dtype=float)
-    affine[:3, :3] = np.diag(resolution)
-    affine[:3, 3] = -((shape - 1.0) * resolution) / 2.0
+    affine[:3, :3] = np.diag(resolution_mm)
+    affine[:3, 3]  = -((shape_arr - 1.0) * resolution_mm) / 2.0
+
+    if not is_identity_reorientation(reorient):
+        _, flip_axes = parse_reorientation_mode(reorient)
+        for ax in flip_axes:
+            affine[ax, ax] *= -1.0          # diagonal négatif
+            affine[ax, 3]  = -affine[ax, 3] # origine devient positive
+
     return affine.tolist()
     
 def add_sform_to_json_metadata(
