@@ -117,7 +117,46 @@ class VolumeBuilder3D:
             )
 
         return affine
-    
+    @staticmethod
+    def reorient_affine_like_data(
+        affine: np.ndarray,
+        old_shape: tuple[int, int, int],
+        mode: str,
+    ) -> np.ndarray:
+        """
+        Update an affine after applying the same transpose/flip operations
+        to the data array.
+
+        This keeps the physical/world coordinates consistent after the
+        volume data has been reoriented.
+        """
+        affine = np.array(affine, dtype=float)
+
+        if bmeta.is_identity_reorientation(mode):
+            return affine.copy()
+
+        transpose_axes, flip_axes = bmeta.parse_reorientation_mode(mode)
+
+        new_affine = np.eye(4, dtype=float)
+
+        # New axis i comes from old axis transpose_axes[i]
+        for new_axis, old_axis in enumerate(transpose_axes):
+            col = affine[:3, old_axis].copy()
+
+            if new_axis in flip_axes:
+                col *= -1.0
+
+            new_affine[:3, new_axis] = col
+
+        # Start from old origin
+        new_affine[:3, 3] = affine[:3, 3].copy()
+
+        # If an axis is flipped, the new voxel 0 corresponds to old voxel N-1
+        for new_axis, old_axis in enumerate(transpose_axes):
+            if new_axis in flip_axes:
+                new_affine[:3, 3] += affine[:3, old_axis] * (old_shape[old_axis] - 1)
+
+        return new_affine
     def build_one_volume(self, subject_dir: Path, channel: str, nii_paths: list[Path]) -> Path:
         if not nii_paths:
             raise ValueError(f"NO SLICE FOUND FOR {subject_dir.name} {channel}")
@@ -156,8 +195,6 @@ class VolumeBuilder3D:
         # Reference metadata from first valid slice.
         first_meta = sorted_slices[0][3]
 
-       
-
         pixel_size = first_meta.get("PixelSize")
         if pixel_size is None:
             raise ValueError(f"PixelSize not found in metadata for {sorted_slices[0][2].name}")
@@ -165,8 +202,6 @@ class VolumeBuilder3D:
         downsampled_res_x = float(pixel_size[0])
         downsampled_res_y = float(pixel_size[1])
 
-        # NumberOfSlices must come from JSON.
-        # This is written during the converter step from the YAML once.
         nb_slices = first_meta.get("NumberOfSlices")
         if nb_slices is None:
             raise ValueError(
@@ -183,11 +218,11 @@ class VolumeBuilder3D:
         width = int(first_data.shape[0])
         height = int(first_data.shape[1])
 
-        volume_shape = (width, height, nb_slices)
+        old_volume_shape = (width, height, nb_slices)
 
         # Allocate the full volume using NumberOfSlices.
         # Some slice positions may remain empty if missing in this channel.
-        stack_of_slices = np.zeros(volume_shape, dtype=np.float32)
+        stack_of_slices = np.zeros(old_volume_shape, dtype=np.float32)
 
         new_resolution = [
             downsampled_res_x,
@@ -231,22 +266,29 @@ class VolumeBuilder3D:
                 + (" ..." if len(missing_positions) > 20 else "")
             )
 
-        # Apply the requested 3D reorientation to the actual volume.
+        # The padded slices already define the correct spatial reference.
+        # We take the affine before reorienting the volume data.
+        reference_padded_slice = sorted_slices[0][2]
+        reference_affine = VolumeBuilder3D.build_affine_from_padded_slice(
+            reference_padded_slice
+        )
+
+        # Reorient the actual 3D data array.
+        stack_of_slices, new_resolution = self.reorient_volume_3d(
+            stack_of_slices,
+            new_resolution,
+            self.reorient,
+        )
+
         final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
 
-        reference_padded_slice = sorted_slices[0][2]
-
-        new_affine = VolumeBuilder3D.build_affine_from_padded_slice(
-
-            reference_padded_slice
-
+        # Reorient the affine using the same transpose/flip operations as the data.
+        # This keeps the physical position consistent after reorientation.
+        new_affine = VolumeBuilder3D.reorient_affine_like_data(
+            affine=reference_affine,
+            old_shape=old_volume_shape,
+            mode=self.reorient,
         )
-        # When axes are flipped, the data is reversed but build_centered_affine
-        # always produces a positive diagonal. We must encode the flips in the
-        # affine (negative diagonal + positive origin) so that the 3D volume
-        # and the 2D slices (whose sforms encode flips via reorient_vec) share
-        # the same physical coordinate convention — otherwise viewers interpolate.
-    
 
         # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
