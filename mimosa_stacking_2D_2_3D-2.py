@@ -230,6 +230,17 @@ class VolumeBuilder3D:
             new_resolution,
         )
 
+        # When axes are flipped, the data is reversed but build_centered_affine
+        # always produces a positive diagonal. We must encode the flips in the
+        # affine (negative diagonal + positive origin) so that the 3D volume
+        # and the 2D slices (whose sforms encode flips via reorient_vec) share
+        # the same physical coordinate convention — otherwise viewers interpolate.
+        if not bmeta.is_identity_reorientation(self.reorient):
+            _, flip_axes = bmeta.parse_reorientation_mode(self.reorient)
+            for ax in flip_axes:
+                new_affine[ax, ax] *= -1
+                new_affine[ax, 3]  *= -1
+
         # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
         out_img.set_sform(new_affine, code=1)

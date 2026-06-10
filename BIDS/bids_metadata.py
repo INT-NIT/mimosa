@@ -579,6 +579,7 @@ def build_centered_affine(
     affine[:3, :3] = np.diag(resolution)
     affine[:3, 3] = -((shape - 1.0) * resolution) / 2.0
     return affine.tolist()
+
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
@@ -610,8 +611,8 @@ def add_sform_to_json_metadata(
     pixel_size = meta["PixelSize"]
 
     # Width/Height in pixels of the exported (downsampled) image
-    exported_width  = meta.get("WidthPixels-DS")
-    exported_height = meta.get("HeightPixels-DS")
+    exported_width  = meta.get("WidthPhysical-Native")
+    exported_height = meta.get("HeightPhysical-Native")
 
     if exported_width is None or exported_height is None:
         # Fallback for old JSONs that used "Width"/"Height"
@@ -626,8 +627,8 @@ def add_sform_to_json_metadata(
 
     sform = build_centered_slice_sform(
         pixel_size      = pixel_size,
-        exported_width  = int(exported_width),
-        exported_height = int(exported_height),
+        exported_width  = float(exported_width),
+        exported_height = float(exported_height),
         slice_position  = slice_position,
         nb_slices       = nb_slices,
         thickness       = original_thickness,
