@@ -501,6 +501,61 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
         return transpose_axes, flip_axes
 
 
+def build_centered_slice_sform_from_native_extent(
+    pixel_size: list[float],
+    native_pixel_size: list[float],
+    width_physical_native: float,
+    height_physical_native: float,
+    slice_position: int,
+    nb_slices: int,
+    thickness: float,
+    reorient: str = "none",
+) -> list[list[float]]:
+
+    px = float(pixel_size[0]) * UM_TO_MM
+    py = float(pixel_size[1]) * UM_TO_MM
+
+    native_px = float(native_pixel_size[0]) * UM_TO_MM
+    native_py = float(native_pixel_size[1]) * UM_TO_MM
+
+    th = float(thickness) * UM_TO_MM
+
+    w_mm = float(width_physical_native) * UM_TO_MM
+    h_mm = float(height_physical_native) * UM_TO_MM
+
+    center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
+
+    origin = np.array([
+        -(w_mm - native_px) / 2.0,
+        -(h_mm - native_py) / 2.0,
+        center_z,
+    ], dtype=float)
+
+    col_x = np.array([px, 0.0, 0.0], dtype=float)
+    col_y = np.array([0.0, py, 0.0], dtype=float)
+    col_z = np.array([0.0, 0.0, th], dtype=float)
+
+    if not is_identity_reorientation(reorient):
+        transpose_axes, flip_axes = parse_reorientation_mode(reorient)
+
+        def reorient_vec(v: np.ndarray) -> np.ndarray:
+            v_new = np.array([v[transpose_axes[i]] for i in range(3)], dtype=float)
+            for ax in flip_axes:
+                v_new[ax] *= -1.0
+            return v_new
+
+        col_x = reorient_vec(col_x)
+        col_y = reorient_vec(col_y)
+        col_z = reorient_vec(col_z)
+        origin = reorient_vec(origin)
+
+    sform = np.eye(4, dtype=float)
+    sform[:3, 0] = col_x
+    sform[:3, 1] = col_y
+    sform[:3, 2] = col_z
+    sform[:3, 3] = origin
+
+    return sform.tolist()
 
 def build_centered_slice_sform(
     pixel_size: list[float],
@@ -512,33 +567,27 @@ def build_centered_slice_sform(
     reorient: str = "none",
 ) -> list[list[float]]:
     """
-    Build a 2D slice SForm in a common centered volume reference.
+    Build SForm from exported image dimensions in pixels.
 
-    Origin = geometric center of the exported image.
-    Works for both non-padded and padded slices:
-        - non-padded : exported_width * px ≈ width_physical_um * UM_TO_MM
-        - padded     : content is symmetrically padded so centering the
-                       exported image automatically centers the content.
-
-    Z position is derived from slice_position in the global stack:
-        center_z = (slice_position - (nb_slices - 1) / 2) * thickness_mm
+    This is mainly used for padded slices, where the full padded image grid
+    must be described using target_width/target_height and exported PixelSize.
     """
 
     px = float(pixel_size[0]) * UM_TO_MM
     py = float(pixel_size[1]) * UM_TO_MM
-    th = float(thickness)     * UM_TO_MM
+    th = float(thickness) * UM_TO_MM
 
     center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
 
     origin = np.array([
-        -((float(exported_width)  - 1.0) * px) / 2.0,
+        -((float(exported_width) - 1.0) * px) / 2.0,
         -((float(exported_height) - 1.0) * py) / 2.0,
         center_z,
     ], dtype=float)
 
-    col_x = np.array([px,  0.0, 0.0], dtype=float)
-    col_y = np.array([0.0,  py, 0.0], dtype=float)
-    col_z = np.array([0.0, 0.0,  th], dtype=float)
+    col_x = np.array([px, 0.0, 0.0], dtype=float)
+    col_y = np.array([0.0, py, 0.0], dtype=float)
+    col_z = np.array([0.0, 0.0, th], dtype=float)
 
     if not is_identity_reorientation(reorient):
         transpose_axes, flip_axes = parse_reorientation_mode(reorient)
@@ -549,9 +598,9 @@ def build_centered_slice_sform(
                 v_new[ax] *= -1.0
             return v_new
 
-        col_x  = reorient_vec(col_x)
-        col_y  = reorient_vec(col_y)
-        col_z  = reorient_vec(col_z)
+        col_x = reorient_vec(col_x)
+        col_y = reorient_vec(col_y)
+        col_z = reorient_vec(col_z)
         origin = reorient_vec(origin)
 
     sform = np.eye(4, dtype=float)
@@ -561,7 +610,6 @@ def build_centered_slice_sform(
     sform[:3, 3] = origin
 
     return sform.tolist()
-
 
 def build_centered_affine(
     shape: tuple[float, float, float],
@@ -579,7 +627,7 @@ def build_centered_affine(
     affine[:3, :3] = np.diag(resolution)
     affine[:3, 3] = -((shape - 1.0) * resolution) / 2.0
     return affine.tolist()
-
+    
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
@@ -611,8 +659,8 @@ def add_sform_to_json_metadata(
     pixel_size = meta["PixelSize"]
 
     # Width/Height in pixels of the exported (downsampled) image
-    exported_width  = meta.get("WidthPhysical-Native")
-    exported_height = meta.get("HeightPhysical-Native")
+    exported_width  = meta.get("WidthPixels-DS")
+    exported_height = meta.get("HeightPixels-DS")
 
     if exported_width is None or exported_height is None:
         # Fallback for old JSONs that used "Width"/"Height"
@@ -625,14 +673,15 @@ def add_sform_to_json_metadata(
             "Expected 'WidthPixels-DS'/'HeightPixels-DS' or 'Width'/'Height'."
         )
 
-    sform = build_centered_slice_sform(
-        pixel_size      = pixel_size,
-        exported_width  = float(exported_width),
-        exported_height = float(exported_height),
-        slice_position  = slice_position,
-        nb_slices       = nb_slices,
-        thickness       = original_thickness,
-        reorient        = reorient,
+    sform = build_centered_slice_sform_from_native_extent(
+        pixel_size=meta["PixelSize"],
+        native_pixel_size=meta["NativePixelSize"],
+        width_physical_native=meta["WidthPhysical-Native"],
+        height_physical_native=meta["HeightPhysical-Native"],
+        slice_position=slice_position,
+        nb_slices=nb_slices,
+        thickness=original_thickness,
+        reorient=reorient,
     )
 
     meta["SlicePosition"]          = slice_position
@@ -642,12 +691,13 @@ def add_sform_to_json_metadata(
     meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixAxis"]        = ["X", "Y", "Z"]
     meta["SFormMatrixDescription"] = (
-        "SForm matrix placing this 2D slice in a centered common volume reference. "
-        "Chunk/stage coordinates are not used. "
-        "Origin is the geometric center of the exported image "
-        "(WidthPixels-DS * PixelSize / 2), valid for both non-padded and padded slices. "
-        f"reorient={reorient}."
-    )
+    "SForm matrix placing this 2D slice in a centered common volume reference. "
+    "Chunk/stage coordinates are not used. "
+    "For non-padded slices, the origin is computed from the native physical extent "
+    "using WidthPhysical-Native, HeightPhysical-Native and NativePixelSize. "
+    "The SForm spacing uses PixelSize, which corresponds to the exported image resolution. "
+    f"reorient={reorient}."
+)
 
     return meta
 def write_sform_to_nifti_and_json(

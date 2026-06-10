@@ -299,6 +299,8 @@ class MimosaReader:
 
         meta = {
             "Manufacturer": manufacturer,
+            "NativePixelSize": [float(px_um_x), float(px_um_y)],
+            "NativePixelSizeUnits": unit,
             "PixelSize": out_pix,
             "PixelSizeUnits": out_unit,
             "SampleStaining": stain,

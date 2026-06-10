@@ -131,12 +131,13 @@ class SlicePreprocessor:
 
         pad_x_before = round(shift_x / 2)
         pad_y_before = round(shift_y / 2)
-
+        pad_x_after = shift_x - pad_x_before
+        pad_y_after = shift_y - pad_y_before
         padded_data_2d = np.pad(
             data_2d,
             (
-                (pad_x_before, shift_x - pad_x_before),
-                (pad_y_before, shift_y - pad_y_before),
+                (pad_x_before, pad_x_after),
+                (pad_y_before, pad_y_after),
             ),
             mode="constant",
             constant_values=0,
@@ -148,17 +149,13 @@ class SlicePreprocessor:
         slice_position = int(meta["SlicePosition"])
         nb_slices = int(meta["NumberOfSlices"])
 
-        preproc_sform = np.array(
-            bmeta.build_centered_slice_sform(
-                pixel_size      = meta["PixelSize"],
-                exported_width  = target_width,
-                exported_height = target_height,
-                slice_position  = slice_position,
-                nb_slices       = nb_slices,
-                thickness       = self.original_thickness,
-                reorient        = self.reorient,
-            ),
-            dtype=float,
+        nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
+
+        preproc_sform = nonpadded_sform.copy()
+        preproc_sform[:3, 3] = (
+            nonpadded_sform[:3, 3]
+            - pad_x_before * nonpadded_sform[:3, 0]
+            - pad_y_before * nonpadded_sform[:3, 1]
         )
 
         out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
