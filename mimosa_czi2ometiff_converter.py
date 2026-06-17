@@ -558,6 +558,7 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                     photometric="minisblack",
                     description=enriched_xml,
                     metadata=None,
+                    compression="zlib",
                 )
 
             print("Written:", output_path)
