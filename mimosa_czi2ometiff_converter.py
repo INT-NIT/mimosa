@@ -640,7 +640,7 @@ def main():
     )
 
     cfg = bmeta.update_yaml_with_slices(metadata_path)
-
+    MimosaReader.load_correspondence_from_yaml(cfg)   
     session = bm.BIDSSession(str(bids_root))
 
     sessions_by_sub = {}
