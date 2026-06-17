@@ -243,8 +243,7 @@ def expand_slice_ranges(yaml_path: str) -> None:
                 print(f"  EXPANDED {filename}: [{start}, {end}, {step}] → {expanded}")
 
             sample["files"] = updated_files
-            print(f"  → {len(updated_files)} files kept for {sample['sample_id']}")
-
+            print(f"  → {len(updated_files)} files kept for {sample.get('participant_id', 'unknown')}")
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(
             cfg,
