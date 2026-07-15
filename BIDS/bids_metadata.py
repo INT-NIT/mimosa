@@ -502,14 +502,16 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
 
 
 def build_centered_slice_sform_from_native_extent(
-    pixel_size: list[float],
-    native_pixel_size: list[float],
-    width_physical_native: float,
-    height_physical_native: float,
-    slice_position: int,
-    nb_slices: int,
-    thickness: float,
-    reorient: str = "none",
+    pixel_size,
+    native_pixel_size,
+    width_physical_native,
+    height_physical_native,
+    slice_position,
+    nb_slices,
+    thickness,
+    width_ds,
+    height_ds,
+    reorient="none",
 ) -> list[list[float]]:
 
     px = float(pixel_size[0]) * UM_TO_MM
@@ -526,8 +528,8 @@ def build_centered_slice_sform_from_native_extent(
     center_z = (float(slice_position) - (float(nb_slices) - 1.0) / 2.0) * th
 
     origin = np.array([
-        -(w_mm - native_px) / 2.0,
-        -(h_mm - native_py) / 2.0,
+        -((width_ds - 1) * px) / 2.0,
+        -((height_ds - 1) * py) / 2.0,
         center_z,
     ], dtype=float)
 

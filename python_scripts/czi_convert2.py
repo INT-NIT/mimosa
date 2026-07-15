@@ -88,7 +88,8 @@ def czi2bitmapHPC(
                     if write_nii:
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
-
+                        width_ds = arr.shape[0]
+                        height_ds = arr.shape[1]
                         meta_nii = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
