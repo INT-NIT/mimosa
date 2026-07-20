@@ -74,13 +74,17 @@ def czi2bitmapHPC(
                     if write_tif:
                         out_path = os.path.join(deriv_folder, base + ".tif")
                         tf.imwrite(out_path, channel_images[c], imagej=True)
+                        tiff_array = channel_images[c]
                         meta_tiff = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
                             downsampling_factor=effective_downsampling_factor,
                             is_nifti=False,
-                            axis_swap=False,
-                            scene_idx=scene_idx
+                            scene_idx=scene_idx,
+                            exported_shape=(
+                                int(tiff_array.shape[1]),
+                                int(tiff_array.shape[0]),
+                            ),
                         )
                         bmeta.write_micr_sidecar_json(out_path, meta_tiff)
                         print(f"  -> BIDS raw: {os.path.relpath(out_path, bids_root_path)}")
@@ -88,25 +92,24 @@ def czi2bitmapHPC(
                     if write_nii:
                         out_path = os.path.join(deriv_folder, base + ".nii.gz")
                         arr = np.swapaxes(channel_images[c], 0, 1)
-                        width_ds = arr.shape[0]
-                        height_ds = arr.shape[1]
                         meta_nii = reader.get_converted_file_metadata(
                             rect=rect,
                             stain=stain,
                             downsampling_factor=effective_downsampling_factor,
                             is_nifti=True,
-                            axis_swap=True,
                             scene_idx=scene_idx,
-
+                            exported_shape=(
+                                int(arr.shape[0]),
+                                int(arr.shape[1]),
+                            ),
                         )
 
                         if slice_position_map is not None:
                             meta_nii = bmeta.add_sform_to_json_metadata(
-                                meta=meta_nii,
-                                slice_position_map=slice_position_map,
-                                original_thickness=original_thickness,
-                                reorient=reorient
-                            )
+                            meta=meta_nii,
+                            slice_position_map=slice_position_map,
+                            original_thickness=original_thickness,
+                        )
 
                         sform = np.array(meta_nii.get("SFormMatrix", np.eye(4)), dtype=float)
 

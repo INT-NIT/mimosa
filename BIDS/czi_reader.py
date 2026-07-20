@@ -214,56 +214,103 @@ class MimosaReader:
                 return name
         return "Unknown"
 
-    def get_chunk_transform_matrix(self, rect, pixel_size_um, downsampling_factor, slice_index=None):
+    def get_chunk_transform_matrix(
+        self,
+        rect,
+        pixel_size_um: tuple[float, float],
+        downsampling_factor: float,
+    ):
         """
-        Build BIDS ChunkTransformationMatrix.
+        Build the 2D transformation of a CZI scene.
 
-        It maps local pixels of the saved image to physical coordinates
-        in the slide/sample coordinate system.
+        The matrix maps pixels of the exported downsampled image to
+        physical coordinates in the original CZI slide coordinate system.
 
-        For a downsampled image:
-            X_slide_um = out_px_um_x * x_downsampled_pixel + x0_um
-            Y_slide_um = out_px_um_y * y_downsampled_pixel + y0_um
+        Coordinates and pixel sizes are expressed in micrometers.
 
-        rect.x and rect.y are assumed to be in original CZI pixel coordinates.
-        PixelSizeUnits is micrometers.
+        Parameters
+        ----------
+        rect
+            Rectangle of the scene in native CZI pixel coordinates:
+            x, y, width, height.
+
+        pixel_size_um
+            Native physical pixel size:
+            (pixel_size_x_um, pixel_size_y_um).
+
+        downsampling_factor
+            Effective spatial downsampling factor applied to the image.
+
+        Returns
+        -------
+        dict
+            Native scene dimensions, physical extents, output pixel size
+            and ChunkTransformationMatrix.
         """
 
-        px_um_x, px_um_y = pixel_size_um
+        px_native_x_um = float(pixel_size_um[0])
+        px_native_y_um = float(pixel_size_um[1])
+        factor = float(downsampling_factor)
 
-        # Pixel size of the saved downsampled image
-        out_px_um_x = float(px_um_x) * float(downsampling_factor)
-        out_px_um_y = float(px_um_y) * float(downsampling_factor)
+        if factor <= 0:
+            raise ValueError(
+                f"downsampling_factor must be positive, got {factor}"
+            )
 
         try:
-            x_px = float(rect.x)
-            y_px = float(rect.y)
-            w_px = float(rect.w)
-            h_px = float(rect.h)
-        except Exception:
-            x_px = float(rect[0])
-            y_px = float(rect[1])
-            w_px = float(rect[2])
-            h_px = float(rect[3])
-        
-        # Position of the scene origin in slide coordinates, in micrometers
-        x0_um = x_px * float(px_um_x)
-        y0_um = y_px * float(px_um_y)
-        w_native_um = w_px * float(px_um_x)  # taille physique réelle
-        h_native_um = h_px * float(px_um_y) 
-        # Size of the saved downsampled image, in pixels
-        w_downsampled = w_px / float(downsampling_factor)
-        h_downsampled = h_px / float(downsampling_factor)
+            x_native_px = float(rect.x)
+            y_native_px = float(rect.y)
+            width_native_px = int(rect.w)
+            height_native_px = int(rect.h)
+        except AttributeError:
+            x_native_px = float(rect[0])
+            y_native_px = float(rect[1])
+            width_native_px = float(rect[2])
+            height_native_px = float(rect[3])
 
-        # For now, keep ChunkTransformationMatrix as 2D.
-        # SliceIndex stays as a separate metadata field.
-        mat = [
-            [out_px_um_x, 0.0, x0_um],
-            [0.0, out_px_um_y, y0_um],
-            [0.0, 0.0, 1.0],
+        # Physical resolution of the exported downsampled image.
+        pixel_size_x_ds_um = px_native_x_um * factor
+        pixel_size_y_ds_um = px_native_y_um * factor
+
+        # Physical position of the native scene origin in the CZI slide.
+        scene_origin_x_um = x_native_px * px_native_x_um
+        scene_origin_y_um = y_native_px * px_native_y_um
+
+        # Native physical extent of the complete scene.
+        width_native_um = width_native_px * px_native_x_um
+        height_native_um = height_native_px * px_native_y_um
+
+        chunk_transform = [
+            [
+                pixel_size_x_ds_um,
+                0.0,
+                scene_origin_x_um,
+            ],
+            [
+                0.0,
+                pixel_size_y_ds_um,
+                scene_origin_y_um,
+            ],
+            [
+                0.0,
+                0.0,
+                1.0,
+            ],
         ]
-        return mat, ["X", "Y"], [out_px_um_x, out_px_um_y], "um", w_downsampled, h_downsampled , w_native_um, h_native_um 
-    
+
+        return {
+            "ChunkTransformationMatrix": chunk_transform,
+            "ChunkTransformationMatrixAxis": ["X", "Y"],
+            "NativeWidthPixels": width_native_px,
+            "NativeHeightPixels": height_native_px,
+            "NativeWidthPhysical": width_native_um,
+            "NativeHeightPhysical": height_native_um,
+            "OutputPixelSize": [
+                pixel_size_x_ds_um,
+                pixel_size_y_ds_um,
+            ],
+            "OutputPixelSizeUnits": "um",
+        }
     def get_slice_index_for_scene(self, scene_idx: int) -> int | None:
         """returns slice index for a given scene from YAML"""
 
@@ -283,50 +330,109 @@ class MimosaReader:
         self,
         rect,
         stain: str,
-        downsampling_factor: int,
+        downsampling_factor: float,
         is_nifti: bool,
-        axis_swap: bool = False,
-        scene_idx: int = 0
+        scene_idx: int = 0,
+        exported_shape: tuple[int, int] | None = None,
     ):
-        slice_idx = self.get_slice_index_for_scene(scene_idx)
+        """
+        Build metadata for an exported TIFF or NIfTI image.
+
+        exported_shape must describe the actual saved image grid:
+            (size_x, size_y)
+
+        For a NIfTI image, this should normally be:
+            exported_shape = arr.shape[:2]
+
+        It must not be estimated from the native CZI dimensions.
+        """
+
+        slice_index = self.get_slice_index_for_scene(scene_idx)
 
         manufacturer = self.get_manufacturer()
-        px_um_x, px_um_y, unit = self.get_pixel_size_um()
-        acq_sig = self.get_acq_signature()
-        chunk_mat, axes, out_pix, out_unit, w_downsampled, h_downsampled ,w_native_um, h_native_um = self.get_chunk_transform_matrix(
-            rect, (px_um_x, px_um_y), downsampling_factor=downsampling_factor,slice_index=slice_idx
+        px_native_x_um, px_native_y_um, native_unit = (
+            self.get_pixel_size_um()
+        )
+
+        scene_geometry = self.get_chunk_transform_matrix(
+            rect=rect,
+            pixel_size_um=(
+                px_native_x_um,
+                px_native_y_um,
+            ),
+            downsampling_factor=downsampling_factor,
         )
 
         meta = {
             "Manufacturer": manufacturer,
-            "NativePixelSize": [float(px_um_x), float(px_um_y)],
-            "NativePixelSizeUnits": unit,
-            "PixelSize": out_pix,
-            "PixelSizeUnits": out_unit,
+
+            "NativePixelSize": [
+                float(px_native_x_um),
+                float(px_native_y_um),
+            ],
+            "NativePixelSizeUnits": native_unit,
+
+            "PixelSize": scene_geometry["OutputPixelSize"],
+            "PixelSizeUnits": scene_geometry[
+                "OutputPixelSizeUnits"
+            ],
+
+            "NativeWidthPixels": scene_geometry[
+                "NativeWidthPixels"
+            ],
+            "NativeHeightPixels": scene_geometry[
+                "NativeHeightPixels"
+            ],
+
+            "WidthPhysical-Native": scene_geometry[
+                "NativeWidthPhysical"
+            ],
+            "HeightPhysical-Native": scene_geometry[
+                "NativeHeightPhysical"
+            ],
+
             "SampleStaining": stain,
-            "AcquisitionSignature": acq_sig,
+            "AcquisitionSignature": self.get_acq_signature(),
             "AcquisitionDate": self.get_session(),
-            "ChunkTransformationMatrix": chunk_mat,
-            "ChunkTransformationMatrixAxis": axes,
-            "WidthPixels-DS": w_downsampled,
-            "HeightPixels-DS": h_downsampled,
-            "WidthPhysical-Native": w_native_um,   
-            "HeightPhysical-Native": h_native_um,
-            "DownsamplingFactor": downsampling_factor
+
+            "ChunkTransformationMatrix": scene_geometry[
+                "ChunkTransformationMatrix"
+            ],
+            "ChunkTransformationMatrixAxis": scene_geometry[
+                "ChunkTransformationMatrixAxis"
+            ],
+
+            "DownsamplingFactor": float(downsampling_factor),
         }
 
-        if slice_idx is not None:
-            meta["SliceIndex"] = slice_idx   
+        if exported_shape is not None:
+            if len(exported_shape) != 2:
+                raise ValueError(
+                    "exported_shape must contain exactly "
+                    "(size_x, size_y)"
+                )
+
+            size_x = int(exported_shape[0])
+            size_y = int(exported_shape[1])
+
+            if size_x <= 0 or size_y <= 0:
+                raise ValueError(
+                    f"Invalid exported shape: {exported_shape}"
+                )
+
+            meta["ExportedShape"] = [size_x, size_y]
+            meta["WidthPixels-DS"] = size_x
+            meta["HeightPixels-DS"] = size_y
+
+        if slice_index is not None:
+            meta["SliceIndex"] = int(slice_index)
 
         if is_nifti:
             meta["ConvertedTo"] = "NIfTI"
-            if axis_swap:
-                meta["AxisSwapApplied"] = "swapaxes(0,1)"
         else:
             meta["ConvertedTo"] = "TIFF"
 
-        return meta 
-
+        return meta
     def get_summary(self):
         return {
             "sub": self.get_subject(),

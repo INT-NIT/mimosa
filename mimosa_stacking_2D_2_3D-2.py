@@ -268,9 +268,16 @@ class VolumeBuilder3D:
 
         # The padded slices already define the correct spatial reference.
         # We take the affine before reorienting the volume data.
+        reference_position = int(sorted_slices[0][0])
         reference_padded_slice = sorted_slices[0][2]
+
         reference_affine = VolumeBuilder3D.build_affine_from_padded_slice(
             reference_padded_slice
+        )
+
+        # Ramener l'origine à la position correspondant à volume[:, :, 0].
+        reference_affine[:3, 3] -= (
+            reference_position * reference_affine[:3, 2]
         )
 
         # Reorient the actual 3D data array.
