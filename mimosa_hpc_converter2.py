@@ -30,7 +30,7 @@ def main():
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     parser.add_argument(
-        "-threads", type=int, default=czi.READ_THREADS,
+        "--threads", type=int, default=czi.READ_THREADS,
         help=(
             "Threads used to produce ONE image: its bands are read and reduced "
             "concurrently. This is the setting that makes a single NIfTI come "
@@ -39,7 +39,7 @@ def main():
         ),
     )
     parser.add_argument(
-        "-block-value", type=str, default="decimate", choices=("decimate", "mean"),
+        "--block-value", type=str, default="decimate", choices=("decimate", "mean"),
         help=(
             "How to reduce each native block. "
             "'decimate' keeps the native pixel k*f, bit for bit "
