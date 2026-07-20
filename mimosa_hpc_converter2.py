@@ -29,6 +29,16 @@ def main():
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
+    parser.add_argument(
+        "--reduce", type=str, default="decimate", choices=("decimate", "mean"),
+        help=(
+            "How to reduce each native block. "
+            "'decimate' keeps the native pixel k*f, bit for bit "
+            "(desc-downsampled). 'mean' averages the f*f native block, which "
+            "is more accurate for quantification (desc-downsampledavg). "
+            "Both are computed from native data: the ZEN pyramid is never used."
+        ),
+    )
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -49,6 +59,7 @@ def main():
 
     res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
     print("Exported resolutions:", ", ".join(res_label.values()))
+    print("Reduction method   :", args.reduce)
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
@@ -167,6 +178,7 @@ def main():
                     slice_position_map=slice_position_map,
                     original_thickness=args.original_thickness,
                     reorient=args.reorient,
+                    reduce_method=args.reduce,
                 )
 
         except Exception as e:

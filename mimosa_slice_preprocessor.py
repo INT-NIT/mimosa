@@ -28,7 +28,12 @@ class SlicePreprocessor:
         relative_path = nii_path.relative_to(self.downsampled_root)
         name = relative_path.name
 
-        if "_desc-downsampled_" in name:
+        # Both reduction methods are accepted: desc-downsampled (decimation)
+        # and desc-downsampledavg (block mean). The longer one is tested first,
+        # otherwise "_desc-downsampled" would never match "downsampledavg".
+        if "_desc-downsampledavg_" in name:
+            name = name.replace("_desc-downsampledavg_", "_desc-padded_")
+        elif "_desc-downsampled_" in name:
             name = name.replace("_desc-downsampled_", "_desc-padded_")
         elif "_FLUO.nii.gz" in name:
             name = name.replace("_FLUO.nii.gz", "_desc-padded_FLUO.nii.gz")

@@ -24,6 +24,58 @@ BAND_BUDGET_PIXELS = 64_000_000
 ROW_SKIP_MIN_FACTOR = 2048
 
 
+# Supported reduction methods.
+#   "decimate" : keep native pixel k*f. No value is ever invented, but 1 pixel
+#                out of f*f is kept (1 out of 65536 at res-8x).
+#   "mean"     : average the f*f native block. Values are computed here, from
+#                native data, with a documented and reproducible algorithm.
+#                This is NOT the ZEN pyramid, whose algorithm is unknown.
+REDUCE_METHODS = ("decimate", "mean")
+
+
+def _reduce_block(band: np.ndarray, factor: int, method: str) -> np.ndarray:
+    """Reduce a native band by ``factor`` using ``method``.
+
+    Blocks never straddle two bands: band heights are multiples of the largest
+    requested factor, so the result is identical to reducing the whole scene
+    at once. Partial blocks at the right/bottom edge are handled exactly
+    (averaged over the pixels that actually exist).
+    """
+    if method == "decimate":
+        return band[::factor, ::factor]
+
+    if method != "mean":
+        raise ValueError(f"Unknown reduce method: {method!r}")
+
+    height, width = band.shape
+    rows = np.arange(0, height, factor)
+    cols = np.arange(0, width, factor)
+
+    # Accumulate exactly. float32 is NOT usable here: a 64x64 block of uint16
+    # sums up to 2.7e8, well past the 2**24 exact-integer limit of float32,
+    # which silently corrupts res-6x and beyond. Integer input therefore
+    # accumulates in int64 (exact), float input in float64.
+    is_integer = np.issubdtype(band.dtype, np.integer)
+    accum_dtype = np.int64 if is_integer else np.float64
+
+    # reduceat writes straight into the reduced-size output, so the full band
+    # is never copied to the wider dtype.
+    acc = np.add.reduceat(band, rows, axis=0, dtype=accum_dtype)
+    acc = np.add.reduceat(acc, cols, axis=1, dtype=accum_dtype)
+
+    counts_y = np.diff(np.append(rows, height))
+    counts_x = np.diff(np.append(cols, width))
+    counts = (counts_y[:, None] * counts_x[None, :]).astype(np.float64)
+
+    mean = acc.astype(np.float64) / counts
+
+    if is_integer:
+        info = np.iinfo(band.dtype)
+        mean = np.clip(np.rint(mean), info.min, info.max)
+
+    return mean.astype(band.dtype)
+
+
 def _read_native_band(czidoc, x0, y0, width, height, scene_idx, channel_idx):
     """Read a native-resolution band. No ``zoom``, therefore no interpolation."""
     band = np.asarray(
@@ -53,14 +105,21 @@ def read_decimated_multi(
     scene_idx: int,
     channel_idx: int,
     exponents,
+    reduce_method: str = "decimate",
     band_budget_pixels: int = BAND_BUDGET_PIXELS,
 ) -> dict[int, np.ndarray]:
     """Produce every requested resolution from a single native streaming pass.
 
-    Each output is a strict decimation ``native[::f, ::f]`` with ``f = 2**e``.
-    The CZI is never read with ``zoom``, so no interpolation, no resampling and
-    no value blending ever happens: every exported pixel is a native pixel,
-    bit for bit.
+    The CZI is never read with ``zoom``. Measured on real MIMoSA data, ``zoom``
+    is 90x to 700x faster than a native read, which is only possible because it
+    serves ZEN pyramid levels instead of native pixels: its values do not match
+    ``native[::f, ::f]``, and it silently drops the trailing rows/columns
+    (``floor`` instead of ``ceil``). It is therefore never used here.
+
+    ``reduce_method="decimate"`` gives ``native[::f, ::f]``: every exported
+    pixel is a native pixel, bit for bit.
+    ``reduce_method="mean"`` averages each ``f x f`` native block, computed
+    here from native data with a reproducible algorithm.
 
     Because all factors are powers of two and every band starts on a multiple
     of the largest factor, all resolutions sample the same native grid and are
@@ -76,6 +135,10 @@ def read_decimated_multi(
         raise ValueError("At least one downsampling exponent is required")
     if exponents[0] < 0:
         raise ValueError("Downsampling exponents must be >= 0")
+    if reduce_method not in REDUCE_METHODS:
+        raise ValueError(
+            f"reduce_method must be one of {REDUCE_METHODS}, got {reduce_method!r}"
+        )
 
     x0, y0, width, height = (int(v) for v in roi)
     factors = {e: 2**e for e in exponents}
@@ -93,8 +156,9 @@ def read_decimated_multi(
 
     # --- Fast path: when one output row is further apart than a whole CZI
     # sub-block, read only the native rows that are actually kept. The bigger
-    # the downsampling, the fewer bytes are decompressed. -------------------
-    skip_rows = factor_min >= ROW_SKIP_MIN_FACTOR
+    # the downsampling, the fewer bytes are decompressed. Only valid for
+    # decimation: a block mean needs every native row of the block. ---------
+    skip_rows = reduce_method == "decimate" and factor_min >= ROW_SKIP_MIN_FACTOR
 
     y = 0
     while y < height:
@@ -126,7 +190,7 @@ def read_decimated_multi(
         for exponent, factor in factors.items():
             if skip_rows and (y % factor) != 0:
                 continue
-            block = band[::factor, ::factor]
+            block = _reduce_block(band, factor, reduce_method)
             row0 = y // factor
             outputs[exponent][row0 : row0 + block.shape[0], :] = block
 
@@ -148,13 +212,22 @@ def czi2bitmapHPC(
     slice_position_map=None,
     original_thickness: float = 100,
     reorient: str = "none",
+    reduce_method: str = "decimate",
 ):
     """Export one CZI to every requested resolution in a single native pass.
 
     ``downsampling_factor`` is an exponent, or a list of exponents. Passing
     several exponents at once costs almost nothing: the native data is read
-    only once and decimated to each resolution on the fly.
+    only once and reduced to each resolution on the fly.
+
+    ``reduce_method`` is "decimate" (native pixels, bit for bit) or "mean"
+    (average of each native block). Outputs are tagged with a different BIDS
+    ``desc-`` so both can coexist in the same dataset.
     """
+    if reduce_method not in REDUCE_METHODS:
+        raise ValueError(
+            f"reduce_method must be one of {REDUCE_METHODS}, got {reduce_method!r}"
+        )
     if isinstance(downsampling_factor, (list, tuple, set)):
         exponents = sorted({int(e) for e in downsampling_factor})
     else:
@@ -171,7 +244,9 @@ def czi2bitmapHPC(
             )
         res_labels = {exponents[0]: res_label}
 
-    desc_label = "downsampled"
+    # "decimate" keeps the historical desc, so existing datasets and the
+    # slice preprocessor keep working unchanged.
+    desc_label = "downsampled" if reduce_method == "decimate" else "downsampledavg"
     czifile_path = os.path.join(pathin, czifilename)
 
     output_format = output_format.lower().strip()
@@ -227,6 +302,7 @@ def czi2bitmapHPC(
                         scene_idx=scene_idx,
                         channel_idx=channel_idx,
                         exponents=exponents,
+                        reduce_method=reduce_method,
                     )
 
                     stain = f"C{channel_idx}"
@@ -264,6 +340,8 @@ def czi2bitmapHPC(
                                     int(channel_image.shape[0]),
                                 ),
                             )
+                            meta_tiff["ReductionMethod"] = reduce_method
+                            meta_tiff["ReductionSource"] = "native CZI (no zoom)"
                             bmeta.write_micr_sidecar_json(tif_path, meta_tiff)
                             print(
                                 "  -> BIDS raw: "
@@ -288,6 +366,9 @@ def czi2bitmapHPC(
                                     int(arr.shape[1]),
                                 ),
                             )
+
+                            meta_nii["ReductionMethod"] = reduce_method
+                            meta_nii["ReductionSource"] = "native CZI (no zoom)"
 
                             if slice_position_map is not None:
                                 meta_nii = bmeta.add_sform_to_json_metadata(
