@@ -130,7 +130,8 @@ def czi2bitmapHPC(
         )
         os.makedirs(deriv_folder, exist_ok=True)
 
-        for scene_idx, rect in enumerate(scenes):
+        for scene_idx in range(len(scenes)):
+            rect = scenes[scene_idx]
             roi = (
                 int(rect[0]),
                 int(rect[1]),
