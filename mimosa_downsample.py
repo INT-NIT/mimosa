@@ -23,6 +23,7 @@ floor(n/f) instead of ceil(n/f), silently dropping up to 220 rows of tissue.
 
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -38,9 +39,13 @@ BLOCK_VALUES = ("decimate", "mean")
 # gets slower on very large bands, so 2048 rows is the compromise.
 BAND_PIXELS = 115_000_000
 
-# pyczi releases the GIL while decoding, and concurrent reads were verified
-# byte-identical to serial ones. Measured 4.15 s -> 2.81 s on 55424x4096.
-READ_THREADS = 4
+# Bands read and reduced concurrently. This is what makes ONE image fast.
+# pyczi releases the GIL while decoding and NumPy releases it during the
+# reduction, so both halves scale; concurrent reads were verified
+# byte-identical to serial ones. Measured on one scene, 3 resolutions, 4 cores:
+# decimate 7.26 s -> 3.26 s, mean 7.46 s -> 3.23 s. Scaling flattens once
+# threads exceed the number of cores.
+READ_THREADS = min(8, (os.cpu_count() or 4))
 
 
 def downsample_band(band, factors, block_value):
@@ -142,35 +147,40 @@ def downsample_scene(czidoc, roi, scene, channel, exponents,
     band_height = min(height, max(largest, (rows // largest) * largest))
     starts = list(range(0, height, band_height))
 
-    out, dtype = {}, None
+    out = {}
 
-    def load(y):
+    def build(y):
+        """Read one band and reduce it, both inside the worker thread.
+
+        Reducing here rather than in the caller matters twice over: NumPy
+        releases the GIL, so the int64 accumulation runs in parallel too, and
+        only the small reduced blocks travel back instead of the whole band.
+        """
         height_here = min(band_height, height - y)
-        return y, read_band(czidoc, (x0, y0 + y, width, height_here), scene, channel)
+        band = read_band(czidoc, (x0, y0 + y, width, height_here), scene, channel)
+        return y, band.dtype, downsample_band(band, factors.values(), block_value)
 
-    def place(y, band):
-        nonlocal dtype
-        if dtype is None:
-            dtype = band.dtype
+    def place(y, dtype, blocks):
+        if not out:
             for exponent, factor in factors.items():
                 out[exponent] = np.empty(
                     (-(-height // factor), -(-width // factor)), dtype=dtype
                 )
-        blocks = downsample_band(band, factors.values(), block_value)
         for exponent, factor in factors.items():
             block = blocks[factor]
             out[exponent][y // factor : y // factor + block.shape[0], :] = block
 
     if threads > 1 and len(starts) > 1:
-        # Bands are disjoint and each writes its own output rows, so their
-        # order does not matter. Reduction stays in this thread.
+        # Bands are disjoint and each writes its own output rows, so order does
+        # not matter. Submitting in waves of `threads` caps memory at that many
+        # bands: mapping every start at once would queue them all at full size.
         with ThreadPoolExecutor(max_workers=int(threads)) as pool:
-            for y, band in pool.map(load, starts):
-                place(y, band)
-                del band
+            for i in range(0, len(starts), threads):
+                for result in pool.map(build, starts[i : i + threads]):
+                    place(*result)
     else:
         for y in starts:
-            place(*load(y))
+            place(*build(y))
 
     return out
 

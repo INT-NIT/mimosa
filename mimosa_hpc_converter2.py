@@ -30,25 +30,16 @@ def main():
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     parser.add_argument(
-        "--jobs", type=int, default=4,
+        "-threads", type=int, default=czi.READ_THREADS,
         help=(
-            "Scene/channel pairs exported at once. This file holds 4 scenes x "
-            "2 channels = 8 independent pairs. Start here when tuning: it "
-            "scales further than --threads. Use 1 to disable."
+            "Threads used to produce ONE image: its bands are read and reduced "
+            "concurrently. This is the setting that makes a single NIfTI come "
+            "out faster. Measured 7.3 s -> 3.3 s on 4 cores. Set it to your "
+            "core count; going past it stops helping. Use 1 to disable."
         ),
     )
     parser.add_argument(
-        "--threads", type=int, default=4,
-        help=(
-            "Threads reading CZI bands inside one pair. pyczi releases the "
-            "GIL, and concurrent reads were verified byte-identical to serial "
-            "ones. Measured x2.3 with 4 threads. Use 1 to disable. Total "
-            "concurrent reads is jobs x threads, so keep the product near the "
-            "number of cores you actually have."
-        ),
-    )
-    parser.add_argument(
-        "--block-value", type=str, default="decimate", choices=("decimate", "mean"),
+        "-block-value", type=str, default="decimate", choices=("decimate", "mean"),
         help=(
             "How to reduce each native block. "
             "'decimate' keeps the native pixel k*f, bit for bit "
@@ -78,7 +69,7 @@ def main():
     res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
     print("Exported resolutions:", ", ".join(res_label.values()))
     print("Block value        :", args.block_value)
-    print("Parallelism        :", f"{args.jobs} jobs x {args.threads} threads")
+    print("Threads            :", args.threads)
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
@@ -199,7 +190,6 @@ def main():
                     reorient=args.reorient,
                     block_value=args.block_value,
                     threads=args.threads,
-                    jobs=args.jobs,
                 )
 
         except Exception as e:

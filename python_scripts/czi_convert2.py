@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
 
 import nibabel as nib
 import numpy as np
@@ -24,11 +23,6 @@ from mimosa_downsample import (  # noqa: E402
 # "decimate" keeps the historical desc so existing datasets and the slice
 # preprocessor keep working unchanged.
 DESC_BY_BLOCK_VALUE = {"decimate": "downsampled", "mean": "downsampledavg"}
-
-# Scene/channel pairs exported concurrently. Each pair is independent: it reads
-# its own ROI and writes its own files. Threads are enough because the two slow
-# parts, CZI decoding and NumPy reduction, both release the GIL.
-JOBS = 4
 
 
 def _as_exponents(value):
@@ -90,6 +84,7 @@ def _save_nifti(path, image, sform):
     nib.save(img, path)
 
 
+
 def czi2bitmapHPC(
     pathin: str,
     czifilename: str,
@@ -104,15 +99,14 @@ def czi2bitmapHPC(
     reorient: str = "none",
     block_value: str = "decimate",
     threads: int = READ_THREADS,
-    jobs: int = JOBS,
 ):
     """Export one CZI to every requested resolution in a single native pass.
 
     downsampling_factor is an exponent or a list of them; passing several at
     once is nearly free because the native data is read only one time.
     block_value is "decimate" or "mean", and tags the output with its own BIDS
-    desc- so both can coexist in one dataset. jobs exports that many
-    scene/channel pairs at once, threads splits the reads inside each one.
+    desc- so both can coexist in one dataset. threads splits each image into
+    bands read and reduced concurrently, which is what makes one export fast.
     """
     if block_value not in BLOCK_VALUES:
         raise ValueError(f"block_value must be one of {BLOCK_VALUES}")
@@ -138,79 +132,66 @@ def czi2bitmapHPC(
         for folder in folders.values():
             os.makedirs(folder, exist_ok=True)
 
-        tasks = []
         for scene_idx in range(len(scenes)):
+            rect = scenes[scene_idx]
+            roi = tuple(int(rect[i]) for i in range(4))
+
             slice_idx = reader.get_slice_index_for_scene(scene_idx)
             if slice_idx is None:
                 print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
                 continue
-            tasks += [(scene_idx, slice_idx, c) for c in range(nb_channels)]
+            bids_info["chunk"] = slice_idx
 
-        def export(task):
-            """Export one scene/channel pair to every requested resolution."""
-            scene_idx, slice_idx, channel_idx = task
-            rect = scenes[scene_idx]
-            stain = f"C{channel_idx}"
-            # A copy per task: mutating the shared dict would let concurrent
-            # scenes steal each other's chunk id.
-            info = dict(bids_info, chunk=slice_idx)
-
-            images = downsample_scene(
-                czidoc=czidoc,
-                roi=tuple(int(rect[i]) for i in range(4)),
-                scene=scene_idx,
-                channel=channel_idx,
-                exponents=exponents,
-                block_value=block_value,
-                threads=threads,
-            )
-
-            written = []
-            for exponent in exponents:
-                image = images[exponent]
-                factor = 2**exponent
-                base = _bids_basename(info, stain, res_labels[exponent], desc)
-
-                if write_tif:
-                    path = os.path.join(folders[exponent], base + ".tif")
-                    tf.imwrite(path, image, imagej=True)
-                    bmeta.write_micr_sidecar_json(
-                        path,
-                        _sidecar(reader, rect, stain, factor, scene_idx,
-                                 (image.shape[1], image.shape[0]), False,
-                                 block_value, slice_position_map,
-                                 original_thickness),
+            with alive_bar(nb_channels, force_tty=True,
+                           title=f"Scene {scene_idx}") as bar:
+                for channel_idx in range(nb_channels):
+                    images = downsample_scene(
+                        czidoc=czidoc,
+                        roi=roi,
+                        scene=scene_idx,
+                        channel=channel_idx,
+                        exponents=exponents,
+                        block_value=block_value,
+                        threads=threads,
                     )
-                    written.append(path)
+                    stain = f"C{channel_idx}"
 
-                if write_nii:
-                    path = os.path.join(folders[exponent], base + ".nii.gz")
-                    arr = np.swapaxes(image, 0, 1)
-                    meta = _sidecar(reader, rect, stain, factor, scene_idx,
-                                    arr.shape[:2], True, block_value,
-                                    slice_position_map, original_thickness)
-                    _save_nifti(
-                        path, arr,
-                        np.asarray(meta.get("SFormMatrix", np.eye(4)), dtype=float),
-                    )
-                    bmeta.write_micr_sidecar_json(path, meta)
-                    written.append(path)
+                    for exponent in exponents:
+                        image = images[exponent]
+                        factor = 2**exponent
+                        base = _bids_basename(
+                            bids_info, stain, res_labels[exponent], desc
+                        )
 
-            return written
+                        if write_tif:
+                            path = os.path.join(folders[exponent], base + ".tif")
+                            tf.imwrite(path, image, imagej=True)
+                            bmeta.write_micr_sidecar_json(
+                                path,
+                                _sidecar(reader, rect, stain, factor, scene_idx,
+                                         (image.shape[1], image.shape[0]), False,
+                                         block_value, slice_position_map,
+                                         original_thickness),
+                            )
+                            print("  -> BIDS raw: "
+                                  f"{os.path.relpath(path, bids_root_path)}")
 
-        with alive_bar(len(tasks), force_tty=True, title=czifilename) as bar:
-            def run(task):
-                paths = export(task)
-                bar()
-                return paths
+                        if write_nii:
+                            path = os.path.join(folders[exponent], base + ".nii.gz")
+                            arr = np.swapaxes(image, 0, 1)
+                            meta = _sidecar(reader, rect, stain, factor, scene_idx,
+                                            arr.shape[:2], True, block_value,
+                                            slice_position_map, original_thickness)
+                            _save_nifti(
+                                path, arr,
+                                np.asarray(meta.get("SFormMatrix", np.eye(4)),
+                                           dtype=float),
+                            )
+                            bmeta.write_micr_sidecar_json(path, meta)
+                            print("  -> derivatives: "
+                                  f"{os.path.relpath(path, bids_root_path)}")
 
-            if jobs > 1 and len(tasks) > 1:
-                with ThreadPoolExecutor(max_workers=int(jobs)) as pool:
-                    results = list(pool.map(run, tasks))
-            else:
-                results = [run(task) for task in tasks]
-
-        for path in sorted(p for group in results for p in group):
-            print(f"  -> {os.path.relpath(path, bids_root_path)}")
+                    del images
+                    bar()
 
     return True
