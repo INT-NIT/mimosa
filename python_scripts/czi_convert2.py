@@ -13,86 +13,54 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 
-def _read_decimated_native(
+def _read_from_reference_resolution(
     czidoc,
     roi: tuple[int, int, int, int],
     scene_idx: int,
     channel_idx: int,
-    factor: int,
-    preferred_tile_size: int = 8192,
+    downsampling_exponent: int,
+    reference_exponent: int = 4,
 ) -> np.ndarray:
-    """Read a CZI scene at native resolution by tiles, then decimate it.
+    """Read one fixed CZI reference resolution, then decimate from it.
 
-    Only existing native pixels are selected. No interpolation, averaging, or
-    intensity recalculation is applied by this function.
+    The CZI reader is used only once at the fixed reference resolution
+    ``2**reference_exponent``. Coarser outputs are produced by direct NumPy
+    pixel selection, so all generated resolutions stay nested without an
+    additional interpolation step.
     """
-    if factor < 1:
-        raise ValueError("factor must be greater than or equal to 1")
+    if downsampling_exponent < 0:
+        raise ValueError("downsampling_exponent must be greater than or equal to 0")
 
-    x0, y0, width, height = (int(value) for value in roi)
-
-    output_height = (height + factor - 1) // factor
-    output_width = (width + factor - 1) // factor
-
-    # Every tile starts on the same sampling grid as the complete ROI.
-    # This avoids a shift at tile boundaries.
-    tile_size = max(factor, (preferred_tile_size // factor) * factor)
-
-    output = None
-
-    for offset_y in range(0, height, tile_size):
-        tile_height = min(tile_size, height - offset_y)
-
-        for offset_x in range(0, width, tile_size):
-            tile_width = min(tile_size, width - offset_x)
-
-            tile_roi = (
-                x0 + offset_x,
-                y0 + offset_y,
-                tile_width,
-                tile_height,
+    if downsampling_exponent < reference_exponent:
+        zoom_factor = 1.0 / float(2**downsampling_exponent)
+        return np.asarray(
+            czidoc.read(
+                roi=roi,
+                plane={"C": channel_idx},
+                scene=scene_idx,
+                zoom=zoom_factor,
             )
+        ).squeeze()
 
-            native_tile = np.asarray(
-                czidoc.read(
-                    roi=tile_roi,
-                    plane={"C": channel_idx},
-                    scene=scene_idx,
-                    zoom=1.0,
-                )
-            ).squeeze()
+    reference_factor = 2**reference_exponent
+    reference_image = np.asarray(
+        czidoc.read(
+            roi=roi,
+            plane={"C": channel_idx},
+            scene=scene_idx,
+            zoom=1.0 / float(reference_factor),
+        )
+    ).squeeze()
 
-            if native_tile.ndim != 2:
-                raise RuntimeError(
-                    "Expected a 2D CZI tile, "
-                    f"got shape {native_tile.shape} for scene {scene_idx}, "
-                    f"channel {channel_idx}."
-                )
-
-            if output is None:
-                output = np.empty(
-                    (output_height, output_width),
-                    dtype=native_tile.dtype,
-                )
-
-            sampled_tile = native_tile[::factor, ::factor]
-
-            output_y = offset_y // factor
-            output_x = offset_x // factor
-            end_y = min(output_y + sampled_tile.shape[0], output_height)
-            end_x = min(output_x + sampled_tile.shape[1], output_width)
-
-            output[output_y:end_y, output_x:end_x] = sampled_tile[
-                : end_y - output_y,
-                : end_x - output_x,
-            ]
-
-    if output is None:
+    if reference_image.ndim != 2:
         raise RuntimeError(
-            f"No pixels were read for scene {scene_idx}, channel {channel_idx}."
+            "Expected a 2D CZI image, "
+            f"got shape {reference_image.shape} for scene {scene_idx}, "
+            f"channel {channel_idx}."
         )
 
-    return output
+    relative_factor = 2 ** (downsampling_exponent - reference_exponent)
+    return reference_image[::relative_factor, ::relative_factor].copy()
 
 
 def czi2bitmapHPC(
@@ -154,12 +122,13 @@ def czi2bitmapHPC(
                 title=f"Scene {scene_idx}",
             ) as bar:
                 for channel_idx in range(nb_channels):
-                    channel_image = _read_decimated_native(
+                    channel_image = _read_from_reference_resolution(
                         czidoc=czidoc,
                         roi=roi,
                         scene_idx=scene_idx,
                         channel_idx=channel_idx,
-                        factor=effective_downsampling_factor,
+                        downsampling_exponent=downsampling_factor,
+                        reference_exponent=4,
                     )
 
                     stain = f"C{channel_idx}"
