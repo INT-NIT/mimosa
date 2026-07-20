@@ -42,7 +42,6 @@ def czi2bitmapHPC(
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         deriv_folder = bm.get_derivative_folder(bids_root_path, bids_info, res_label) if (write_nii or write_tif) else None
-        zoom_factor = float(1.0 / effective_downsampling_factor)
 
         for scene_idx in range(len(scenes)):
             rect = scenes[scene_idx]
@@ -57,8 +56,17 @@ def czi2bitmapHPC(
             bids_info["chunk"] = slice_idx
             channel_images = {}
             for c in range(nb_channels):
-                channel_images[c] = czidoc.read(roi=roi, plane={"C": c}, scene=scene_idx, zoom=zoom_factor)
+                native_image = czidoc.read(
+                roi=roi,
+                plane={"C": c},
+                scene=scene_idx,
+                zoom=1.0,
+                )
 
+                channel_images[c] = native_image[
+                    ::effective_downsampling_factor,
+                    ::effective_downsampling_factor,
+                ]
             with alive_bar(nb_channels, force_tty=True, title=f"Scene {scene_idx}") as bar:
                 for c in range(nb_channels):
                     channel_name = f"C{c}"
