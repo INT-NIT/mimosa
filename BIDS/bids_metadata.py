@@ -548,29 +548,29 @@ def build_slice_sform(
 
     spacing_z_mm = float(thickness) * UM_TO_MM
 
-    # Decimation factor actually applied to the native grid.
-    factor_x = resolution_x_mm / native_resolution_x_mm
-    factor_y = resolution_y_mm / native_resolution_y_mm
-
     # Common X/Y origin calculated from the native CZI grid.
-    # The exported pixel k is the native pixel k*factor, but it is declared
-    # with a physical size of factor native pixels: it therefore represents
-    # the native block [k*factor, k*factor + factor - 1], whose center sits
-    # at (factor - 1) / 2 native pixels from its first native pixel.
-    # Without this half-block shift, each resolution is offset by a different
-    # amount ((factor - 1) / 2 native pixels), which misaligns res-4x, res-6x
-    # and res-8x by a non-integer number of pixels in a viewer.
-    # With it, all resolutions tile the same native grid from index 0 and,
-    # because the factors are powers of two, they are exactly nested.
-    origin_x_mm = (
-        -((float(native_width) - 1.0) * native_resolution_x_mm) / 2.0
-        + ((factor_x - 1.0) / 2.0) * native_resolution_x_mm
-    )
+    # Therefore res-4x and res-8x from the same scene start
+    # at exactly the same physical position.
+    #
+    # Point-sampling convention: the exported pixel k IS the native pixel
+    # k*factor, not an average of its block. Placing voxel 0 on the center of
+    # native pixel 0, identically for every resolution, therefore makes the
+    # sampling points of res-4x, res-6x and res-8x coincide exactly.
+    #
+    # The half-voxel offset seen in a viewer is a rendering artifact: a coarse
+    # point sample is drawn as a large filled square, so the drawn edges do not
+    # tile with the finer grid even though the sample centers do coincide.
+    # Do not "fix" it by shifting the origin by (factor - 1) / 2 native pixels:
+    # that would declare each value at a position it was not measured at.
+    origin_x_mm = -(
+        (float(native_width) - 1.0)
+        * native_resolution_x_mm
+    ) / 2.0
 
-    origin_y_mm = (
-        -((float(native_height) - 1.0) * native_resolution_y_mm) / 2.0
-        + ((factor_y - 1.0) / 2.0) * native_resolution_y_mm
-    )
+    origin_y_mm = -(
+        (float(native_height) - 1.0)
+        * native_resolution_y_mm
+    ) / 2.0
 
     # Physical Z position of this slice.
     origin_z_mm = (

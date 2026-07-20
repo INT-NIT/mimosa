@@ -1,33 +1,30 @@
-"""Diagnostic: is pylibCZIrw's `zoom` read exact, or does it invent values?
+"""Diagnostic: is pylibCZIrw's `zoom` read exact on REAL scene ROIs?
 
-Run this on the HPC, where the CZI files live:
+    python check_zoom_exactness.py /envau/.../fichier.czi
 
-    python check_zoom_exactness.py /envau/.../fichier.czi 16
+Tests every production factor (16, 64, 256 = res-4x, 6x, 8x) in two regimes:
 
-It answers three questions:
+  A. small ROI aligned on the scene origin  -> the easy case
+  B. the FULL scene ROI, whose size is NOT a multiple of the factor
+     -> the real case, where libCZI rounding can shift the grid
 
-  1. Does `zoom` return real native pixels (nearest neighbour), or blended
-     values that exist nowhere in the file?
-  2. If it returns real pixels, on which grid offset?
-  3. How much faster is it, really?
+Regime B is verified by spot-checking individual native pixels, so it never
+loads the whole scene in RAM.
 
-Interpretation
---------------
-  VERDICT EXACT      -> `zoom` is safe. Use the fast path, no quantification
-                        is harmed. Only the sform origin needs care.
-  VERDICT SHIFTED    -> `zoom` keeps real pixels but on a shifted grid. Safe
-                        for intensities, needs an origin correction.
-  VERDICT BLENDED    -> `zoom` invents values (pyramid averaging or bilinear).
-                        Do NOT use it for quantitative work.
+Finally it times a realistic strip to measure the true speedup of `zoom`.
 """
 
 from __future__ import annotations
 
+import random
 import sys
 import time
 
 import numpy as np
 from pylibCZIrw import czi as pyczi
+
+FACTORS = (16, 64, 256)
+SPOT_CHECKS = 40
 
 
 def _read(doc, roi, scene, channel, zoom=None):
@@ -40,119 +37,135 @@ def _read(doc, roi, scene, channel, zoom=None):
     return arr
 
 
+def test_aligned(doc, x0, y0, w, h, scene, channel, factor):
+    """Regime A: small ROI, size exactly a multiple of factor."""
+    side = factor * 32
+    tw = min(side, (w // factor) * factor)
+    th = min(side, (h // factor) * factor)
+    roi = (x0, y0, tw, th)
+
+    native = _read(doc, roi, scene, channel)
+    zoomed = _read(doc, roi, scene, channel, zoom=1.0 / factor)
+    decim = native[::factor, ::factor]
+
+    ny = min(zoomed.shape[0], decim.shape[0])
+    nx = min(zoomed.shape[1], decim.shape[1])
+    ok = np.array_equal(zoomed[:ny, :nx], decim[:ny, :nx])
+    shape_ok = zoomed.shape == decim.shape
+
+    print(f"    A) aligned {tw}x{th}: zoom{zoomed.shape} vs decim{decim.shape}")
+    print(f"       shapes match : {shape_ok}")
+    print(f"       values match : {ok}")
+    return ok and shape_ok
+
+
+def test_full_scene(doc, x0, y0, w, h, scene, channel, factor, rng):
+    """Regime B: the real full-scene ROI, size not a multiple of factor."""
+    roi = (x0, y0, w, h)
+
+    t = time.perf_counter()
+    zoomed = _read(doc, roi, scene, channel, zoom=1.0 / factor)
+    dt = time.perf_counter() - t
+
+    expected_ceil = ((h + factor - 1) // factor, (w + factor - 1) // factor)
+    expected_floor = (h // factor, w // factor)
+
+    print(f"    B) full scene {w}x{h}  (w%f={w % factor}, h%f={h % factor})")
+    print(f"       zoom shape   : {zoomed.shape}   read in {dt:.1f}s")
+    print(f"       ceil(n/f)    : {expected_ceil}")
+    print(f"       floor(n/f)   : {expected_floor}")
+
+    # Spot-check: output pixel (k, j) must equal native pixel (k*f, j*f).
+    ny, nx = zoomed.shape
+    bad = []
+    for _ in range(SPOT_CHECKS):
+        k = rng.randrange(ny)
+        j = rng.randrange(nx)
+        py = y0 + k * factor
+        px = x0 + j * factor
+        if py >= y0 + h or px >= x0 + w:
+            continue
+        native_px = _read(doc, (px, py, 1, 1), scene, channel)
+        native_val = int(np.asarray(native_px).reshape(-1)[0])
+        if int(zoomed[k, j]) != native_val:
+            bad.append((k, j, int(zoomed[k, j]), native_val))
+
+    if not bad:
+        print(f"       spot-check   : {SPOT_CHECKS}/{SPOT_CHECKS} OK "
+              f"-> zoom[k,j] == native[k*f, j*f]")
+        return True
+
+    print(f"       spot-check   : {len(bad)} MISMATCH out of {SPOT_CHECKS}")
+    for k, j, got, want in bad[:5]:
+        print(f"         [{k},{j}] zoom={got} native={want}")
+    return False
+
+
+def bench(doc, x0, y0, w, h, scene, channel):
+    """Realistic timing on a wide strip, native vs zoom."""
+    strip_h = min(4096, h)
+    roi = (x0, y0, w, strip_h)
+    print(f"\n[TIMING] strip {w} x {strip_h}")
+
+    t = time.perf_counter()
+    _read(doc, roi, scene, channel)
+    t_native = time.perf_counter() - t
+    print(f"    native      : {t_native:7.2f}s")
+
+    for factor in FACTORS:
+        t = time.perf_counter()
+        _read(doc, roi, scene, channel, zoom=1.0 / factor)
+        t_zoom = time.perf_counter() - t
+        speed = t_native / t_zoom if t_zoom > 0 else float("inf")
+        print(f"    zoom 1/{factor:<4d}: {t_zoom:7.2f}s   (x{speed:.1f} vs native)")
+
+    print("\n    If all zoom timings are close to the native one, there is no")
+    print("    pyramid to exploit: the bottleneck is CZI decompression and the")
+    print("    only real speedup left is parallelism across scenes.")
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
 
     czi_path = sys.argv[1]
-    factor = int(sys.argv[2]) if len(sys.argv) > 2 else 16
-    channel = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+    channel = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    rng = random.Random(0)
 
     with pyczi.open_czi(czi_path) as doc:
         scenes = doc.scenes_bounding_rectangle
-        scene_idx = sorted(scenes)[0] if isinstance(scenes, dict) else 0
-        rect = scenes[scene_idx]
+        scene = sorted(scenes)[0] if isinstance(scenes, dict) else 0
+        rect = scenes[scene]
         x0, y0, w, h = (int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
 
         print("=" * 70)
-        print("FILE   :", czi_path)
-        print("SCENE  :", scene_idx, "  native size:", w, "x", h)
-        print("FACTOR :", factor, " (i.e. res label", f"{factor.bit_length()-1}x)")
+        print("FILE  :", czi_path)
+        print("SCENE :", scene, " origin=", (x0, y0), " size=", (w, h))
         print("=" * 70)
 
-        # ---- 1. Pyramid present? -------------------------------------
-        try:
-            info = doc.total_bounding_box
-            print("\n[1] total_bounding_box:", info)
-        except Exception as exc:
-            print("\n[1] bounding box unavailable:", exc)
+        verdict = {}
+        for factor in FACTORS:
+            label = f"res-{factor.bit_length() - 1}x"
+            print(f"\n[{label}]  factor = {factor}")
+            a = test_aligned(doc, x0, y0, w, h, scene, channel, factor)
+            b = test_full_scene(doc, x0, y0, w, h, scene, channel, factor, rng)
+            verdict[label] = (a, b)
 
-        try:
-            meta = doc.raw_metadata
-            has_pyramid = "PyramidType" in meta or "SubBlockPyramid" in meta
-            print("    pyramid mentioned in metadata:", has_pyramid)
-            if has_pyramid:
-                print("    -> `zoom` may read ZEN-generated pyramid levels,")
-                print("       which are usually AVERAGED (invented values).")
-        except Exception as exc:
-            print("    raw_metadata unavailable:", exc)
+        bench(doc, x0, y0, w, h, scene, channel)
 
-        # ---- 2. Small aligned test ROI -------------------------------
-        side = factor * 32
-        tw = min(side, (w // factor) * factor)
-        th = min(side, (h // factor) * factor)
-        roi = (x0, y0, tw, th)
-        print(f"\n[2] test ROI: {tw} x {th} native pixels")
-
-        t = time.perf_counter()
-        native = _read(doc, roi, scene_idx, channel)
-        t_native = time.perf_counter() - t
-
-        t = time.perf_counter()
-        zoomed = _read(doc, roi, scene_idx, channel, zoom=1.0 / factor)
-        t_zoom = time.perf_counter() - t
-
-        print("    native read:", native.shape, native.dtype, f"{t_native:.3f}s")
-        print("    zoom   read:", zoomed.shape, zoomed.dtype, f"{t_zoom:.3f}s")
-        if t_zoom > 0:
-            print(f"    speedup on this ROI: x{t_native / t_zoom:.1f}")
-
-        decimated = native[::factor, ::factor]
-        print("    exact decimation:", decimated.shape)
-
-        # ---- 3. Exactness --------------------------------------------
-        print("\n[3] VERDICT")
-
-        ny = min(zoomed.shape[0], decimated.shape[0])
-        nx = min(zoomed.shape[1], decimated.shape[1])
-        z = zoomed[:ny, :nx].astype(np.int64)
-
-        if np.array_equal(z, decimated[:ny, :nx].astype(np.int64)):
-            print("    >>> EXACT: zoom == native[::f, ::f], bit for bit.")
-            print("    >>> The fast path is safe. Use it.")
-            return
-
-        # Which offset, if any, matches?
-        best = None
-        for dy in range(factor):
-            for dx in range(factor):
-                cand = native[dy::factor, dx::factor]
-                if cand.shape[0] < ny or cand.shape[1] < nx:
-                    continue
-                if np.array_equal(z, cand[:ny, :nx].astype(np.int64)):
-                    best = (dy, dx)
-                    break
-            if best:
-                break
-
-        if best:
-            print(f"    >>> SHIFTED: zoom == native[{best[0]}::f, {best[1]}::f]")
-            print("    >>> Real native pixels, only the grid offset differs.")
-            print("    >>> Intensities are INTACT. Safe for quantification.")
-            print(f"    >>> Correct the sform origin by {best} native pixels.")
-            return
-
-        # Are the values at least present in their native block?
-        invented = 0
-        checked = 0
-        for k in range(min(ny, 64)):
-            for j in range(min(nx, 64)):
-                block = native[k * factor:(k + 1) * factor,
-                               j * factor:(j + 1) * factor]
-                checked += 1
-                if zoomed[k, j] not in block:
-                    invented += 1
-
-        pct = 100.0 * invented / max(1, checked)
-        print(f"    >>> checked {checked} pixels, {invented} ({pct:.1f}%) do not")
-        print("        exist anywhere in their native block.")
-        if invented == 0:
-            print("    >>> NEAREST-NEIGHBOUR on an irregular grid.")
-            print("    >>> Values intact, but grid not reproducible. Risky.")
+        print("\n" + "=" * 70)
+        print("SUMMARY")
+        all_ok = True
+        for label, (a, b) in verdict.items():
+            state = "EXACT" if (a and b) else "NOT EXACT"
+            all_ok &= a and b
+            print(f"  {label:8s} aligned={a}  full-scene={b}   -> {state}")
+        print("=" * 70)
+        if all_ok:
+            print("=> zoom is safe at every production factor. Restore the fast path.")
         else:
-            print("    >>> BLENDED: zoom INVENTS values (averaging/bilinear).")
-            print("    >>> Do NOT use zoom for quantitative fluorescence.")
+            print("=> zoom drifts on the real ROI. Keep the native decimation.")
 
 
 if __name__ == "__main__":
