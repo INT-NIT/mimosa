@@ -500,10 +500,11 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
 
         return transpose_axes, flip_axes
 
-def build_centered_slice_sform(
+def build_slice_sform(
     pixel_size: list[float],
-    exported_width: int,
-    exported_height: int,
+    native_pixel_size: list[float],
+    native_width: int,
+    native_height: int,
     slice_position: int,
     nb_slices: int,
     thickness: float,
@@ -511,36 +512,17 @@ def build_centered_slice_sform(
     """
     Build the SForm of one exported 2D NIfTI slice.
 
-    The exported image grid is centered around X=0 and Y=0.
-    The slice is positioned along Z from its position in the global stack.
+    All resolutions produced from the same native CZI scene use:
+    - the same physical origin;
+    - their own exported pixel resolution;
+    - the same Z position.
 
-    No interpolation or resampling is performed here.
-    This function only assigns physical coordinates to existing pixels.
-
-    Parameters
-    ----------
-    pixel_size
-        Exported pixel size [X, Y] in micrometers.
-
-    exported_width
-        Actual number of pixels along NIfTI axis 0.
-
-    exported_height
-        Actual number of pixels along NIfTI axis 1.
-
-    slice_position
-        Continuous position of the slice in the reconstructed stack.
-
-    nb_slices
-        Total number of positions in the reconstructed stack.
-
-    thickness
-        Distance between two consecutive slices, in micrometers.
+    This function does not modify or interpolate image values.
     """
 
-    if exported_width <= 0 or exported_height <= 0:
+    if native_width <= 0 or native_height <= 0:
         raise ValueError(
-            "exported_width and exported_height must be positive"
+            "native_width and native_height must be positive"
         )
 
     if nb_slices <= 0:
@@ -549,25 +531,37 @@ def build_centered_slice_sform(
     if not 0 <= slice_position < nb_slices:
         raise ValueError(
             f"Invalid slice position {slice_position} "
-            f"for a stack containing {nb_slices} slices"
+            f"for {nb_slices} slices"
         )
 
-    # Resolution of the actual exported image, converted from µm to mm.
+    # Resolution of the exported image, such as res-4x or res-8x.
     resolution_x_mm = float(pixel_size[0]) * UM_TO_MM
     resolution_y_mm = float(pixel_size[1]) * UM_TO_MM
+
+    # Native CZI resolution.
+    native_resolution_x_mm = (
+        float(native_pixel_size[0]) * UM_TO_MM
+    )
+    native_resolution_y_mm = (
+        float(native_pixel_size[1]) * UM_TO_MM
+    )
+
     spacing_z_mm = float(thickness) * UM_TO_MM
 
-    # Position of the first pixel center.
-    # This places the geometric center of every exported grid at X=0, Y=0.
+    # Common X/Y origin calculated from the native CZI grid.
+    # Therefore res-4x and res-8x from the same scene start
+    # at exactly the same physical position.
     origin_x_mm = -(
-        (float(exported_width) - 1.0) * resolution_x_mm
+        (float(native_width) - 1.0)
+        * native_resolution_x_mm
     ) / 2.0
 
     origin_y_mm = -(
-        (float(exported_height) - 1.0) * resolution_y_mm
+        (float(native_height) - 1.0)
+        * native_resolution_y_mm
     ) / 2.0
 
-    # Position of this slice in the centered global stack.
+    # Physical Z position of this slice.
     origin_z_mm = (
         float(slice_position)
         - (float(nb_slices) - 1.0) / 2.0
@@ -604,6 +598,7 @@ def build_centered_slice_sform(
     )
 
     return sform.tolist()
+
 def build_centered_affine(
     shape: tuple[float, float, float],
     resolution: list[float],
@@ -663,15 +658,7 @@ def add_sform_to_json_metadata(
     slice_position = int(slice_position_map[slice_index])
     nb_slices = int(len(slice_position_map))
 
-    exported_width = meta.get("WidthPixels-DS")
-    exported_height = meta.get("HeightPixels-DS")
-
-    if exported_width is None or exported_height is None:
-        raise ValueError(
-            f"Missing exported dimensions for SliceIndex={slice_index}. "
-            "Expected WidthPixels-DS and HeightPixels-DS. "
-            "These values must come from the actual saved array shape."
-        )
+   
 
     pixel_size = meta.get("PixelSize")
 
@@ -679,11 +666,26 @@ def add_sform_to_json_metadata(
         raise ValueError(
             f"Missing or invalid PixelSize for SliceIndex={slice_index}"
         )
+    native_pixel_size = meta.get("NativePixelSize")
+    native_width = meta.get("NativeWidthPixels")
+    native_height = meta.get("NativeHeightPixels")
 
-    sform = build_centered_slice_sform(
+    if native_pixel_size is None or len(native_pixel_size) < 2:
+        raise ValueError(
+            f"Missing NativePixelSize for SliceIndex={slice_index}"
+        )
+
+    if native_width is None or native_height is None:
+        raise ValueError(
+            f"Missing native dimensions for SliceIndex={slice_index}. "
+            "Expected NativeWidthPixels and NativeHeightPixels."
+        )
+
+    sform = build_slice_sform(
         pixel_size=pixel_size,
-        exported_width=int(exported_width),
-        exported_height=int(exported_height),
+        native_pixel_size=native_pixel_size,
+        native_width=int(native_width),
+        native_height=int(native_height),
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness=original_thickness,
@@ -697,15 +699,16 @@ def add_sform_to_json_metadata(
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
 
     meta["SFormMatrixDescription"] = (
-        "SForm matrix describing the actual exported NIfTI grid. "
-        "The X and Y origins are calculated from WidthPixels-DS, "
-        "HeightPixels-DS and PixelSize so that the exported image "
-        "is centered at X=0 and Y=0. "
-        "The Z position is calculated from SlicePosition, "
-        "NumberOfSlices and the histological slice spacing. "
-        "No interpolation or resampling was applied."
-    )
-
+    "SForm matrix placing the exported NIfTI slice in a common "
+    "physical reference. The X and Y origins are calculated from "
+    "the native CZI dimensions and native pixel size, so all "
+    "resolutions produced from the same scene share the same origin. "
+    "The SForm spacing uses the exported PixelSize. "
+    "The Z position is calculated from SlicePosition, "
+    "NumberOfSlices and the histological slice spacing. "
+    "No additional interpolation or resampling is performed "
+    "when creating this matrix."
+)
     return meta
 def write_sform_to_nifti_and_json(
     nii_path,
