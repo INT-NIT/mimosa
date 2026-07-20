@@ -13,13 +13,20 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 
+# Common fast reference grid for every exported resolution used by MIMoSA.
+# All requested exponents >= 2 are generated from the same 2**2 reference,
+# so resolutions 2, 3, 4, 5, 6, 7, 8, ... are exactly nested while avoiding
+# the very slow native-resolution read.
+REFERENCE_DOWNSAMPLING_EXPONENT = 2
+
+
 def _read_from_reference_resolution(
     czidoc,
     roi: tuple[int, int, int, int],
     scene_idx: int,
     channel_idx: int,
     downsampling_exponent: int,
-    reference_exponent: int = 4,
+    reference_exponent: int = REFERENCE_DOWNSAMPLING_EXPONENT,
 ) -> np.ndarray:
     """Read one fixed CZI reference resolution, then decimate from it.
 
@@ -32,8 +39,11 @@ def _read_from_reference_resolution(
         raise ValueError("downsampling_exponent must be greater than or equal to 0")
 
     if downsampling_exponent < reference_exponent:
+        # Exponents 0 and 1 are finer than the common exponent-2 reference.
+        # They keep the original fast CZI read, but exact nesting is guaranteed
+        # for the normal exported range 2, 3, 4, 5, 6, 7, 8, ... only.
         zoom_factor = 1.0 / float(2**downsampling_exponent)
-        return np.asarray(
+        image = np.asarray(
             czidoc.read(
                 roi=roi,
                 plane={"C": channel_idx},
@@ -41,6 +51,13 @@ def _read_from_reference_resolution(
                 zoom=zoom_factor,
             )
         ).squeeze()
+        if image.ndim != 2:
+            raise RuntimeError(
+                "Expected a 2D CZI image, "
+                f"got shape {image.shape} for scene {scene_idx}, "
+                f"channel {channel_idx}."
+            )
+        return image
 
     reference_factor = 2**reference_exponent
     reference_image = np.asarray(
@@ -128,7 +145,7 @@ def czi2bitmapHPC(
                         scene_idx=scene_idx,
                         channel_idx=channel_idx,
                         downsampling_exponent=downsampling_factor,
-                        reference_exponent=4,
+                        reference_exponent=REFERENCE_DOWNSAMPLING_EXPONENT,
                     )
 
                     stain = f"C{channel_idx}"
