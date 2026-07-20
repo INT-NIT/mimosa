@@ -36,7 +36,7 @@ def describe(name, img, sform, meta):
     print("  spacing (mm)    :", [round(float(sform[i, i]), 6) for i in range(3)])
     print("  origin  (mm)    :", [round(float(sform[i, 3]), 6) for i in range(3)])
     for key in (
-        "ReductionMethod",
+        "BlockValueMethod",
         "SFormOriginConvention",
         "DownsamplingFactor",
         "PixelSize",

@@ -8,6 +8,10 @@ import numpy as np
 import nibabel as nb
 
 UM_TO_MM=1.0/1000
+
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mimosa_downsample import slice_sform  # noqa: E402
 def load_metadata_config(config_path: Path) -> dict:
     with open(Path(config_path), "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -508,122 +512,27 @@ def build_slice_sform(
     slice_position: int,
     nb_slices: int,
     thickness: float,
-    reduce_method: str = "decimate",
+    block_value: str = "decimate",
 ) -> list[list[float]]:
+    """Build the SForm of one exported 2D slice, as a nested list.
+
+    Thin wrapper over mimosa_downsample.slice_sform, which owns the geometry
+    so that reduction and placement can never drift apart. block_value is
+    accepted for call-site clarity but does not move the voxel: it only says
+    how the block value was estimated, never where the block sits.
     """
-    Build the SForm of one exported 2D NIfTI slice.
+    if block_value not in ("decimate", "mean"):
+        raise ValueError(f"block_value must be 'decimate' or 'mean', got {block_value!r}")
 
-    All resolutions produced from the same native CZI scene use:
-    - the same physical origin;
-    - their own exported pixel resolution;
-    - the same Z position.
-
-    This function does not modify or interpolate image values.
-
-    The origin follows what the voxel actually contains:
-
-    - ``reduce_method="decimate"``: the voxel IS the native pixel k*factor, a
-      point sample. Its physical position is the center of that native pixel,
-      identically for every resolution, so the sampling points of res-4x,
-      res-6x and res-8x coincide exactly.
-
-    - ``reduce_method="mean"``: the voxel is the average of the native block
-      [k*factor, k*factor + factor - 1]. It therefore truly occupies that whole
-      block, and is placed at the block center, (factor - 1) / 2 native pixels
-      further. All resolutions then tile the same native grid from index 0 and,
-      because the factors are powers of two, they are exactly nested: 4x4
-      res-6x voxels fill exactly one res-8x voxel, edges included.
-
-    Using the block-center origin with a decimation would declare each value at
-    a position where it was never measured. Do not mix them.
-    """
-
-    if native_width <= 0 or native_height <= 0:
-        raise ValueError(
-            "native_width and native_height must be positive"
-        )
-
-    if nb_slices <= 0:
-        raise ValueError("nb_slices must be positive")
-
-    if not 0 <= slice_position < nb_slices:
-        raise ValueError(
-            f"Invalid slice position {slice_position} "
-            f"for {nb_slices} slices"
-        )
-
-    # Resolution of the exported image, such as res-4x or res-8x.
-    resolution_x_mm = float(pixel_size[0]) * UM_TO_MM
-    resolution_y_mm = float(pixel_size[1]) * UM_TO_MM
-
-    # Native CZI resolution.
-    native_resolution_x_mm = (
-        float(native_pixel_size[0]) * UM_TO_MM
-    )
-    native_resolution_y_mm = (
-        float(native_pixel_size[1]) * UM_TO_MM
-    )
-
-    spacing_z_mm = float(thickness) * UM_TO_MM
-
-    if reduce_method not in ("decimate", "mean"):
-        raise ValueError(
-            f"reduce_method must be 'decimate' or 'mean', got {reduce_method!r}"
-        )
-
-    # A voxel of factor f covers the native block [k*f, k*f + f - 1] and is
-    # placed at its center, in BOTH reduction modes. Declaring a pixel size of
-    # f x native already commits to the block interpretation; putting the voxel
-    # anywhere else contradicts its own declared size, and that contradiction is
-    # what makes a res-8x edge land on a res-6x center in a viewer.
-    # reduce_method only chooses how the block value is estimated.
-    factor_x = resolution_x_mm / native_resolution_x_mm
-    factor_y = resolution_y_mm / native_resolution_y_mm
-
-    origin_x_mm = (
-        (factor_x - 1.0) / 2.0 - (float(native_width) - 1.0) / 2.0
-    ) * native_resolution_x_mm
-    origin_y_mm = (
-        (factor_y - 1.0) / 2.0 - (float(native_height) - 1.0) / 2.0
-    ) * native_resolution_y_mm
-
-    # Physical Z position of this slice.
-    origin_z_mm = (
-        float(slice_position)
-        - (float(nb_slices) - 1.0) / 2.0
-    ) * spacing_z_mm
-
-    sform = np.array(
-        [
-            [
-                resolution_x_mm,
-                0.0,
-                0.0,
-                origin_x_mm,
-            ],
-            [
-                0.0,
-                resolution_y_mm,
-                0.0,
-                origin_y_mm,
-            ],
-            [
-                0.0,
-                0.0,
-                spacing_z_mm,
-                origin_z_mm,
-            ],
-            [
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-            ],
-        ],
-        dtype=np.float64,
-    )
-
-    return sform.tolist()
+    return slice_sform(
+        pixel_size_um=pixel_size,
+        native_pixel_um=native_pixel_size,
+        native_width=native_width,
+        native_height=native_height,
+        slice_position=slice_position,
+        nb_slices=nb_slices,
+        thickness_um=thickness,
+    ).tolist()
 
 def build_centered_affine(
     shape: tuple[float, float, float],
@@ -655,7 +564,7 @@ def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
-    reduce_method: str = "decimate",
+    block_value: str = "decimate",
 ) -> dict:
     """
     Add the SForm of an exported 2D NIfTI slice to its metadata.
@@ -716,7 +625,7 @@ def add_sform_to_json_metadata(
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness=original_thickness,
-        reduce_method=reduce_method,
+        block_value=block_value,
     )
 
     meta["SlicePosition"] = slice_position
