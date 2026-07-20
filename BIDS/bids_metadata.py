@@ -571,24 +571,21 @@ def build_slice_sform(
             f"reduce_method must be 'decimate' or 'mean', got {reduce_method!r}"
         )
 
-    # Common X/Y origin calculated from the native CZI grid, so that res-4x,
-    # res-6x and res-8x from the same scene share the same physical reference.
-    center_x_mm = -((float(native_width) - 1.0) * native_resolution_x_mm) / 2.0
-    center_y_mm = -((float(native_height) - 1.0) * native_resolution_y_mm) / 2.0
+    # A voxel of factor f covers the native block [k*f, k*f + f - 1] and is
+    # placed at its center, in BOTH reduction modes. Declaring a pixel size of
+    # f x native already commits to the block interpretation; putting the voxel
+    # anywhere else contradicts its own declared size, and that contradiction is
+    # what makes a res-8x edge land on a res-6x center in a viewer.
+    # reduce_method only chooses how the block value is estimated.
+    factor_x = resolution_x_mm / native_resolution_x_mm
+    factor_y = resolution_y_mm / native_resolution_y_mm
 
-    if reduce_method == "mean":
-        # The voxel covers its whole native block: place it on the block center.
-        factor_x = resolution_x_mm / native_resolution_x_mm
-        factor_y = resolution_y_mm / native_resolution_y_mm
-        shift_x_mm = ((factor_x - 1.0) / 2.0) * native_resolution_x_mm
-        shift_y_mm = ((factor_y - 1.0) / 2.0) * native_resolution_y_mm
-    else:
-        # Point sample: the voxel sits exactly on its native pixel.
-        shift_x_mm = 0.0
-        shift_y_mm = 0.0
-
-    origin_x_mm = center_x_mm + shift_x_mm
-    origin_y_mm = center_y_mm + shift_y_mm
+    origin_x_mm = (
+        (factor_x - 1.0) / 2.0 - (float(native_width) - 1.0) / 2.0
+    ) * native_resolution_x_mm
+    origin_y_mm = (
+        (factor_y - 1.0) / 2.0 - (float(native_height) - 1.0) / 2.0
+    ) * native_resolution_y_mm
 
     # Physical Z position of this slice.
     origin_z_mm = (
@@ -726,9 +723,7 @@ def add_sform_to_json_metadata(
     meta["NumberOfSlices"] = nb_slices
     meta["SFormMatrix"] = sform
     meta["SFormMatrixUnits"] = "mm"
-    meta["SFormOriginConvention"] = (
-        "block-center" if reduce_method == "mean" else "native-pixel-center"
-    )
+    meta["SFormOriginConvention"] = "block-center"
     meta["SFormReorientationMode"] = "none"
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
 
