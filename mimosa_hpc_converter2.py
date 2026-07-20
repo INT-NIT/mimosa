@@ -17,7 +17,14 @@ def dir_path(path):
 def main():
     parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
     parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
-    parser.add_argument("-df", "--downsampling_factor", type=int,   required=True,  help="downsampling factor e.x: 4 ")
+    parser.add_argument(
+        "-df", "--downsampling_factor", type=str, required=True,
+        help=(
+            "Downsampling exponent(s), factor = 2**exponent. "
+            "Accepts a single value (e.g. 4) or a comma separated list "
+            "(e.g. 4,6,8). Several resolutions cost one single native read."
+        ),
+    )
     parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
     parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
@@ -30,8 +37,18 @@ def main():
 
     clean_output_path = args.output_path.rstrip("/")
 
-    downsampling_factor = args.downsampling_factor
-    res_label = f"{downsampling_factor}x"
+    downsampling_factor = sorted(
+        {
+            int(token)
+            for token in str(args.downsampling_factor).replace(";", ",").split(",")
+            if token.strip()
+        }
+    )
+    if not downsampling_factor:
+        raise ValueError("At least one downsampling exponent is required")
+
+    res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
+    print("Exported resolutions:", ", ".join(res_label.values()))
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
