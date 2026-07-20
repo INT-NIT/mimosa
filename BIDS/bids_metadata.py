@@ -508,6 +508,7 @@ def build_slice_sform(
     slice_position: int,
     nb_slices: int,
     thickness: float,
+    reduce_method: str = "decimate",
 ) -> list[list[float]]:
     """
     Build the SForm of one exported 2D NIfTI slice.
@@ -518,6 +519,23 @@ def build_slice_sform(
     - the same Z position.
 
     This function does not modify or interpolate image values.
+
+    The origin follows what the voxel actually contains:
+
+    - ``reduce_method="decimate"``: the voxel IS the native pixel k*factor, a
+      point sample. Its physical position is the center of that native pixel,
+      identically for every resolution, so the sampling points of res-4x,
+      res-6x and res-8x coincide exactly.
+
+    - ``reduce_method="mean"``: the voxel is the average of the native block
+      [k*factor, k*factor + factor - 1]. It therefore truly occupies that whole
+      block, and is placed at the block center, (factor - 1) / 2 native pixels
+      further. All resolutions then tile the same native grid from index 0 and,
+      because the factors are powers of two, they are exactly nested: 4x4
+      res-6x voxels fill exactly one res-8x voxel, edges included.
+
+    Using the block-center origin with a decimation would declare each value at
+    a position where it was never measured. Do not mix them.
     """
 
     if native_width <= 0 or native_height <= 0:
@@ -548,29 +566,29 @@ def build_slice_sform(
 
     spacing_z_mm = float(thickness) * UM_TO_MM
 
-    # Common X/Y origin calculated from the native CZI grid.
-    # Therefore res-4x and res-8x from the same scene start
-    # at exactly the same physical position.
-    #
-    # Point-sampling convention: the exported pixel k IS the native pixel
-    # k*factor, not an average of its block. Placing voxel 0 on the center of
-    # native pixel 0, identically for every resolution, therefore makes the
-    # sampling points of res-4x, res-6x and res-8x coincide exactly.
-    #
-    # The half-voxel offset seen in a viewer is a rendering artifact: a coarse
-    # point sample is drawn as a large filled square, so the drawn edges do not
-    # tile with the finer grid even though the sample centers do coincide.
-    # Do not "fix" it by shifting the origin by (factor - 1) / 2 native pixels:
-    # that would declare each value at a position it was not measured at.
-    origin_x_mm = -(
-        (float(native_width) - 1.0)
-        * native_resolution_x_mm
-    ) / 2.0
+    if reduce_method not in ("decimate", "mean"):
+        raise ValueError(
+            f"reduce_method must be 'decimate' or 'mean', got {reduce_method!r}"
+        )
 
-    origin_y_mm = -(
-        (float(native_height) - 1.0)
-        * native_resolution_y_mm
-    ) / 2.0
+    # Common X/Y origin calculated from the native CZI grid, so that res-4x,
+    # res-6x and res-8x from the same scene share the same physical reference.
+    center_x_mm = -((float(native_width) - 1.0) * native_resolution_x_mm) / 2.0
+    center_y_mm = -((float(native_height) - 1.0) * native_resolution_y_mm) / 2.0
+
+    if reduce_method == "mean":
+        # The voxel covers its whole native block: place it on the block center.
+        factor_x = resolution_x_mm / native_resolution_x_mm
+        factor_y = resolution_y_mm / native_resolution_y_mm
+        shift_x_mm = ((factor_x - 1.0) / 2.0) * native_resolution_x_mm
+        shift_y_mm = ((factor_y - 1.0) / 2.0) * native_resolution_y_mm
+    else:
+        # Point sample: the voxel sits exactly on its native pixel.
+        shift_x_mm = 0.0
+        shift_y_mm = 0.0
+
+    origin_x_mm = center_x_mm + shift_x_mm
+    origin_y_mm = center_y_mm + shift_y_mm
 
     # Physical Z position of this slice.
     origin_z_mm = (
@@ -640,6 +658,7 @@ def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
     original_thickness: float,
+    reduce_method: str = "decimate",
 ) -> dict:
     """
     Add the SForm of an exported 2D NIfTI slice to its metadata.
@@ -700,12 +719,16 @@ def add_sform_to_json_metadata(
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness=original_thickness,
+        reduce_method=reduce_method,
     )
 
     meta["SlicePosition"] = slice_position
     meta["NumberOfSlices"] = nb_slices
     meta["SFormMatrix"] = sform
     meta["SFormMatrixUnits"] = "mm"
+    meta["SFormOriginConvention"] = (
+        "block-center" if reduce_method == "mean" else "native-pixel-center"
+    )
     meta["SFormReorientationMode"] = "none"
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
 

@@ -375,6 +375,7 @@ def czi2bitmapHPC(
                                     meta=meta_nii,
                                     slice_position_map=slice_position_map,
                                     original_thickness=original_thickness,
+                                    reduce_method=reduce_method,
                                 )
 
                             sform = np.asarray(
