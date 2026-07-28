@@ -9,6 +9,30 @@ import nibabel as nb
 
 UM_TO_MM=1.0/1000
 
+import tempfile
+
+
+def _atomic_write_text(path, text: str) -> None:
+    """Write a file so an interruption can never leave it half written.
+
+    The text goes to a temporary file in the same folder, then os.replace
+    swaps it in atomically. A crash mid-write leaves the old file intact.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
 import sys as _sys
 _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mimosa_downsample import slice_sform  # noqa: E402
@@ -323,43 +347,104 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
             sample["files"] = updated_files
 
-    with open(yaml_path, "w", encoding="utf-8") as f:
+    # Atomic write: an interruption here used to leave metadata.yml truncated,
+    # which silently changed the total slice count on the next run.
+    _atomic_write_text(
+        yaml_path,
         yaml.dump(
             cfg,
-            f,
             allow_unicode=True,
             default_flow_style=False,
             sort_keys=False,
-        )
+        ),
+    )
 
     return cfg
 
 def get_slice_position_map_from_config(cfg: dict) -> dict[int, int]:
     """
-    Build a map SliceIndex -> position in the global stack.
+    Build a map SliceIndex -> position over EVERY subject of the config.
 
-    Example:
-        SliceIndex 2   -> 0
-        SliceIndex 4   -> 1
-        SliceIndex 452 -> N
+    Kept for backward compatibility. New code should freeze one map per
+    subject with load_or_freeze_slice_reference, so the total slice count of a
+    brain never changes when CZI files are deleted or a run is interrupted.
     """
-    slice_indices = []
+    return _positions_from_indices(_all_slice_indices(cfg))
 
+
+def _all_slice_indices(cfg: dict, subject: str | None = None) -> list[int]:
+    """Collect declared SliceIndex values, optionally for one subject only."""
+    indices = []
     for entry in cfg.get("samples", {}).get("entries", []):
+        if subject is not None and str(entry.get("subject")) != str(subject):
+            continue
         for sample in entry.get("samples", []):
             for file_entry in sample.get("files", []):
                 for s in file_entry.get("slices", []):
                     try:
-                        slice_indices.append(int(s))
-                    except Exception:
+                        indices.append(int(s))
+                    except (TypeError, ValueError):
                         continue
+    return sorted(set(indices))
 
-    unique_slices = sorted(set(slice_indices))
 
-    return {
-        slice_index: position
-        for position, slice_index in enumerate(unique_slices)
+def _positions_from_indices(unique_indices: list[int]) -> dict[int, int]:
+    """Map each SliceIndex to its 0-based position in the sorted stack."""
+    return {idx: pos for pos, idx in enumerate(sorted(set(unique_indices)))}
+
+
+def slice_reference_path(bids_root) -> Path:
+    """Where the frozen per-subject slice references live (BIDS code/ folder)."""
+    return Path(bids_root) / "code" / "mimosa_slice_references.json"
+
+
+def load_or_freeze_slice_reference(
+    bids_root,
+    subject: str,
+    slice_indices: list[int],
+    refreeze: bool = False,
+) -> dict[int, int]:
+    """Return the frozen SliceIndex -> position map for one subject.
+
+    The first time a subject is seen (or when refreeze is True), the count is
+    computed from slice_indices and written to disk. After that the stored map
+    is reused unchanged, so deleting CZI files or interrupting a run can never
+    shrink the total: partial high-resolution slices still land at the exact
+    depth they occupy in the complete brain.
+    """
+    path = slice_reference_path(bids_root)
+    store = {}
+    if path.exists():
+        try:
+            store = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            store = {}
+
+    subject = str(subject)
+    entry = store.get(subject)
+
+    if entry is not None and not refreeze:
+        # Reuse the frozen map. JSON keys are strings; restore int keys.
+        return {int(k): int(v) for k, v in entry["SliceIndexToPosition"].items()}
+
+    positions = _positions_from_indices(slice_indices)
+    if not positions:
+        raise ValueError(
+            f"No slice index found for subject {subject!r}. Cannot freeze a "
+            "slice reference from an empty set."
+        )
+
+    store[subject] = {
+        "NumberOfSlices": len(positions),
+        "SliceIndexToPosition": {str(k): v for k, v in positions.items()},
     }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(path, json.dumps(store, indent=2, ensure_ascii=False))
+    print(
+        f"Slice reference frozen for {subject}: "
+        f"{len(positions)} slices -> {path}"
+    )
+    return positions
 
 def is_identity_reorientation(mode: str) -> bool:
     if mode is None:

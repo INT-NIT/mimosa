@@ -30,6 +30,15 @@ def main():
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     parser.add_argument(
+        "--refreeze", action="store_true",
+        help=(
+            "Recompute the frozen slice count of each subject from the CZI "
+            "currently declared. Use it only when the complete set of a brain "
+            "has genuinely changed. Without it, the total is kept stable so "
+            "exporting a few slices places them at the right depth."
+        ),
+    )
+    parser.add_argument(
         "--threads", type=int, default=czi.READ_THREADS,
         help=(
             "Threads used to produce ONE image: its bands are read and reduced "
@@ -79,7 +88,23 @@ def main():
     cfg = bmeta.load_metadata_config(args.yaml)
     bmeta.update_yaml_with_slices(args.yaml)
     cfg = bmeta.load_metadata_config(args.yaml)
-    slice_position_map = bmeta.get_slice_position_map_from_config(cfg)
+
+    # Freeze the total slice count once per subject. After the first full pass
+    # it is reused unchanged, so deleting CZI files to export only a few
+    # high-resolution slices no longer shifts their depth. Use --refreeze to
+    # recompute when the complete set of a brain has genuinely changed.
+    slice_maps_by_subject = {}
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subj = entry.get("subject")
+        if subj is None or subj in slice_maps_by_subject:
+            continue
+        slice_maps_by_subject[subj] = bmeta.load_or_freeze_slice_reference(
+            bids_root=bids_root_path,
+            subject=subj,
+            slice_indices=bmeta._all_slice_indices(cfg, subject=subj),
+            refreeze=args.refreeze,
+        )
+
     MimosaReader.load_correspondence_from_yaml(cfg)
 
     session = bm.BIDSSession(bids_root_path)
@@ -115,15 +140,15 @@ def main():
                     continue
 
                 files_to_process.append(
-
                     (
                         subject_path,
                         filename,
                         derived_from,
                         sample_type,
                         participant_id,
+                        subject,
                     ))
-    for input_dir, filename, derived_from, sample_type, participant_id_from_yaml in files_to_process:
+    for input_dir, filename, derived_from, sample_type, participant_id_from_yaml, subject_label in files_to_process:
         full_input_path = os.path.join(input_dir, filename)
         czi_id = os.path.splitext(filename)[0]
 
@@ -185,7 +210,7 @@ def main():
                     output_format,
                     res_label=res_label,
                     reader=reader,
-                    slice_position_map=slice_position_map,
+                    slice_position_map=slice_maps_by_subject[subject_label],
                     original_thickness=args.original_thickness,
                     reorient=args.reorient,
                     block_value=args.block_value,

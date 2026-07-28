@@ -211,6 +211,27 @@ class VolumeBuilder3D:
 
         nb_slices = int(nb_slices)
 
+        # Guard: every slice must agree on the total. If some were produced
+        # with a different total (e.g. old sidecars from before the count was
+        # frozen), placing them by index would put them at the wrong depth.
+        # Fail loudly instead of silently misplacing them.
+        disagreeing = [
+            (p.name, int(m["NumberOfSlices"]))
+            for _, _, p, m in sorted_slices
+            if m.get("NumberOfSlices") is not None
+            and int(m["NumberOfSlices"]) != nb_slices
+        ]
+        if disagreeing:
+            details = ", ".join(f"{n} says {v}" for n, v in disagreeing[:5])
+            raise ValueError(
+                f"Inconsistent NumberOfSlices for {subject_dir.name} {channel}: "
+                f"reference is {nb_slices} but {details}"
+                + (" ..." if len(disagreeing) > 5 else "")
+                + ". Regenerate these slices with the current frozen reference "
+                "(mimosa_hpc_converter2.py), or pass --refreeze if the brain's "
+                "complete slice set really changed."
+            )
+
         # Read the size of preprocessed padded slices.
         first_img = nb.load(str(sorted_slices[0][2]))
         first_data = np.squeeze(first_img.get_fdata())
