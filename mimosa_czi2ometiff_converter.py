@@ -412,6 +412,8 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     channels: tuple[int, ...],
     patch_size: int = 6144,
     threads: int = READ_THREADS,
+    compression: str = "zlib",
+    quality: float = 0.5,
 ):
     import tempfile
     import os
@@ -561,15 +563,22 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 downsampling_factor=downsampling_factor,
             )
 
-            # Step 3 : écrire le vrai fichier BigTIFF avec l'XML enrichi
+            # Step 3 : écrire le vrai fichier BigTIFF avec l'XML enrichi.
+            # zlib is lossless but weak on fluorescence data (~10%). jpegxr and
+            # jpeg2000 are lossy: they shrink the file a lot (like the CZI does)
+            # at the cost of slightly altered pixel values. Lossy is fine for a
+            # visual overview but must not be used for quantification.
+            write_kwargs = dict(
+                photometric="minisblack",
+                description=enriched_xml,
+                metadata=None,
+                compression=compression,
+            )
+            if compression in ("jpegxr", "jpeg2000"):
+                write_kwargs["compressionargs"] = {"level": float(quality)}
+
             with tifffile.TiffWriter(str(output_path), bigtiff=True) as tif:
-                tif.write(
-                    mosaic_image.astype(np.uint16),
-                    photometric="minisblack",
-                    description=enriched_xml,
-                    metadata=None,
-                    compression="zlib",
-                )
+                tif.write(mosaic_image.astype(np.uint16), **write_kwargs)
 
             print("Written:", output_path)
 
@@ -585,6 +594,13 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 sample_label=sample_label,
                 sample_info=sample_info,
             )
+
+            # Record the compression so a reader knows whether the pixel values
+            # are exact (lossless) or slightly altered (lossy overview).
+            meta["Compression"] = compression
+            meta["Lossy"] = compression in ("jpegxr", "jpeg2000")
+            if meta["Lossy"]:
+                meta["CompressionQuality"] = float(quality)
 
             write_json_sidecar_for_ome_tiff(output_path, meta)
 
@@ -644,6 +660,32 @@ def main():
             "Patches read and downsampled concurrently. They cover disjoint "
             "mosaic regions, so this only speeds things up, the output is "
             "identical. Set it near your core count; use 1 to disable."
+        ),
+    )
+
+    parser.add_argument(
+        "--compression",
+        type=str,
+        default="zlib",
+        choices=("zlib", "jpegxr", "jpeg2000"),
+        help=(
+            "How to compress the OME-TIFF. 'zlib' is lossless but weak on "
+            "fluorescence (~10%%), so the file stays large. 'jpegxr' and "
+            "'jpeg2000' are lossy: much smaller (like the CZI), at the cost of "
+            "slightly altered pixel values. Use lossy only for a visual "
+            "overview, never for quantification."
+        ),
+    )
+
+    parser.add_argument(
+        "--quality",
+        type=float,
+        default=0.5,
+        help=(
+            "Quality level for lossy compression. ONLY affects jpegxr and "
+            "jpeg2000; it does NOTHING for zlib, which is lossless and keeps "
+            "every value exactly. Lower means smaller and more altered. 0.5 is "
+            "a good mild overview setting, about 6x smaller than lossless."
         ),
     )
 
@@ -753,6 +795,8 @@ def main():
                 channels=channels,
                 patch_size=args.patch_size,
                 threads=args.threads,
+                compression=args.compression,
+                quality=args.quality,
             )
 
         except Exception as exc:

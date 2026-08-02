@@ -6,10 +6,9 @@ from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 
 class SlicePreprocessor:
-    def __init__(self,input_root: str,output_root: str,original_thickness: float,  res_label: str,reorient: str = "none",):     
+    def __init__(self, input_root: str, output_root: str, res_label: str, reorient: str = "none"):
         self.input_root = Path(input_root).resolve()
         self.output_root = Path(output_root).resolve()
-        self.original_thickness = original_thickness
         self.res_label = res_label
         self.reorient = reorient
         self.subject_max_sizes = {} # having track of max width and height for each subject 
@@ -191,7 +190,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="2D slice preprocessing")
     parser.add_argument("-bids_root", required=True, help="Path to BIDS root folder")
     parser.add_argument("-padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
-    parser.add_argument("-original_thickness", required=False, type=float, default=200, help="Histological section thickness")
     parser.add_argument("-res",required=True,help="Resolution label to preprocess, for example 4x")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
@@ -199,7 +197,6 @@ if __name__ == "__main__":
     proc = SlicePreprocessor(
         input_root=args.bids_root,
         output_root=args.bids_root,
-        original_thickness=args.original_thickness,
         res_label=args.res,
         reorient=args.reorient,
     )
@@ -255,6 +252,5 @@ if __name__ == "__main__":
 python mimosa_slice_preprocessor.py \
   -bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
   -res 4x \
-  -padding_delta 100 \
-  -original_thickness 100
+  -padding_delta 100
 """

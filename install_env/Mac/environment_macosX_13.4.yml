@@ -48,6 +48,7 @@ dependencies:
       - fqdn==1.5.1
       - grapheme==0.6.0
       - idna==3.4
+      - imagecodecs==2023.8.12
       - imageio==2.31.1
       - ipykernel==6.25.1
       - ipython==8.14.0
@@ -84,6 +85,7 @@ dependencies:
       - numpy==1.25.2
       - overrides==7.4.0
       - packaging==23.1
+      - pandas==2.0.3
       - pandocfilters==1.5.0
       - parso==0.8.3
       - pexpect==4.8.0
