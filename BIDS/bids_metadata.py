@@ -598,18 +598,23 @@ def build_slice_sform(
     nb_slices: int,
     thickness: float,
     block_value: str = "decimate",
+    reorient: str = "none",
 ) -> list[list[float]]:
     """Build the SForm of one exported 2D slice, as a nested list.
 
-    Thin wrapper over mimosa_downsample.slice_sform, which owns the geometry
-    so that reduction and placement can never drift apart. block_value is
-    accepted for call-site clarity but does not move the voxel: it only says
-    how the block value was estimated, never where the block sits.
+    The base geometry (block-centered origin, exact resolution tiling) is
+    computed by mimosa_downsample.slice_sform. If ``reorient`` is not the
+    identity, the sform axes and origin are then permuted and flipped so the
+    slice already sits in the requested anatomical frame — the same transform
+    the 3D stacking applies to the volume, so a slice viewed alone matches the
+    reoriented volume.
+
+    block_value is accepted for call-site clarity but does not move the voxel.
     """
     if block_value not in ("decimate", "mean"):
         raise ValueError(f"block_value must be 'decimate' or 'mean', got {block_value!r}")
 
-    return slice_sform(
+    sform = slice_sform(
         pixel_size_um=pixel_size,
         native_pixel_um=native_pixel_size,
         native_width=native_width,
@@ -617,7 +622,36 @@ def build_slice_sform(
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness_um=thickness,
-    ).tolist()
+    )
+
+    if not is_identity_reorientation(reorient):
+        sform = apply_reorientation_to_sform(sform, reorient)
+
+    return sform.tolist()
+
+
+def apply_reorientation_to_sform(sform: np.ndarray, reorient: str) -> np.ndarray:
+    """Permute and flip the sform axes and origin according to ``reorient``.
+
+    Each column (X, Y, Z direction) and the origin is a 3-vector; the mode
+    reorders its components (transpose_axes) then flips the chosen ones
+    (flip_axes). This matches the volume-level reorientation used by the 3D
+    stacking, so per-slice and per-volume reorientation stay consistent.
+    """
+    transpose_axes, flip_axes = parse_reorientation_mode(reorient)
+
+    def reorient_vec(v):
+        v_new = np.array([v[transpose_axes[i]] for i in range(3)], dtype=float)
+        for ax in flip_axes:
+            v_new[ax] *= -1.0
+        return v_new
+
+    out = np.eye(4, dtype=float)
+    out[:3, 0] = reorient_vec(sform[:3, 0])
+    out[:3, 1] = reorient_vec(sform[:3, 1])
+    out[:3, 2] = reorient_vec(sform[:3, 2])
+    out[:3, 3] = reorient_vec(sform[:3, 3])
+    return out
 
 def build_centered_affine(
     shape: tuple[float, float, float],
@@ -650,6 +684,7 @@ def add_sform_to_json_metadata(
     slice_position_map: dict[int, int],
     original_thickness: float,
     block_value: str = "decimate",
+    reorient: str = "none",
 ) -> dict:
     """
     Add the SForm of an exported 2D NIfTI slice to its metadata.
@@ -711,6 +746,7 @@ def add_sform_to_json_metadata(
         nb_slices=nb_slices,
         thickness=original_thickness,
         block_value=block_value,
+        reorient=reorient,
     )
 
     meta["SlicePosition"] = slice_position
@@ -718,7 +754,7 @@ def add_sform_to_json_metadata(
     meta["SFormMatrix"] = sform
     meta["SFormMatrixUnits"] = "mm"
     meta["SFormOriginConvention"] = "block-center"
-    meta["SFormReorientationMode"] = "none"
+    meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
 
     meta["SFormMatrixDescription"] = (

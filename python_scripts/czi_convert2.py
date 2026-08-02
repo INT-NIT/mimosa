@@ -52,7 +52,7 @@ def _bids_basename(bids_info, stain, res_label, desc):
 
 
 def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
-             block_value, slice_position_map, thickness):
+             block_value, slice_position_map, thickness, reorient="none"):
     """Build the JSON sidecar for one exported image, sform included."""
     meta = reader.get_converted_file_metadata(
         rect=rect,
@@ -71,6 +71,7 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
             slice_position_map=slice_position_map,
             original_thickness=thickness,
             block_value=block_value,
+            reorient=reorient,
         )
     return meta
 
@@ -171,7 +172,7 @@ def czi2bitmapHPC(
                                 _sidecar(reader, rect, stain, factor, scene_idx,
                                          (image.shape[1], image.shape[0]), False,
                                          block_value, slice_position_map,
-                                         original_thickness),
+                                         original_thickness, reorient),
                             )
                             print("  -> BIDS raw: "
                                   f"{os.path.relpath(path, bids_root_path)}")
@@ -181,7 +182,8 @@ def czi2bitmapHPC(
                             arr = np.swapaxes(image, 0, 1)
                             meta = _sidecar(reader, rect, stain, factor, scene_idx,
                                             arr.shape[:2], True, block_value,
-                                            slice_position_map, original_thickness)
+                                            slice_position_map, original_thickness,
+                                            reorient)
                             _save_nifti(
                                 path, arr,
                                 np.asarray(meta.get("SFormMatrix", np.eye(4)),

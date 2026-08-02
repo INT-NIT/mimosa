@@ -173,7 +173,7 @@ python mimosa_hpc_converter2.py -f nii -df 4,6,8 \
 | `-o` | Output BIDS root. **Required.** | — |
 | `-y` | metadata YAML. | `metadata.yml` |
 | `-original_thickness` | Section thickness in µm. | `100` |
-| `-reorient` | Currently not applied here (see note). | `none` |
+| `-reorient` | Reorients each slice's sform into the anatomical frame, e.g. `x,-z,-y`. | `none` |
 | `--block-value` | `decimate` or `mean`. | `decimate` |
 | `--threads` | Threads to produce one image faster. | cores |
 | `--refreeze` | Recompute the frozen slice count. | off |
@@ -201,10 +201,13 @@ python mimosa_hpc_converter2.py -f nii -df 4,6,8 \
   frozen once (see *Frozen slice count* below). Use `--refreeze` only when the
   complete set of a brain genuinely changed; never for routine partial runs.
 
-- **`-reorient` (currently does nothing here).** This option is accepted but
-  not applied at the conversion step. The real reorientation of the brain into
-  the anatomical frame happens later, at the 3D stacking step
-  (`mimosa_stacking_2D_2_3D-2.py`, see its `-reorient`).
+- **`-reorient` (orient the slices in the anatomical frame).** A scanned slide
+  is not always aligned with the anatomical reference frame that viewers like
+  FSLeyes expect. `-reorient` permutes and flips the axes of each slice's sform
+  so the slice already sits in the requested frame, e.g. `x,-z,-y` (the `-`
+  flips that axis). `none` keeps the acquisition axes. This is the same
+  transform the 3D stacking applies to the volume, so a slice and the
+  reoriented volume stay consistent.
 
 ---
 
