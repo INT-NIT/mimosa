@@ -38,25 +38,6 @@ def main():
             "exporting a few slices places them at the right depth."
         ),
     )
-    parser.add_argument(
-        "-threads", type=int, default=czi.READ_THREADS,
-        help=(
-            "Threads used to produce ONE image: its bands are read and reduced "
-            "concurrently. This is the setting that makes a single NIfTI come "
-            "out faster. Measured 7.3 s -> 3.3 s on 4 cores. Set it to your "
-            "core count; going past it stops helping. Use 1 to disable."
-        ),
-    )
-    parser.add_argument(
-        "-block_value", type=str, default="decimate", choices=("decimate", "mean"),
-        help=(
-            "How to reduce each native block. "
-            "'decimate' keeps the native pixel k*f, bit for bit "
-            "(desc-downsampled). 'mean' averages the f*f native block, which "
-            "is more accurate for quantification (desc-downsampledavg). "
-            "Both are computed from native data: the ZEN pyramid is never used."
-        ),
-    )
     args = parser.parse_args()
 
     output_format = args.output_format.lower().strip()
@@ -77,8 +58,7 @@ def main():
 
     res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
     print("Exported resolutions:", ", ".join(res_label.values()))
-    print("Block value        :", args.block_value)
-    print("Threads            :", args.threads)
+    print("Reduction method    : zoom (ZEN pyramid)")
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
@@ -213,8 +193,6 @@ def main():
                     slice_position_map=slice_maps_by_subject[subject_label],
                     original_thickness=args.original_thickness,
                     reorient=args.reorient,
-                    block_value=args.block_value,
-                    threads=args.threads,
                 )
 
         except Exception as e:

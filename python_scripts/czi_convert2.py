@@ -14,15 +14,9 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mimosa_downsample import (  # noqa: E402
-    BLOCK_VALUES,
-    READ_THREADS,
-    downsample_scene,
-)
+from mimosa_downsample import downsample_scene_zoom  # noqa: E402
 
-# "decimate" keeps the historical desc so existing datasets and the slice
-# preprocessor keep working unchanged.
-DESC_BY_BLOCK_VALUE = {"decimate": "downsampled", "mean": "downsampledavg"}
+DESC = "downsampled"
 
 
 def _as_exponents(value):
@@ -52,7 +46,7 @@ def _bids_basename(bids_info, stain, res_label, desc):
 
 
 def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
-             block_value, slice_position_map, thickness, reorient="none"):
+             slice_position_map, thickness, reorient="none"):
     """Build the JSON sidecar for one exported image, sform included."""
     meta = reader.get_converted_file_metadata(
         rect=rect,
@@ -62,15 +56,13 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
         scene_idx=scene_idx,
         exported_shape=(int(shape[0]), int(shape[1])),
     )
-    meta["BlockValueMethod"] = block_value
-    meta["BlockValueSource"] = "native CZI (no zoom)"
+    meta["DownsamplingSource"] = "CZI zoom (ZEN pyramid)"
 
     if is_nifti and slice_position_map is not None:
         meta = bmeta.add_sform_to_json_metadata(
             meta=meta,
             slice_position_map=slice_position_map,
             original_thickness=thickness,
-            block_value=block_value,
             reorient=reorient,
         )
     return meta
@@ -85,7 +77,6 @@ def _save_nifti(path, image, sform):
     nib.save(img, path)
 
 
-
 def czi2bitmapHPC(
     pathin: str,
     czifilename: str,
@@ -98,27 +89,18 @@ def czi2bitmapHPC(
     slice_position_map=None,
     original_thickness: float = 100,
     reorient: str = "none",
-    block_value: str = "decimate",
-    threads: int = READ_THREADS,
 ):
-    """Export one CZI to every requested resolution in a single native pass.
+    """Export one CZI to every requested resolution using the CZI zoom.
 
-    downsampling_factor is an exponent or a list of them; passing several at
-    once is nearly free because the native data is read only one time.
-    block_value is "decimate" or "mean", and tags the output with its own BIDS
-    desc- so both can coexist in one dataset. threads splits each image into
-    bands read and reduced concurrently, which is what makes one export fast.
+    downsampling_factor is an exponent or a list of them (factor = 2**exp).
+    The reduction is done by the CZI `zoom` argument (ZEN pyramid).
     """
-    if block_value not in BLOCK_VALUES:
-        raise ValueError(f"block_value must be one of {BLOCK_VALUES}")
-
     output_format = output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
         raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
     exponents = _as_exponents(downsampling_factor)
     res_labels = _as_res_labels(res_label, exponents)
-    desc = DESC_BY_BLOCK_VALUE[block_value]
     write_tif = output_format in ("tif", "both")
     write_nii = output_format in ("nii", "both")
 
@@ -146,14 +128,9 @@ def czi2bitmapHPC(
             with alive_bar(nb_channels, force_tty=True,
                            title=f"Scene {scene_idx}") as bar:
                 for channel_idx in range(nb_channels):
-                    images = downsample_scene(
-                        czidoc=czidoc,
-                        roi=roi,
-                        scene=scene_idx,
-                        channel=channel_idx,
-                        exponents=exponents,
-                        block_value=block_value,
-                        threads=threads,
+                    images = downsample_scene_zoom(
+                        czidoc=czidoc, roi=roi, scene=scene_idx,
+                        channel=channel_idx, exponents=exponents,
                     )
                     stain = f"C{channel_idx}"
 
@@ -161,7 +138,7 @@ def czi2bitmapHPC(
                         image = images[exponent]
                         factor = 2**exponent
                         base = _bids_basename(
-                            bids_info, stain, res_labels[exponent], desc
+                            bids_info, stain, res_labels[exponent], DESC
                         )
 
                         if write_tif:
@@ -171,7 +148,7 @@ def czi2bitmapHPC(
                                 path,
                                 _sidecar(reader, rect, stain, factor, scene_idx,
                                          (image.shape[1], image.shape[0]), False,
-                                         block_value, slice_position_map,
+                                         slice_position_map,
                                          original_thickness, reorient),
                             )
                             print("  -> BIDS raw: "
@@ -181,7 +158,7 @@ def czi2bitmapHPC(
                             path = os.path.join(folders[exponent], base + ".nii.gz")
                             arr = np.swapaxes(image, 0, 1)
                             meta = _sidecar(reader, rect, stain, factor, scene_idx,
-                                            arr.shape[:2], True, block_value,
+                                            arr.shape[:2], True,
                                             slice_position_map, original_thickness,
                                             reorient)
                             _save_nifti(
