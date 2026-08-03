@@ -394,8 +394,13 @@ def _positions_from_indices(unique_indices: list[int]) -> dict[int, int]:
 
 
 def slice_reference_path(bids_root) -> Path:
-    """Where the frozen per-subject slice references live (BIDS code/ folder)."""
-    return Path(bids_root) / "code" / "mimosa_slice_references.json"
+    """Where the frozen per-subject slice references live.
+
+    Stored under derivatives/, which is where the pipeline's own generated
+    files belong in BIDS. Not in code/ (reserved for scripts) nor in
+    sourcedata/ (reserved for the original acquisition).
+    """
+    return Path(bids_root) / "derivatives" / "2D" / "mimosa_slice_references.json"
 
 
 def load_or_freeze_slice_reference(

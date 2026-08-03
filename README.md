@@ -163,7 +163,7 @@ Reads each CZI at native resolution and writes reduced images into
 ```bash
 python mimosa_hpc_converter2.py -f nii -df 4,6,8 \
   -o /path/to/BIDS -y metadata.yml \
-  --block-value mean --threads 16
+  -block_value mean -threads 16
 ```
 
 | Option | What it does | Default |
@@ -173,10 +173,10 @@ python mimosa_hpc_converter2.py -f nii -df 4,6,8 \
 | `-o` | Output BIDS root. **Required.** | — |
 | `-y` | metadata YAML. | `metadata.yml` |
 | `-original_thickness` | Section thickness in µm. | `100` |
-| `-reorient` | Reorients each slice's sform into the anatomical frame, e.g. `x,-z,-y`. | `none` |
-| `--block-value` | `decimate` or `mean`. | `decimate` |
-| `--threads` | Threads to produce one image faster. | cores |
-| `--refreeze` | Recompute the frozen slice count. | off |
+| `-reorient` | Reorients the slice's **sform matrix** (not the pixels) into the anatomical frame, e.g. `x,-z,-y`. | `none` |
+| `-block_value` | `decimate` or `mean`. | `decimate` |
+| `-threads` | Threads to produce one image faster. | cores |
+| `-refreeze` | Recompute the frozen slice count. | off |
 
 **Understanding the options**
 
@@ -186,28 +186,36 @@ python mimosa_hpc_converter2.py -f nii -df 4,6,8 \
   read, so extra resolutions are almost free. *(Note: the OME-TIFF converter
   below uses the factor directly, not the exponent.)*
 
-- **`--block-value` (how a block becomes one pixel).** Each output pixel stands
+- **`-block_value` (how a block becomes one pixel).** Each output pixel stands
   for a block of native pixels. `decimate` keeps one native pixel per block,
   bit for bit. `mean` averages the whole block, which keeps more signal and is
   better for quantification. Neither invents values, and the vendor
   `zoom`/pyramid is never used. The two methods coexist: `decimate` is tagged
   `desc-downsampled`, `mean` is tagged `desc-downsampledavg`.
 
-- **`--threads` (speed of one image).** One image is read and reduced in
+- **`-threads` (speed of one image).** One image is read and reduced in
   parallel bands. Set it near your number of CPU cores; beyond that it stops
   helping. The output is identical whatever the thread count.
 
-- **`--refreeze` (slice count).** The total number of slices per brain is
-  frozen once (see *Frozen slice count* below). Use `--refreeze` only when the
+- **`-refreeze` (slice count).** The total number of slices per brain is
+  frozen once (see *Frozen slice count* below). Use `-refreeze` only when the
   complete set of a brain genuinely changed; never for routine partial runs.
 
 - **`-reorient` (orient the slices in the anatomical frame).** A scanned slide
   is not always aligned with the anatomical reference frame that viewers like
-  FSLeyes expect. `-reorient` permutes and flips the axes of each slice's sform
-  so the slice already sits in the requested frame, e.g. `x,-z,-y` (the `-`
-  flips that axis). `none` keeps the acquisition axes. This is the same
-  transform the 3D stacking applies to the volume, so a slice and the
-  reoriented volume stay consistent.
+  FSLeyes expect. `-reorient` permutes and flips the axes, e.g. `x,-z,-y` (the
+  `-` flips that axis). `none` keeps the acquisition axes.
+
+  **Important — it changes only the sform matrix, not the pixels.** For a 2D
+  slice, `-reorient` rewrites the SForm (the affine that places the slice in
+  physical space) and the recorded `SFormReorientationMode`. It does **not**
+  rotate or flip the image pixels themselves, and this is correct: the sform
+  is what tells a viewer the anatomical orientation. So a 2D slice viewed
+  alone will not look rotated — only its anatomical labels (S/I/L/R/A/P)
+  change. The pixels are actually moved only when the 3D volume is built
+  (`mimosa_stacking_2D_2_3D-2.py`), where the whole brain is visibly
+  reoriented. Both use the same convention, so slices and volume stay
+  consistent.
 
 ---
 
@@ -218,7 +226,7 @@ Stitches all scenes of a CZI into one whole-slide OME-TIFF written to
 
 ```bash
 python mimosa_czi2ometiff_converter.py -y metadata.yml \
-  -bids_root /path/to/BIDS -df 8 -channels 0,1 --threads 16
+  -bids_root /path/to/BIDS -df 8 -channels 0,1 -threads 16
 ```
 
 | Option | What it does | Default |
@@ -228,9 +236,9 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
 | `-df` | Downsampling **factor** among `1, 2, 4, 6, 8`. | `8` |
 | `-channels` | Channels to convert, e.g. `0` or `0,1`. | `0,1` |
 | `-patch_size` | Patch size (px) used to read the CZI. | `6144` |
-| `--threads` | Patches read in parallel. | cores |
-| `--compression` | `zlib` (lossless), `jpegxr` or `jpeg2000` (lossy, much smaller). | `zlib` |
-| `--quality` | Force of the lossy compression. **Only affects `jpegxr`/`jpeg2000`, ignored for `zlib`.** | `0.5` |
+| `-threads` | Patches read in parallel. | cores |
+| `-compression` | `zlib` (lossless), `jpegxr` or `jpeg2000` (lossy, much smaller). | `zlib` |
+| `-quality` | Force of the lossy compression. **Only affects `jpegxr`/`jpeg2000`, ignored for `zlib`.** | `0.5` |
 
 **Understanding the options**
 
@@ -244,11 +252,11 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
 - **`-patch_size`.** The mosaic is too big to read at once, so it is read in
   square patches of this size (native pixels). You rarely need to change it.
 
-- **`--threads`.** Patches are read in parallel. They cover disjoint regions of
+- **`-threads`.** Patches are read in parallel. They cover disjoint regions of
   the mosaic, so the result is byte-for-byte identical to a single-thread run,
   only faster.
 
-- **`--compression` (which method).** Chooses how the OME-TIFF is compressed.
+- **`-compression` (which method).** Chooses how the OME-TIFF is compressed.
   `zlib` is **lossless**: it keeps every pixel value exactly, but it barely
   compresses fluorescence data, so a full-resolution file can be larger than
   the CZI. `jpegxr` and `jpeg2000` are **lossy**: much smaller (like the CZI),
@@ -256,7 +264,7 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
   the data, never to quantify — quantification is done on the downsampled
   NIfTI.
 
-- **`--quality` (how hard the lossy method compresses).** This is a slider for
+- **`-quality` (how hard the lossy method compresses).** This is a slider for
   the lossy codecs, like the quality setting when you save a JPEG: lower means
   smaller and more degraded. Measured about 6x smaller than lossless at `0.5`.
   **It only affects `jpegxr` and `jpeg2000`. With `zlib` it does nothing,
@@ -322,19 +330,6 @@ python mimosa_stacking_2D_2_3D-2.py -bids_root /path/to/BIDS \
 - **`-original_thickness`.** The physical distance between two sections, in µm.
   It sets the spacing of the volume along the depth (Z) axis.
 
----
-
-## 5. `check_alignment.py` — verification tool
-
-Checks that two resolutions of the same slice tile exactly. For debugging,
-not part of the conversion.
-
-```bash
-python check_alignment.py image_res-6x.nii.gz image_res-8x.nii.gz
-```
-
-It prints `the two grids tile exactly` when everything is correct.
-
 
 # Data organization (BIDS layout)
 
@@ -345,21 +340,20 @@ BIDS/
 ├── sub-X/ses-Y/micr/
 │   └── ..._FLUO.ome.tiff                       raw OME-TIFF mosaic
 ├── derivatives/2D/
+│   ├── mimosa_slice_references.json            frozen slice count per subject
 │   ├── downsampled/sub-X/ses-Y/micr/res-Nx/
 │   │   ├── ..._desc-downsampled_FLUO.nii.gz    reduced images (decimate)
 │   │   └── ..._desc-downsampledavg_FLUO.nii.gz reduced images (mean)
 │   └── preproc/                                padded 2D slices
-├── derivatives/ (3D)                           reconstructed volumes
-└── code/
-    └── mimosa_slice_references.json            frozen slice count per subject
+└── derivatives/ (3D)                           reconstructed volumes
 ```
 
 
 # Frozen slice count
 
 The total number of slices of a brain is computed **once** per subject and
-stored in `code/mimosa_slice_references.json`. After that first pass it is
-reused unchanged.
+stored in `derivatives/2D/mimosa_slice_references.json`. After that first pass
+it is reused unchanged.
 
 Why it matters: a slice's depth in the volume depends on this total. If the
 total could change, deleting CZI files or interrupting a run would shift every
@@ -368,5 +362,5 @@ high-resolution slices and they still land at the exact depth they occupy in
 the complete brain.
 
 Run the **first full pass with all CZI present**, so the frozen total is
-correct. Use `--refreeze` only when a brain's complete slice set genuinely
+correct. Use `-refreeze` only when a brain's complete slice set genuinely
 changes.

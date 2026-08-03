@@ -30,7 +30,7 @@ def main():
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     parser.add_argument(
-        "--refreeze", action="store_true",
+        "-refreeze", action="store_true",
         help=(
             "Recompute the frozen slice count of each subject from the CZI "
             "currently declared. Use it only when the complete set of a brain "
@@ -39,7 +39,7 @@ def main():
         ),
     )
     parser.add_argument(
-        "--threads", type=int, default=czi.READ_THREADS,
+        "-threads", type=int, default=czi.READ_THREADS,
         help=(
             "Threads used to produce ONE image: its bands are read and reduced "
             "concurrently. This is the setting that makes a single NIfTI come "
@@ -48,7 +48,7 @@ def main():
         ),
     )
     parser.add_argument(
-        "--block-value", type=str, default="decimate", choices=("decimate", "mean"),
+        "-block_value", type=str, default="decimate", choices=("decimate", "mean"),
         help=(
             "How to reduce each native block. "
             "'decimate' keeps the native pixel k*f, bit for bit "
@@ -91,7 +91,7 @@ def main():
 
     # Freeze the total slice count once per subject. After the first full pass
     # it is reused unchanged, so deleting CZI files to export only a few
-    # high-resolution slices no longer shifts their depth. Use --refreeze to
+    # high-resolution slices no longer shifts their depth. Use -refreeze to
     # recompute when the complete set of a brain has genuinely changed.
     slice_maps_by_subject = {}
     for entry in cfg.get("samples", {}).get("entries", []):

@@ -27,6 +27,8 @@ participants_tsv:
   rows:
   - participant_id: sub-Una
     species: Marmouset
+  - participant_id: sub-Sully
+    species: Marmouset
 microscopy_json:
   MicroscopyTechnique: Fluorescence microscopy
   SampleEnvironment: ex vivo
@@ -39,6 +41,13 @@ samples:
   - derived_from
   - source_filename
   entries:
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/5-Sully-MIO21100401/originaux
+    subject: Sully
+    samples:
+    - sample_type: technical sample 
+      derived_from: midbrain
+      participant_id: sub-Sully
+      files:
   - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/0-Originals/8-Una/UNA/
     subject: Una
     samples:

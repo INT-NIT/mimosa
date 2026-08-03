@@ -30,7 +30,7 @@ from mimosa_downsample import READ_THREADS  # noqa: E402
 
 def parse_channels(value: str) -> tuple[int, ...]:
     """
-    Parse --channels 0,1 -> (0, 1)
+    Parse -channels 0,1 -> (0, 1)
     """
     return tuple(int(v.strip()) for v in value.split(",") if v.strip() != "")
 
@@ -653,7 +653,7 @@ def main():
     )
 
     parser.add_argument(
-        "--threads",
+        "-threads",
         type=int,
         default=READ_THREADS,
         help=(
@@ -664,7 +664,7 @@ def main():
     )
 
     parser.add_argument(
-        "--compression",
+        "-compression",
         type=str,
         default="zlib",
         choices=("zlib", "jpegxr", "jpeg2000"),
@@ -678,7 +678,7 @@ def main():
     )
 
     parser.add_argument(
-        "--quality",
+        "-quality",
         type=float,
         default=0.5,
         help=(
