@@ -46,10 +46,12 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     native_x, native_y = (float(v) * UM_TO_MM for v in native_pixel_um[:2])
     step_z = float(thickness_um) * UM_TO_MM
 
-    # Native pixel i sits at (i - (N-1)/2) * native, centering the scene on 0.
-    # Voxel 0 covers native [0, f-1], hence a center at (f-1)/2.
-    origin_x = ((step_x / native_x - 1) / 2 - (native_width - 1) / 2) * native_x
-    origin_y = ((step_y / native_y - 1) / 2 - (native_height - 1) / 2) * native_y
+    # Same origin for every resolution: the scene is centered on 0 using the
+    # native grid, so origin_x/origin_y do not depend on the factor. Simple and
+    # no per-resolution shift. (The resolutions' voxel centers coincide; their
+    # drawn edges differ by half a coarse voxel, which is only cosmetic.)
+    origin_x = -(native_width - 1) / 2 * native_x
+    origin_y = -(native_height - 1) / 2 * native_y
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
     return np.array([[step_x, 0.0, 0.0, origin_x],

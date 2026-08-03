@@ -758,7 +758,7 @@ def add_sform_to_json_metadata(
     meta["NumberOfSlices"] = nb_slices
     meta["SFormMatrix"] = sform
     meta["SFormMatrixUnits"] = "mm"
-    meta["SFormOriginConvention"] = "block-center"
+    meta["SFormOriginConvention"] = "native-centered"
     meta["SFormReorientationMode"] = reorient
     meta["SFormMatrixAxis"] = ["X", "Y", "Z"]
 
