@@ -54,14 +54,6 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     origin_y = -(native_height - 1) / 2 * native_y
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
-    # Snap the in-plane origin onto the downsampled pixel grid. Slices have
-    # slightly different native sizes; without this their grids fall at
-    # different sub-pixel phases and do not overlay. Snapping puts every slice
-    # on the same grid (center moves by < half a pixel, invisible) so the raw
-    # slices, the padded slices and the 3D volume all align.
-    origin_x = round(origin_x / step_x) * step_x
-    origin_y = round(origin_y / step_y) * step_y
-
     return np.array([[step_x, 0.0, 0.0, origin_x],
                      [0.0, step_y, 0.0, origin_y],
                      [0.0, 0.0, step_z, origin_z],

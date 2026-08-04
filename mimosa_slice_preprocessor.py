@@ -156,15 +156,20 @@ class SlicePreprocessor:
 
         nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
 
-        # Padding keeps the original pixels at their exact world position: the
-        # raw (non-padded) slice and its padded version stay aligned. Because the
-        # raw origin is snapped to the pixel grid in slice_sform, every slice
-        # shares the same grid -> raw, padded and volume all align.
+        # Every padded slice is centered on the COMMON padded grid (target_shape,
+        # identical for all slices), so all padded slices share the exact same
+        # in-plane affine. The 3D volume copies one slice's affine, so it overlays
+        # EVERY padded slice perfectly. Slice depth (z) is preserved.
         preproc_sform = nonpadded_sform.copy()
+        col0 = nonpadded_sform[:3, 0]          # image x direction (in-plane)
+        col1 = nonpadded_sform[:3, 1]          # image y direction (in-plane)
+        col2 = nonpadded_sform[:3, 2]          # through-slice / depth direction
+        depth_dir = col2 / np.linalg.norm(col2)
+        depth_vec = np.dot(nonpadded_sform[:3, 3], depth_dir) * depth_dir
         preproc_sform[:3, 3] = (
-            nonpadded_sform[:3, 3]
-            - pad_x_before * nonpadded_sform[:3, 0]
-            - pad_y_before * nonpadded_sform[:3, 1]
+            -(target_width - 1) / 2.0 * col0
+            - (target_height - 1) / 2.0 * col1
+            + depth_vec
         )
 
         padded_data = padded_data.astype(np.float32)
