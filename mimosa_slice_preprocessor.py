@@ -43,7 +43,7 @@ class SlicePreprocessor:
 
     def get_slice_size_from_nifti(self, nii_path: Path) -> tuple[int, int]:
         img = nb.load(str(nii_path))
-        data_2d = np.squeeze(img.get_fdata())
+        data_2d = np.squeeze(np.asarray(img.dataobj))
         return int(data_2d.shape[0]), int(data_2d.shape[1])
     
     def compute_target_shape(self, nii_paths, padding_delta, subject_name):
@@ -114,7 +114,8 @@ class SlicePreprocessor:
         output_path = self.build_output_path(nii_path)
 
         img = nb.load(str(nii_path))
-        data = img.get_fdata()
+        # One single convention: everything in float32.
+        data = img.get_fdata().astype(np.float32)
         header = img.header.copy()
 
         data_2d = np.squeeze(data)
@@ -155,6 +156,10 @@ class SlicePreprocessor:
 
         nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
 
+        # Padding keeps the original pixels at their exact world position: the
+        # raw (non-padded) slice and its padded version stay aligned. Because the
+        # raw origin is snapped to the pixel grid in slice_sform, every slice
+        # shares the same grid -> raw, padded and volume all align.
         preproc_sform = nonpadded_sform.copy()
         preproc_sform[:3, 3] = (
             nonpadded_sform[:3, 3]
@@ -162,6 +167,8 @@ class SlicePreprocessor:
             - pad_y_before * nonpadded_sform[:3, 1]
         )
 
+        padded_data = padded_data.astype(np.float32)
+        header.set_data_dtype(np.float32)
         out_img = nb.Nifti1Image(padded_data, preproc_sform, header)
         out_img.set_sform(preproc_sform, code=1)
         out_img.set_qform(preproc_sform, code=1)

@@ -70,7 +70,9 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
 
 def _save_nifti(path, image, sform):
     """Write a 2D image as NIfTI with sform and qform set from one matrix."""
-    img = nib.Nifti1Image(image, sform)
+    # One single convention: NIfTI slices in float32 (like the padded slices
+    # and the 3D volume).
+    img = nib.Nifti1Image(np.asarray(image, dtype=np.float32), sform)
     img.set_sform(sform, code=1)
     img.set_qform(sform, code=1)
     img.header.set_xyzt_units("mm")
