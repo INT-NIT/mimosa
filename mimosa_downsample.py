@@ -41,8 +41,9 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
 
     When the exported (downsampled) width/height are given, the origin centers
     the image on its own downsampled pixel grid. With every slice exported at an
-    even size, all slices share the same pixel grid, so the raw slices, their
-    padded versions and the 3D volume all align exactly. Without them, it falls
+    odd size, a pixel center sits exactly on 0 for every slice and every
+    resolution, so the raw slices, their padded versions and the 3D volume all
+    align, and the resolutions align with each other. Without them, it falls
     back to native-grid centering.
     """
     if native_width <= 0 or native_height <= 0:

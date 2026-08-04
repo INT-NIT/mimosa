@@ -62,12 +62,13 @@ class SlicePreprocessor:
 
         target_width = max_width + padding_delta
         target_height = max_height + padding_delta
-        # Force an even target so the symmetric padding is exact (no rounding).
-        # With even slices and an even target, every slice lands on the same
-        # pixel grid -> raw, padded and volume all align.
-        if target_width % 2:
+        # Force an ODD target. Slices are exported odd, so target - width is even
+        # -> symmetric padding is exact (no rounding). Odd + centered keeps a
+        # pixel center on 0 for every slice and every resolution, so raw, padded
+        # and volume align, and the resolutions align with each other too.
+        if target_width % 2 == 0:
             target_width += 1
-        if target_height % 2:
+        if target_height % 2 == 0:
             target_height += 1
         return target_width, target_height
     
