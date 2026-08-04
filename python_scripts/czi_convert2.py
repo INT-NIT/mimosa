@@ -138,6 +138,14 @@ def czi2bitmapHPC(
 
                     for exponent in exponents:
                         image = images[exponent]
+                        # Force even dimensions (add one background row/col if
+                        # odd). Every slice then shares the same pixel-grid
+                        # parity, which is what lets the raw slices, the padded
+                        # slices and the 3D volume all align exactly.
+                        if image.shape[0] % 2:
+                            image = np.pad(image, ((0, 1), (0, 0)))
+                        if image.shape[1] % 2:
+                            image = np.pad(image, ((0, 0), (0, 1)))
                         factor = 2**exponent
                         base = _bids_basename(
                             bids_info, stain, res_labels[exponent], DESC

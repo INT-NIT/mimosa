@@ -604,6 +604,8 @@ def build_slice_sform(
     thickness: float,
     block_value: str = "decimate",
     reorient: str = "none",
+    ds_width: int | None = None,
+    ds_height: int | None = None,
 ) -> list[list[float]]:
     """Build the SForm of one exported 2D slice, as a nested list.
 
@@ -627,6 +629,8 @@ def build_slice_sform(
         slice_position=slice_position,
         nb_slices=nb_slices,
         thickness_um=thickness,
+        ds_width=ds_width,
+        ds_height=ds_height,
     )
 
     if not is_identity_reorientation(reorient):
@@ -742,6 +746,11 @@ def add_sform_to_json_metadata(
             "Expected NativeWidthPixels and NativeHeightPixels."
         )
 
+    # Exported (downsampled) image size, forced even by the converter. Used to
+    # center the sform on the downsampled grid so raw, padded and volume align.
+    ds_width = meta.get("WidthPixels-DS")
+    ds_height = meta.get("HeightPixels-DS")
+
     sform = build_slice_sform(
         pixel_size=pixel_size,
         native_pixel_size=native_pixel_size,
@@ -752,6 +761,8 @@ def add_sform_to_json_metadata(
         thickness=original_thickness,
         block_value=block_value,
         reorient=reorient,
+        ds_width=int(ds_width) if ds_width is not None else None,
+        ds_height=int(ds_height) if ds_height is not None else None,
     )
 
     meta["SlicePosition"] = slice_position

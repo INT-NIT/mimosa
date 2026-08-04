@@ -35,8 +35,16 @@ def downsample_scene_zoom(czidoc, roi, scene, channel, exponents):
 
 
 def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
-                slice_position, nb_slices, thickness_um):
-    """Build the 4x4 sform of one slice, in mm, centered on the scene."""
+                slice_position, nb_slices, thickness_um,
+                ds_width=None, ds_height=None):
+    """Build the 4x4 sform of one slice, in mm, centered on the scene.
+
+    When the exported (downsampled) width/height are given, the origin centers
+    the image on its own downsampled pixel grid. With every slice exported at an
+    even size, all slices share the same pixel grid, so the raw slices, their
+    padded versions and the 3D volume all align exactly. Without them, it falls
+    back to native-grid centering.
+    """
     if native_width <= 0 or native_height <= 0:
         raise ValueError("native size must be positive")
     if not 0 <= slice_position < nb_slices:
@@ -46,12 +54,15 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     native_x, native_y = (float(v) * UM_TO_MM for v in native_pixel_um[:2])
     step_z = float(thickness_um) * UM_TO_MM
 
-    # Same origin for every resolution: the scene is centered on 0 using the
-    # native grid, so origin_x/origin_y do not depend on the factor. Simple and
-    # no per-resolution shift. (The resolutions' voxel centers coincide; their
-    # drawn edges differ by half a coarse voxel, which is only cosmetic.)
-    origin_x = -(native_width - 1) / 2 * native_x
-    origin_y = -(native_height - 1) / 2 * native_y
+    if ds_width is not None and ds_height is not None:
+        # Center on the exported downsampled grid so every slice (all exported
+        # at an even size) shares the same pixel grid -> raw, padded and volume
+        # all overlay exactly.
+        origin_x = -(int(ds_width) - 1) / 2 * step_x
+        origin_y = -(int(ds_height) - 1) / 2 * step_y
+    else:
+        origin_x = -(native_width - 1) / 2 * native_x
+        origin_y = -(native_height - 1) / 2 * native_y
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
     return np.array([[step_x, 0.0, 0.0, origin_x],

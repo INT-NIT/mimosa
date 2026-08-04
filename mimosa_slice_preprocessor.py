@@ -60,7 +60,16 @@ class SlicePreprocessor:
 
         self.subject_max_sizes[subject_name] = (max_width, max_height)
 
-        return max_width + padding_delta, max_height + padding_delta
+        target_width = max_width + padding_delta
+        target_height = max_height + padding_delta
+        # Force an even target so the symmetric padding is exact (no rounding).
+        # With even slices and an even target, every slice lands on the same
+        # pixel grid -> raw, padded and volume all align.
+        if target_width % 2:
+            target_width += 1
+        if target_height % 2:
+            target_height += 1
+        return target_width, target_height
     
    
         
@@ -156,20 +165,16 @@ class SlicePreprocessor:
 
         nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
 
-        # Every padded slice is centered on the COMMON padded grid (target_shape,
-        # identical for all slices), so all padded slices share the exact same
-        # in-plane affine. The 3D volume copies one slice's affine, so it overlays
-        # EVERY padded slice perfectly. Slice depth (z) is preserved.
+        # Padding keeps the original pixels at their exact world position. The raw
+        # slice is centered on its (even) downsampled grid and the target is even,
+        # so the symmetric padding is exact (no rounding). Result: the raw slice,
+        # its padded version and the 3D volume all overlay exactly, and every
+        # padded slice ends up with the same in-plane origin.
         preproc_sform = nonpadded_sform.copy()
-        col0 = nonpadded_sform[:3, 0]          # image x direction (in-plane)
-        col1 = nonpadded_sform[:3, 1]          # image y direction (in-plane)
-        col2 = nonpadded_sform[:3, 2]          # through-slice / depth direction
-        depth_dir = col2 / np.linalg.norm(col2)
-        depth_vec = np.dot(nonpadded_sform[:3, 3], depth_dir) * depth_dir
         preproc_sform[:3, 3] = (
-            -(target_width - 1) / 2.0 * col0
-            - (target_height - 1) / 2.0 * col1
-            + depth_vec
+            nonpadded_sform[:3, 3]
+            - pad_x_before * nonpadded_sform[:3, 0]
+            - pad_y_before * nonpadded_sform[:3, 1]
         )
 
         padded_data = padded_data.astype(np.float32)
