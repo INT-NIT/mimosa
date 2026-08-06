@@ -72,8 +72,9 @@ class SlicePreprocessor:
             target_width += 1
         if target_height % 2 == 0:
             target_height += 1
-        return target_width, target_height
         """
+        return target_width, target_height
+    
    
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
