@@ -55,15 +55,9 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     native_x, native_y = (float(v) * UM_TO_MM for v in native_pixel_um[:2])
     step_z = float(thickness_um) * UM_TO_MM
 
-    if ds_width is not None and ds_height is not None:
-        # Center on the exported downsampled grid so every slice (all exported
-        # at an even size) shares the same pixel grid -> raw, padded and volume
-        # all overlay exactly.
-        origin_x = -(int(ds_width) - 1) / 2 * step_x
-        origin_y = -(int(ds_height) - 1) / 2 * step_y
-    else:
-        origin_x = -(native_width - 1) / 2 * native_x
-        origin_y = -(native_height - 1) / 2 * native_y
+    origin_x = -(native_width - 1) / 2 * native_x     # origine au NATIF, COMMUNE a toutes les resolutions
+    origin_y = -(native_height - 1) / 2 * native_y
+    
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
     return np.array([[step_x, 0.0, 0.0, origin_x],
