@@ -66,12 +66,14 @@ class SlicePreprocessor:
         # -> symmetric padding is exact (no rounding). Odd + centered keeps a
         # pixel center on 0 for every slice and every resolution, so raw, padded
         # and volume align, and the resolutions align with each other too.
+        """
+        
         if target_width % 2 == 0:
             target_width += 1
         if target_height % 2 == 0:
             target_height += 1
         return target_width, target_height
-    
+        """
    
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
