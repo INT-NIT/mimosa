@@ -143,10 +143,12 @@ def czi2bitmapHPC(
                         # for every slice AND every resolution, so raw, padded,
                         # volume align within a resolution AND res-4x/6x/8x align
                         # with each other (coarse pixels fall on fine pixels).
+                        """
                         if image.shape[0] % 2 == 0:
                             image = np.pad(image, ((0, 1), (0, 0)))
                         if image.shape[1] % 2 == 0:
                             image = np.pad(image, ((0, 0), (0, 1)))
+                        """
                         factor = 2**exponent
                         base = _bids_basename(
                             bids_info, stain, res_labels[exponent], DESC
