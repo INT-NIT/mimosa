@@ -2,7 +2,7 @@ import argparse
 import os
 
 
-from python_scripts import czi_convert2 as czi
+from python_scripts import czi_convert as czi
 from BIDS.czi_reader import MimosaReader  
 from BIDS import bids_manager as bm
 from BIDS import bids_metadata as bmeta

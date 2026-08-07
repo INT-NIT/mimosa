@@ -21,7 +21,7 @@ from BIDS import bids_manager as bm
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mimosa_downsample import READ_THREADS  # noqa: E402
+from python_scripts.mimosa_downsample import READ_THREADS  # noqa: E402
 
 
 # ============================================================

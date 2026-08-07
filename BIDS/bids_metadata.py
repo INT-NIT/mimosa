@@ -35,7 +35,7 @@ def _atomic_write_text(path, text: str) -> None:
 
 import sys as _sys
 _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mimosa_downsample import slice_sform  # noqa: E402
+from python_scripts.mimosa_downsample import slice_sform  # noqa: E402
 def load_metadata_config(config_path: Path) -> dict:
     with open(Path(config_path), "r", encoding="utf-8") as f:
         return yaml.safe_load(f)

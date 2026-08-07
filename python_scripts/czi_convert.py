@@ -14,7 +14,7 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mimosa_downsample import downsample_scene_zoom  # noqa: E402
+from python_scripts.mimosa_downsample import downsample_scene_zoom  # noqa: E402
 
 DESC = "downsampled"
 
