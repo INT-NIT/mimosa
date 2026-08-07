@@ -312,15 +312,6 @@ def get_next_slide_label(
     return f"slide{count + 1:02d}"
 
 
-def downsample_patch_nearest(patch: np.ndarray, factor: int) -> np.ndarray:
-    """
-    Downsample patch by keeping one pixel every factor pixels.
-
-    Same simple logic as:
-        patch[::factor, ::factor]
-    """
-    return patch[::factor, ::factor]
-
 def inject_scene_positions_into_ome_xml(
     existing_xml: str,
     scenes,
@@ -474,35 +465,69 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
             )
 
             def fill_patch(idx):
-                """Read one patch, downsample it, write it into the mosaic.
-
-                Patches cover disjoint mosaic regions, so several run in
-                parallel with no locking: each writes only its own slice.
                 """
+                Read one CZI patch directly at the requested reduced resolution
+                using the CZI zoom mechanism, then place it in the output mosaic.
+                """
+
                 x_idx, y_idx = idx
+
                 src_x0 = x_idx * patch_width_full
                 src_y0 = y_idx * patch_height_full
 
-                patch_width = min(patch_width_full, bbox_w - src_x0)
-                patch_height = min(patch_height_full, bbox_h - src_y0)
+                patch_width = min(
+                    patch_width_full,
+                    bbox_w - src_x0,
+                )
+
+                patch_height = min(
+                    patch_height_full,
+                    bbox_h - src_y0,
+                )
+
                 if patch_width <= 0 or patch_height <= 0:
                     return
 
-                roi = (bbox_x + src_x0, bbox_y + src_y0, patch_width, patch_height)
-                patch = np.asarray(czidoc.read(roi=roi, plane={"C": channel}))
-                patch = patch[..., 0] if patch.ndim == 3 else np.squeeze(patch)
-
-                patch_res = downsample_patch_nearest(patch=patch, factor=downsampling_factor)
-
-                out_x0 = int(round(src_x0 / downsampling_factor))
-                out_y0 = int(round(src_y0 / downsampling_factor))
-                out_x1 = min(out_x0 + patch_res.shape[1], mosaic_image_width)
-                out_y1 = min(out_y0 + patch_res.shape[0], mosaic_image_height)
-
-                mosaic_image[out_y0:out_y1, out_x0:out_x1] = (
-                    patch_res[: out_y1 - out_y0, : out_x1 - out_x0]
+                roi = (
+                    int(bbox_x + src_x0),
+                    int(bbox_y + src_y0),
+                    int(patch_width),
+                    int(patch_height),
                 )
 
+                # Read directly at the requested resolution.
+                patch_res = np.asarray(
+                    czidoc.read(
+                        roi=roi,
+                        plane={"C": int(channel)},
+                        zoom=1.0 / float(downsampling_factor),
+                    )
+                ).squeeze()
+
+                if patch_res.ndim == 3:
+                    patch_res = patch_res[..., 0]
+
+                # Position of this patch in the reduced mosaic.
+                out_x0 = int(src_x0 // downsampling_factor)
+                out_y0 = int(src_y0 // downsampling_factor)
+
+                out_x1 = min(
+                    out_x0 + patch_res.shape[1],
+                    mosaic_image_width,
+                )
+
+                out_y1 = min(
+                    out_y0 + patch_res.shape[0],
+                    mosaic_image_height,
+                )
+
+                mosaic_image[
+                    out_y0:out_y1,
+                    out_x0:out_x1,
+                ] = patch_res[
+                    : out_y1 - out_y0,
+                    : out_x1 - out_x0,
+                ]
             patch_indices = [
                 (x_idx, y_idx)
                 for x_idx in range(nb_patch_w)
