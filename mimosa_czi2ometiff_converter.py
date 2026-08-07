@@ -6,7 +6,6 @@ import math
 import os
 import re
 import sys
-import uuid
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -21,12 +20,9 @@ from BIDS import bids_manager as bm
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from python_scripts.mimosa_downsample import READ_THREADS  # noqa: E402
+READ_THREADS = os.cpu_count() or 1
 
 
-# ============================================================
-# Helpers
-# ============================================================
 
 def parse_channels(value: str) -> tuple[int, ...]:
     """
