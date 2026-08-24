@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +19,6 @@ from BIDS import bids_manager as bm
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-READ_THREADS = os.cpu_count() or 1
 
 
 
@@ -398,7 +396,6 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     downsampling_factor: int,
     channels: tuple[int, ...],
     patch_size: int = 6144,
-    threads: int = READ_THREADS,
     compression: str = "zlib",
     quality: float = 0.5,
 ):
@@ -539,16 +536,10 @@ def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 force_tty=True,
                 title=f"{sample_label} {stain_label} ds{downsampling_factor}x",
             ) as bar:
-                def run(idx):
+
+                for idx in patch_indices:
                     fill_patch(idx)
                     bar()
-
-                if threads > 1 and total_patches > 1:
-                    with ThreadPoolExecutor(max_workers=int(threads)) as pool:
-                        list(pool.map(run, patch_indices))
-                else:
-                    for idx in patch_indices:
-                        run(idx)
 
             output_path = build_raw_bids_output_path(
                 bids_root=bids_root,
@@ -673,16 +664,6 @@ def main():
         help="Patch size in x1 pixels used to read the CZI by blocks.",
     )
 
-    parser.add_argument(
-        "-threads",
-        type=int,
-        default=READ_THREADS,
-        help=(
-            "Patches read and downsampled concurrently. They cover disjoint "
-            "mosaic regions, so this only speeds things up, the output is "
-            "identical. Set it near your core count; use 1 to disable."
-        ),
-    )
 
     parser.add_argument(
         "-compression",
@@ -815,7 +796,6 @@ def main():
                 downsampling_factor=args.df,
                 channels=channels,
                 patch_size=args.patch_size,
-                threads=args.threads,
                 compression=args.compression,
                 quality=args.quality,
             )

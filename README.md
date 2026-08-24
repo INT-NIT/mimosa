@@ -335,7 +335,6 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
 | `-df` | Downsampling **factor** among `1, 2, 4, 6, 8`. | `8` |
 | `-channels` | Channels to convert, e.g. `0` or `0,1`. | `0,1` |
 | `-patch_size` | Patch size (px) used to read the CZI. | `6144` |
-| `-threads` | Patches read in parallel. | cores |
 | `-compression` | `zlib` (lossless), `jpegxr` or `jpeg2000` (lossy, much smaller). | `zlib` |
 | `-quality` | Force of the lossy compression. **Only affects `jpegxr`/`jpeg2000`, ignored for `zlib`.** | `0.5` |
 
@@ -350,8 +349,6 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
 
 - **`-patch_size`.** The mosaic is too big to read at once, so it is read in
   square patches of this size.
-
-- **`-threads`.** Patches are read in parallel.
 
 - **`-compression`.** `zlib` is lossless. `jpegxr` and `jpeg2000` are lossy
   and produce smaller files.
