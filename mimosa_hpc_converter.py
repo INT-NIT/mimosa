@@ -1,65 +1,219 @@
 import argparse
 import os
-from python_scripts import czi_convert as czi
 
-# Folder containing the input czi data
-input_path='/tmp'
-output_format='nii'
-downsampling_factor=4
+
+from python_scripts import czi_convert as czi
+from BIDS.czi_reader import MimosaReader  
+from BIDS import bids_manager as bm
+from BIDS import bids_metadata as bmeta
+
 
 def dir_path(path):
     if os.path.isdir(path):
         return path
-    else:
-        raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
-def main():
-    parser = argparse.ArgumentParser(description='Process for CZI concersion to BIDS')
-    parser.add_argument('-i', '--input_path', type=dir_path, help='root path containing all .czi files')
-    parser.add_argument('-f', '--output_format', type=str, required=True, help='output format TIFF or nii format (default: nii)')
-    parser.add_argument('-df', '--downsampling_factor', type=int, required=True, help=' factor N for downsampling (default: N=4 (=2^4)=16): 256x256 -> 16x16')
-    parser.add_argument('-o', '--output_path', type=str, help='output path (default: input_path/czi2XXX, with XXX=format')
+    raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
 
+
+def main():
+    parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
+    parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
+    parser.add_argument(
+        "-df", "--downsampling_factor", type=str, required=True,
+        help=(
+            "Downsampling exponent(s), factor = 2**exponent. "
+            "Accepts a single value (e.g. 4) or a comma separated list "
+            "(e.g. 4,6,8). Several resolutions cost one single native read."
+        ),
+    )
+    parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
+    parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
+    parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
+    parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
+    parser.add_argument(
+        "-refreeze", action="store_true",
+        help=(
+            "Recompute the frozen slice count of each subject from the CZI "
+            "currently declared. Use it only when the complete set of a brain "
+            "has genuinely changed. Without it, the total is kept stable so "
+            "exporting a few slices places them at the right depth."
+        ),
+    )
     args = parser.parse_args()
 
-    input_path=dir_path(args.input_path)
-    output_format=args.output_format
-    #downsampling_factor=(args.downsampling_factor)**2
+    output_format = args.output_format.lower().strip()
+    if output_format not in ("tif", "nii", "both"):
+        raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
-    downsampling_factor = 2 ** (args.downsampling_factor)
+    clean_output_path = args.output_path.rstrip("/")
 
-    if args.output_path is not None:
-        output_path = dir_path(args.output_path)
-    else:
-        output_path = input_path+"/czi2" + output_format
+    downsampling_factor = sorted(
+        {
+            int(token)
+            for token in str(args.downsampling_factor).replace(";", ",").split(",")
+            if token.strip()
+        }
+    )
+    if not downsampling_factor:
+        raise ValueError("At least one downsampling exponent is required")
 
-    print("PATH IN:",input_path)
-    print("downsampling factor:",downsampling_factor)
+    res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
+    print("Exported resolutions:", ", ".join(res_label.values()))
+    print("Reduction method    : zoom (ZEN pyramid)")
 
-    # Check if the directory exists
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-        print("PATH OUT '% s' created" % output_path)
-    else:
-        print("PATH OUT '% s' not created (already exists)" % output_path)
+    bids_root_path = bm.initialize_dataset(
+        clean_output_path,
+        yaml_path=args.yaml,
+        output_format=output_format,
+    )
+    cfg = bmeta.load_metadata_config(args.yaml)
+    bmeta.update_yaml_with_slices(args.yaml)
+    cfg = bmeta.load_metadata_config(args.yaml)
 
-    print("OUTPUT FORMAT:", output_format)
+    # Freeze the total slice count once per subject. After the first full pass
+    # it is reused unchanged, so deleting CZI files to export only a few
+    # high-resolution slices no longer shifts their depth. Use -refreeze to
+    # recompute when the complete set of a brain has genuinely changed.
+    slice_maps_by_subject = {}
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subj = entry.get("subject")
+        if subj is None or subj in slice_maps_by_subject:
+            continue
+        slice_maps_by_subject[subj] = bmeta.load_or_freeze_slice_reference(
+            bids_root=bids_root_path,
+            subject=subj,
+            slice_indices=bmeta._all_slice_indices(cfg, subject=subj),
+            refreeze=args.refreeze,
+        )
 
-    extensions = ('.czi')
+    MimosaReader.load_correspondence_from_yaml(cfg)
 
-    czifilelist = []
-    for root, dirs, files in os.walk(input_path):
-        for file in files:
-            if file.endswith(extensions):
-                czifilelist.append(file)
+    session = bm.BIDSSession(bids_root_path)
 
-    #czi.czi2bitmap(input_path, file, output_path, tile_number, downsampling_factor, mosaic_patch_size, output_format)
-    print(len(czifilelist))
+    files_to_process = []
+    sessions_by_sub = {}
+    samples_rows    = []
 
-    for csifileindex in range(0,len(czifilelist)):
-        print(czifilelist[csifileindex])
-        czi.czi2bitmapHPC(input_path, czifilelist[csifileindex], output_path, downsampling_factor, output_format)
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subject_path = entry["path"]
+        subject = entry.get("subject")
+        print("DEBUG YAML subject path:", subject_path)
+        if not os.path.exists(subject_path):
+            print(f"WARNING: path not found: {subject_path}")
+            continue
+        for sample in entry.get("samples", []):
+            derived_from = sample.get("derived_from", "n/a")
+            sample_type = sample.get("sample_type", "technical sample")
+            participant_id = sample.get("participant_id", f"sub-{subject}")
+            for file_entry in sample.get("files", []):
+                filename = file_entry.get("filename")
+                slices = file_entry.get("slices", [])
+                if not filename:
+                    continue
+                if not filename.endswith(".czi"):
+                    continue
+                if not slices:
+                    print(f"  SKIP YAML file without slices: {filename}")
+                    continue
+                full_path = os.path.join(subject_path, filename)
+                if not os.path.exists(full_path):
+                    print(f"WARNING: file listed in YAML but not found: {full_path}")
+                    continue
 
-    print("done")
+                files_to_process.append(
+                    (
+                        subject_path,
+                        filename,
+                        derived_from,
+                        sample_type,
+                        participant_id,
+                        subject,
+                    ))
+    for input_dir, filename, derived_from, sample_type, participant_id_from_yaml, subject_label in files_to_process:
+        full_input_path = os.path.join(input_dir, filename)
+        czi_id = os.path.splitext(filename)[0]
+
+        print(f"\n>>> Processing: {filename}")
+
+        try:
+            with MimosaReader(full_input_path) as reader:
+                if reader is None:
+                    print(f"    SKIP: cannot open {filename}")
+                    continue
+
+                summary = reader.get_summary()
+
+                print(
+                    f"    Subject: {summary['sub']}, "
+                    f"Date: {summary['acq_time']}, "
+                    f"Sample: {summary['sample']}"
+                )
+
+                bids_info = session.get_bids_info(
+                    summary_meta=summary,
+                    czi_id=czi_id,
+                    section_idx=None,
+                )
+
+                participant_id = participant_id_from_yaml or f"sub-{bids_info['sub']}"
+
+                slide_num = len([
+                    r for r in samples_rows
+                    if r["sample_id"].startswith("sample-slide")
+                    and r["participant_id"] == participant_id
+                ]) + 1
+
+                slide_id = f"sample-slide{slide_num}"
+
+                # Pour le nom BIDS : _sample-slide01
+                # donc bids_info["sample"] = "slide01"
+                bids_info["sample"] = slide_id.replace("sample-", "")
+
+                samples_rows.append({
+                    "sample_id": slide_id,
+                    "participant_id": participant_id,
+                    "sample_type": sample_type,
+                    "anatomical_region": derived_from,
+                    "source_filename": filename,
+                })
+
+                sub = bids_info["sub"]
+                ses_id = f"ses-{bids_info['ses']}"
+                sessions_by_sub.setdefault(sub, {})
+                sessions_by_sub[sub][ses_id] = bids_info["acq_time"]
+
+                czi.czi2bitmapHPC(
+                    input_dir,
+                    filename,
+                    bids_root_path,
+                    bids_info,
+                    downsampling_factor,
+                    output_format,
+                    res_label=res_label,
+                    reader=reader,
+                    slice_position_map=slice_maps_by_subject[subject_label],
+                    original_thickness=args.original_thickness,
+                    reorient=args.reorient,
+                )
+
+        except Exception as e:
+            print(f"    ERROR processing {filename}: {e}")
+            continue
+
+    for sub, d in sessions_by_sub.items():
+        rows = [
+            {"session_id": ses_id, "acq_time": d[ses_id]}
+            for ses_id in sorted(d.keys())
+        ]
+
+        bmeta.write_subject_sessions_tsv(
+            os.path.join(bids_root_path, "derivatives", "2D","downsampled"),
+            sub,
+            rows,
+        )
+
+    bmeta.write_samples_tsv(bids_root_path, samples_rows)
+
+    print("\n[SUCCESS] Conversion done.")
 
 if __name__ == "__main__":
     main()

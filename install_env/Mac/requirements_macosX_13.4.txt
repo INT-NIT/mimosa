@@ -33,6 +33,7 @@ fonttools=4.42.1=pypi_0
 fqdn=1.5.1=pypi_0
 grapheme=0.6.0=pypi_0
 idna=3.4=pypi_0
+imagecodecs=2023.8.12=pypi_0
 imageio=2.31.1=pypi_0
 ipykernel=6.25.1=pypi_0
 ipython=8.14.0=pypi_0
@@ -72,6 +73,7 @@ numpy=1.25.2=pypi_0
 openssl=3.0.10=h1a28f6b_1
 overrides=7.4.0=pypi_0
 packaging=23.1=pypi_0
+pandas=2.0.3=pypi_0
 pandocfilters=1.5.0=pypi_0
 parso=0.8.3=pypi_0
 pexpect=4.8.0=pypi_0
