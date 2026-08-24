@@ -1,174 +1,189 @@
+from __future__ import annotations
+
 import os
-from pylibCZIrw import czi as pyczi
-import json
-from matplotlib import pyplot as plt
-import matplotlib.cm as cm
-import numpy as np
-#from PIL import Image
-import tifffile as tf
+import sys
+
 import nibabel as nib
-from skimage import img_as_ubyte
-
+import numpy as np
+import tifffile as tf
 from alive_progress import alive_bar
+from pylibCZIrw import czi as pyczi
 
-#This function returns the largest multiple of the number a smaller than b
-def multiple(a, b):
-    m = 0
-    n = a + 1
-    while n < b:
-        if n % a == 0:
-            m = n
-        n = n + 1
+from BIDS import bids_manager as bm
+from BIDS import bids_metadata as bmeta
+from BIDS.czi_reader import MimosaReader
 
-    return m
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from python_scripts.mimosa_downsample import downsample_scene_zoom  # noqa: E402
 
-def czi2bitmap(pathin, czifilename, pathout, patch_factor, downsampling_factor, full_patch_w_h,ouput_format):
-    czifile_scenes = os.path.join(pathin, czifilename)
-
-    with pyczi.open_czi(czifile_scenes) as czidoc:
-        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
-
-        for i in range(0, len(scenes_bounding_rectangle)):
-
-            #with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
-            print("ROI Scene",i)
-
-            downsampled_patch_w_h = int(full_patch_w_h / downsampling_factor)
-
-            print(i, scenes_bounding_rectangle[i])
-
-            nb_patch_w = int((scenes_bounding_rectangle[i].w) / (full_patch_w_h * patch_factor))
-            nb_patch_h = int((scenes_bounding_rectangle[i].h) / (full_patch_w_h * patch_factor))
-            mosaic_image_width = round(float(scenes_bounding_rectangle[i].w) / (downsampling_factor) + 0.5)
-            mosaic_image_height = round(float(scenes_bounding_rectangle[i].h) / (downsampling_factor) + 0.5)
-
-            mosaic_image_C0 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
-            mosaic_image_C1 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
-            mosaic_image_patch_size_w = int(downsampled_patch_w_h * patch_factor)
-            mosaic_image_patch_size_h = int(downsampled_patch_w_h * patch_factor)
-
-            with alive_bar((nb_patch_w+1)*(nb_patch_h+1),force_tty=True) as bar:
-
-                for x in range(0, nb_patch_w + 1):
-                    for y in range(0, nb_patch_h + 1):
-
-                        mosaic_image_patch_size_h_res = mosaic_image_patch_size_h
-                        mosaic_image_patch_size_w_res = mosaic_image_patch_size_w
-                        patch_width = patch_factor * full_patch_w_h
-                        patch_height = patch_factor * full_patch_w_h
-
-                        if (y == nb_patch_h):
-                            patch_height = scenes_bounding_rectangle[i].h - (patch_factor * full_patch_w_h * y)
-                        if (x == nb_patch_w):
-                            patch_width = scenes_bounding_rectangle[i].w - (patch_factor * full_patch_w_h * x)
-
-                        if ((y == nb_patch_h and x == nb_patch_w)):
-                            print(f'last corner size={patch_width}/{patch_height} - patch={downsampled_patch_w_h}')
-
-                            #to overcome the bug in the czidoc.read function, find the largest multiple of 8,
-                            # less than the largest value between the width and height of the last upper corner patch."
-                            max_value=max(patch_width,patch_height)
-                            max_mul8_value=multiple(8,max_value)
-
-                            if (max_value==patch_width):patch_width=max_mul8_value
-                            else:patch_height = max_mul8_value
-
-                        my_roi_patched = (scenes_bounding_rectangle[i].x + patch_factor * full_patch_w_h * x,
-                                          scenes_bounding_rectangle[i].y + patch_factor * full_patch_w_h * y,
-                                          patch_width, patch_height)
-
-                        # mosaic Chanel 0 (Anatomical image)
-                        ch0 = czidoc.read(roi=my_roi_patched, plane={'C': 0})
-                        ch0_res = ch0[::downsampling_factor, ::downsampling_factor]
-                        mosaic_image_C0[
-                        y * mosaic_image_patch_size_h:y * mosaic_image_patch_size_h + ch0_res[..., 0].shape[0],
-                        x * mosaic_image_patch_size_w:x * mosaic_image_patch_size_w + ch0_res[..., 0].shape[1]] = ch0_res[..., 0]
-
-                        # mosaic Chanel 1 (Fluorescence image)
-                        ch1 = czidoc.read(roi=my_roi_patched, plane={'C': 1})
-                        ch1_res = ch1[::downsampling_factor, ::downsampling_factor]
-                        mosaic_image_C1[
-                        y * mosaic_image_patch_size_h:y * mosaic_image_patch_size_h + ch1_res[..., 0].shape[0],
-                        x * mosaic_image_patch_size_w:x * mosaic_image_patch_size_w + ch1_res[..., 0].shape[1]] = ch1_res[..., 0]
-
-                        bar()
-
-                cziname = os.path.splitext(czifilename)[0]
-
-                if (ouput_format=="tiff"):
-
-                    #old method using PIL (replaced by tifffile)
-                    
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
-                    #imC0 = Image.fromarray((mosaic_image_C0).astype(np.uint16))
-                    #imC0.save(filename)
-                    tf.imwrite(filename, mosaic_image_C0,imagej=True)
-
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
-                    #imC1 = Image.fromarray((mosaic_image_C1).astype(np.uint16))
-                    #imC1.save(filename)
-                    tf.imwrite(filename, mosaic_image_C1,imagej=True)
-
-                if (ouput_format == "nii"):
-                    #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(mosaic_image_C0, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(mosaic_image_C1, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
+DESC = "downsampled"
 
 
-def czi2bitmapHPC(pathin, czifilename, pathout, downsampling_factor,ouput_format):
-    czifile_scenes = os.path.join(pathin, czifilename)
+def _as_exponents(value):
+    """Normalise one exponent or a collection of them into a sorted list."""
+    if isinstance(value, (list, tuple, set)):
+        return sorted({int(e) for e in value})
+    return [int(value)]
 
-    with pyczi.open_czi(czifile_scenes) as czidoc:
-        scenes_bounding_rectangle = czidoc.scenes_bounding_rectangle
 
-        for i in range(0, len(scenes_bounding_rectangle)):
+def _as_res_labels(res_label, exponents):
+    """Normalise res_label into {exponent: label}, defaulting to '<e>x'."""
+    if res_label is None:
+        return {e: f"{e}x" for e in exponents}
+    if isinstance(res_label, dict):
+        return {int(k): v for k, v in res_label.items()}
+    if len(exponents) != 1:
+        raise ValueError("a single res_label cannot cover several exponents")
+    return {exponents[0]: res_label}
 
-            print("ROI Scene",i)
 
-            zoom_factor = float (1.0 / downsampling_factor)
+def _bids_basename(bids_info, stain, res_label, desc):
+    """Build the BIDS basename, inserting res- and desc- when absent."""
+    base = bm.build_bids_basename(bids_info=bids_info, stain=stain, suffix="FLUO")
+    if "_res-" in base:
+        return base
+    return base.replace("_FLUO", f"_res-{res_label}_desc-{desc}_FLUO")
 
-            print(i, scenes_bounding_rectangle[i])
 
-            #mosaic_image_C0 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
-            #mosaic_image_C1 = np.zeros((int(mosaic_image_height), int(mosaic_image_width)), dtype='uint16')
+def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
+             slice_position_map, thickness, reorient="none"):
+    """Build the JSON sidecar for one exported image, sform included."""
+    meta = reader.get_converted_file_metadata(
+        rect=rect,
+        stain=stain,
+        downsampling_factor=factor,
+        is_nifti=is_nifti,
+        scene_idx=scene_idx,
+        exported_shape=(int(shape[0]), int(shape[1])),
+    )
+    meta["DownsamplingSource"] = "CZI zoom (ZEN pyramid)"
 
-            with alive_bar(len(scenes_bounding_rectangle),force_tty=True) as bar:
+    if is_nifti and slice_position_map is not None:
+        meta = bmeta.add_sform_to_json_metadata(
+            meta=meta,
+            slice_position_map=slice_position_map,
+            original_thickness=thickness,
+            reorient=reorient,
+        )
+    return meta
 
-                print(i, scenes_bounding_rectangle[i])
-                my_real_roi = (
-                scenes_bounding_rectangle[i][0], scenes_bounding_rectangle[i][1], scenes_bounding_rectangle[i][2],
-                scenes_bounding_rectangle[i][3])
-                print(my_real_roi)
-                ch0_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 0}, scene=i, zoom=zoom_factor)
-                ch1_downsampled = czidoc.read(roi=my_real_roi, plane={'C': 1}, scene=i, zoom=zoom_factor)
 
-                #add # read a 2D image from a specific channel and scene
+def _save_nifti(path, image, sform):
+    """Write a 2D image as NIfTI with sform and qform set from one matrix."""
+    # One single convention: NIfTI slices in float32 (like the padded slices
+    # and the 3D volume).
+    img = nib.Nifti1Image(np.asarray(image, dtype=np.float32), sform)
+    img.set_sform(sform, code=1)
+    img.set_qform(sform, code=1)
+    img.header.set_xyzt_units("mm")
+    nib.save(img, path)
 
-                cziname = os.path.splitext(czifilename)[0]
 
-                if (ouput_format=="tiff"):
-                    #old method using PIL (replaced by tifffile)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.tiff"
-                    #imC0 = Image.fromarray((ch0_downsampled).astype(np.uint16))
-                    #imC0.save(filename)
-                    tf.imwrite(filename, ch0_downsampled,imagej=True)
-                    
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.tiff"
-                    #imC1 = Image.fromarray((ch1_downsampled).astype(np.uint16))
-                    #imC1.save(filename)
-                    tf.imwrite(filename, ch1_downsampled,imagej=True)
+def czi2bitmapHPC(
+    pathin: str,
+    czifilename: str,
+    bids_root_path: str,
+    bids_info: dict,
+    downsampling_factor,
+    output_format: str,
+    res_label=None,
+    reader=None,
+    slice_position_map=None,
+    original_thickness: float = 100,
+    reorient: str = "none",
+):
+    """Export one CZI to every requested resolution using the CZI zoom.
 
-                if (ouput_format == "nii"):
-                    #for nii, we need to swap x,y axis (X -> L/R and y-> S/I or A/P)  do check
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C0.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(ch0_downsampled, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
-                    filename = pathout + "/" + cziname + "_ds" + str(downsampling_factor) + "_S" + str(i).zfill(2) + "_C1.nii.gz"
-                    array_img = nib.Nifti1Image(np.swapaxes(ch1_downsampled, 0, 1), np.eye(4))
-                    nib.save(array_img, filename)
+    downsampling_factor is an exponent or a list of them (factor = 2**exp).
+    The reduction is done by the CZI `zoom` argument (ZEN pyramid).
+    """
+    output_format = output_format.lower().strip()
+    if output_format not in ("tif", "nii", "both"):
+        raise ValueError("output_format must be 'tif', 'nii' or 'both'")
 
-                bar()
+    exponents = _as_exponents(downsampling_factor)
+    res_labels = _as_res_labels(res_label, exponents)
+    write_tif = output_format in ("tif", "both")
+    write_nii = output_format in ("nii", "both")
+
+    with pyczi.open_czi(os.path.join(pathin, czifilename)) as czidoc:
+        scenes = czidoc.scenes_bounding_rectangle
+        nb_channels = MimosaReader.get_nb_channels(czidoc)
+
+        folders = {
+            e: bm.get_derivative_folder(bids_root_path, bids_info, res_labels[e])
+            for e in exponents
+        }
+        for folder in folders.values():
+            os.makedirs(folder, exist_ok=True)
+
+        for scene_idx in range(len(scenes)):
+            rect = scenes[scene_idx]
+            roi = tuple(int(rect[i]) for i in range(4))
+
+            slice_idx = reader.get_slice_index_for_scene(scene_idx)
+            if slice_idx is None:
+                print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
+                continue
+            bids_info["chunk"] = slice_idx
+
+            with alive_bar(nb_channels, force_tty=True,
+                           title=f"Scene {scene_idx}") as bar:
+                for channel_idx in range(nb_channels):
+                    images = downsample_scene_zoom(
+                        czidoc=czidoc, roi=roi, scene=scene_idx,
+                        channel=channel_idx, exponents=exponents,
+                    )
+                    stain = f"C{channel_idx}"
+
+                    for exponent in exponents:
+                        image = images[exponent]
+                        # Force ODD dimensions (add one background row/col if
+                        # even). Odd + centered puts a pixel center exactly on 0
+                        # for every slice AND every resolution, so raw, padded,
+                        # volume align within a resolution AND res-4x/6x/8x align
+                        # with each other (coarse pixels fall on fine pixels).
+                        """
+                        if image.shape[0] % 2 == 0:
+                            image = np.pad(image, ((0, 1), (0, 0)))
+                        if image.shape[1] % 2 == 0:
+                            image = np.pad(image, ((0, 0), (0, 1)))
+                        """
+                        factor = 2**exponent
+                        base = _bids_basename(
+                            bids_info, stain, res_labels[exponent], DESC
+                        )
+
+                        if write_tif:
+                            path = os.path.join(folders[exponent], base + ".tif")
+                            tf.imwrite(path, image, imagej=True)
+                            bmeta.write_micr_sidecar_json(
+                                path,
+                                _sidecar(reader, rect, stain, factor, scene_idx,
+                                         (image.shape[1], image.shape[0]), False,
+                                         slice_position_map,
+                                         original_thickness, reorient),
+                            )
+                            print("  -> BIDS raw: "
+                                  f"{os.path.relpath(path, bids_root_path)}")
+
+                        if write_nii:
+                            path = os.path.join(folders[exponent], base + ".nii.gz")
+                            arr = np.swapaxes(image, 0, 1)
+                            meta = _sidecar(reader, rect, stain, factor, scene_idx,
+                                            arr.shape[:2], True,
+                                            slice_position_map, original_thickness,
+                                            reorient)
+                            _save_nifti(
+                                path, arr,
+                                np.asarray(meta.get("SFormMatrix", np.eye(4)),
+                                           dtype=float),
+                            )
+                            bmeta.write_micr_sidecar_json(path, meta)
+                            print("  -> derivatives: "
+                                  f"{os.path.relpath(path, bids_root_path)}")
+
+                    del images
+                    bar()
+
+    return True
