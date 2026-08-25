@@ -130,48 +130,33 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 
 def write_samples_tsv(bids_root: Path, samples_rows: list) -> None:
     path = Path(bids_root) / "samples.tsv"
+    cols = ["sample_id", "participant_id", "sample_type",
+            "anatomical_region", "source_filename"]
 
-    cols = [
-        "sample_id",
-        "participant_id",
-        "sample_type",
-        "anatomical_region",
-        "source_filename",
-    ]
+    # 1) re-read the rows already present (subjects from previous runs)
+    existing = {}
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            header = f.readline().rstrip("\n").split("\t")
+            for line in f:
+                vals = line.rstrip("\n").split("\t")
+                row = dict(zip(header, vals))
+                key = (row.get("participant_id"), row.get("source_filename"))
+                existing[key] = row
 
-    lines = ["\t".join(cols)]
-
+    # 2) add / update with the rows from the current run
     for r in samples_rows:
-        line = [
-            str(r.get("sample_id", "n/a")),
-            str(r.get("participant_id", "n/a")),
-            str(r.get("sample_type", "n/a")),
-            str(r.get("anatomical_region", "n/a")),
-            str(r.get("source_filename", "n/a")),
-        ]
-        lines.append("\t".join(line))
+        key = (r.get("participant_id"), r.get("source_filename"))
+        existing[key] = {c: str(r.get(c, "n/a")) for c in cols}
+
+    # 3) rewrite the whole set
+    lines = ["\t".join(cols)]
+    for row in existing.values():
+        lines.append("\t".join(str(row.get(c, "n/a")) for c in cols))
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-
-    json_path = Path(bids_root) / "samples.json"
-    samples_json = {
-        "sample_type": {
-            "Description": "Type of sample from ENCODE Biosample Type."
-        },
-        "anatomical_region": {
-            "Description": "Anatomical region associated with the sample, for example midbrain, cerebellum, brainstem, cerebrum."
-        },
-        "source_filename": {
-            "Description": "Original source CZI filename."
-        },
-    }
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(samples_json, f, indent=2, ensure_ascii=False)
-
-    print("samples.tsv created")
-    print("samples.json created")
+    print("samples.tsv updated")
 
 def write_micr_sidecar_json(image_path: Path, meta: dict) -> None:
     """writes the sidecar JSON file for a given image"""
