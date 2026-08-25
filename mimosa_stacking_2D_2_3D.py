@@ -337,15 +337,28 @@ class VolumeBuilder3D:
         return output_path
         
     def build_all_volumes(self):
+        if not self.preproc_root.exists():
+            print(f"ERROR: input path not found: {self.preproc_root}")
+            print("Check -bids_root. No volume was built.")
+            return
+
+        found_any = False
         for subject_dir in bm.iter_subject_dirs(self.preproc_root):
             groups = bm.group_subject_niftis_by_channel(subject_dir)
 
             for channel, nii_paths in groups.items():
                 nii_paths = [p for p in nii_paths if f"_res-{self.res_label}_" in p.name]
                 if not nii_paths:
+                    print(f"SKIP: no .nii for {subject_dir.name} {channel} at res-{self.res_label}")
                     continue
+
+                found_any = True
                 out = self.build_one_volume(subject_dir, channel, nii_paths)
                 print("VOLUME:", out)
+
+        if not found_any:
+            print(f"ERROR: no .nii files found under {self.preproc_root} for res-{self.res_label}.")
+            print("Check the BIDS root path and the -res label. No volume was built.")
     
 if __name__ == "__main__":
     import argparse
