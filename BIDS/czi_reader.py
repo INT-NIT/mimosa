@@ -213,7 +213,49 @@ class MimosaReader:
             if name:
                 return name
         return "Unknown"
+    def get_channel_name(self, channel_idx: int) -> str:
+        """
+        Return the channel/stain name stored in the CZI metadata.
 
+        Example:
+            channel 0 -> DAPI
+            channel 1 -> GFP
+
+        Falls back to C0, C1, ... if no name is found.
+        """
+
+        try:
+            image_info = (
+                self.metadata["ImageDocument"]
+                ["Metadata"]
+                ["Information"]
+                ["Image"]
+            )
+
+            channels = image_info.get("Dimensions", {}).get("Channels", {}).get(
+                "Channel", []
+            )
+
+            if isinstance(channels, dict):
+                channels = [channels]
+
+            if channel_idx < len(channels):
+                channel = channels[channel_idx]
+
+                name = (
+                    channel.get("@Name")
+                    or channel.get("Name")
+                    or channel.get("@Fluor")
+                    or channel.get("Fluor")
+                )
+
+                if name:
+                    return str(name).strip()
+
+        except Exception:
+            pass
+
+        return f"C{channel_idx}"
     def get_chunk_transform_matrix(
         self,
         rect,
