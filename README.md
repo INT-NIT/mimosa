@@ -6,7 +6,7 @@ A set of tools for **M**ultiscale **I**maging for mar**MO**set **S**oftware &amp
 
 The MIMOSA project aims to provide a multiscale, automated, versatile, and user-friendly tool for 3D reconstruction and cell quantification in the brain of the marmoset (<i>Callithrix jacchus</i>) using histological sections. Designed to meet the need for precise and accurate quantification in viral tracing experiments, MIMOSA facilitates efficient analysis.
 
-The tool utilizes DAPI staining to register histological sections to MRI atlases of the marmoset brain, while fluorescent protein labeling enables neuron quantification in targeted areas. MIMOSA integrates Cellpose, allowing users to develop custom-trained models for neuron quantification. Additionally, it includes CZI conversion tools that produce downsampled TIFF/NIfTI derivatives and whole-slide OME-TIFF overview images. The current TIFF/NIfTI converter requests reduced-resolution data through the CZI reader `zoom` mechanism, while the spatial position of each NIfTI image is encoded in its SForm/QForm matrices.
+The tool utilizes DAPI staining to register histological sections to MRI atlases of the marmoset brain, while fluorescent protein labeling enables neuron quantification in targeted areas. MIMOSA integrates Cellpose, allowing users to develop custom-trained models for neuron quantification. Additionally, it includes CZI conversion tools that produce downsampled TIFF/NIfTI derivatives and whole-slide OME-TIF overview images. The current TIFF/NIfTI converter requests reduced-resolution data through the CZI reader `zoom` mechanism, while the spatial position of each NIfTI image is encoded in its SForm/QForm matrices.
 
 
 # Installing for development
@@ -48,7 +48,7 @@ A BIDS dataset has three layers, and MIMOSA fills all three:
   small marker (an empty placeholder named after the CZI). The real `.czi`
   stay in the acquisition folder referenced by the YAML.
 - **raw** (`sub-<subject>/ses-<session>/micr/`) — the primary images in a BIDS
-  format. MIMOSA writes the whole-slide **OME-TIFF** mosaics here. OME-TIFF is
+  format. MIMOSA writes the whole-slide **OME-TIF** mosaics here. OME-TIF is
   a valid BIDS microscopy format and provides a convenient overview of the
   acquisition.
 - **`derivatives/`** — the downsampled images, the preprocessed slices, and the
@@ -58,10 +58,10 @@ A BIDS dataset has three layers, and MIMOSA fills all three:
 
 **We did not fully follow the BIDS convention, and we want to be clear about
 it.** BIDS says that files in `derivatives/` must be produced from the `raw`
-data. Here the `raw` data are the OME-TIFF mosaics, but they are only there to
+data. Here the `raw` data are the OME-TIF mosaics, but they are only there to
 give an idea of the data — to see the whole set of scenes at a reasonable size.
-The real inputs are the `.czi` files, not the OME-TIFFs. So our downsampled
-`derivatives/` are computed from the `.czi`, not from the OME-TIFF `raw`.
+The real inputs are the `.czi` files, not the OME-TIFs. So our downsampled
+`derivatives/` are computed from the `.czi`, not from the OME-TIF `raw`.
 
 File names follow the BIDS entities, for example:
 
@@ -122,14 +122,14 @@ places each one correctly in physical space, and can rebuild a 3D volume.
 
 **Honest note: we did not fully follow the BIDS convention.** BIDS says the
 `derivatives` must be produced from the `raw` data. In our dataset the `raw`
-data are the OME-TIFF mosaics, but these are only there to **give an idea of
+data are the OME-TIF mosaics, but these are only there to **give an idea of
 the data** — a way to see the whole set of scenes at a reasonable size. The
-real inputs of the pipeline are the `.czi` files, **not** the OME-TIFFs. So
+real inputs of the pipeline are the `.czi` files, **not** the OME-TIFs. So
 the downsampled derivatives are computed from the `.czi`, not from the
-OME-TIFF `raw`.
+OME-TIF `raw`.
 
 ```text
-                    ┌─── mimosa_czi2ometiff_converter.py ──►  OME-TIFF mosaic
+                    ┌─── mimosa_czi2ometiff_converter.py ──►  OME-TIF mosaic
                     │                                         (filed under: raw, micr/)
    .czi  ───────────┤
  (the only          │
@@ -147,7 +147,7 @@ OME-TIFF `raw`.
                                                               (derivatives)
 ```
 
-In the diagram, the OME-TIFF `raw` is only an overview of the data. The actual
+In the diagram, the OME-TIF `raw` is only an overview of the data. The actual
 processing pipeline starts from the original `.czi` files.
 
 
@@ -318,14 +318,14 @@ With an even number of slices, zero lies between the two central slices.
 
 ---
 
-## 2. `mimosa_czi2ometiff_converter.py` — CZI → OME-TIFF mosaic
+## 2. `mimosa_czi2ometiff_converter.py` — CZI → OME-TIF mosaic
 
-Stitches all scenes of a CZI into one whole-slide OME-TIFF written to
+Stitches all scenes of a CZI into one whole-slide OME-TIF written to
 `sub-<subject>/ses-<session>/micr/`. This is the BIDS raw image.
 
 ```bash
 python mimosa_czi2ometiff_converter.py -y metadata.yml \
-  -bids_root /path/to/BIDS -df 8 -channels 0,1 -threads 16
+  -bids_root /path/to/BIDS -df 8 -channels 0,1 
 ```
 
 | Option | What it does | Default |
@@ -335,8 +335,6 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
 | `-df` | Downsampling **factor** among `1, 2, 4, 6, 8`. | `8` |
 | `-channels` | Channels to convert, e.g. `0` or `0,1`. | `0,1` |
 | `-patch_size` | Patch size (px) used to read the CZI. | `6144` |
-| `-compression` | `zlib` (lossless), `jpegxr` or `jpeg2000` (lossy, much smaller). | `zlib` |
-| `-quality` | Force of the lossy compression. **Only affects `jpegxr`/`jpeg2000`, ignored for `zlib`.** | `0.5` |
 
 **Understanding the options**
 
@@ -345,16 +343,12 @@ python mimosa_czi2ometiff_converter.py -y metadata.yml \
   `-df 8` means factor 256.
 
 - **`-channels`.** A CZI can hold several fluorescence channels. Give the ones
-  you want, comma-separated. Each produces its own OME-TIFF.
+  you want, comma-separated. Each produces its own OME-TIF.
 
 - **`-patch_size`.** The mosaic is too big to read at once, so it is read in
   square patches of this size.
 
-- **`-compression`.** `zlib` is lossless. `jpegxr` and `jpeg2000` are lossy
-  and produce smaller files.
 
-- **`-quality`.** Controls the lossy compression level. It has no effect on
-  `zlib`.
 
 ---
 
@@ -749,7 +743,7 @@ BIDS/
 ├── sourcedata/
 │   └── sub-X/                                  marker of the original CZI
 ├── sub-X/ses-Y/micr/
-│   └── ..._FLUO.ome.tiff                       raw OME-TIFF mosaic
+│   └── ..._FLUO.ome.tif                      raw OME-TIF mosaic
 ├── derivatives/2D/
 │   ├── mimosa_slice_references.json            frozen slice count per subject
 │   ├── downsampled/sub-X/ses-Y/micr/res-Nx/
