@@ -10,7 +10,7 @@ N = int(meta0["NumberOfSlices"])
 thickness = max(np.linalg.norm(nb.load(files[0][:-5] + ".nii.gz").affine[:3, :3], axis=0))
  
 # Z (mm) -> SlicePosition :  k = z / thickness + (N-1)/2
-k = round(z / thickness + (N - 1) / 2)
+k = round(-(z / thickness + (N - 1) / 2))
  
 for f in files:
     meta = json.load(open(f))
