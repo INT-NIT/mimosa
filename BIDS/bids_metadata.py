@@ -316,7 +316,7 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
             else:
                 # files: null or files: [] => scan all .czi files in the subject path.
-                for czi_path in sorted(subject_path.rglob("*.czi")):
+                for czi_path in subject_path.rglob("*.czi"):
                     file_entry = {"filename": czi_path.name}
 
                     slices = extract_slices_from_filename(czi_path.name)
