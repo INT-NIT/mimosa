@@ -134,8 +134,8 @@ def czi2bitmapHPC(
                         czidoc=czidoc, roi=roi, scene=scene_idx,
                         channel=channel_idx, exponents=exponents,
                     )
-                    stain = f"C{channel_idx}"
-
+                    stain_label = f"C{channel_idx}"
+                    staining_name = reader.get_channel_name(channel_idx)
                     for exponent in exponents:
                         image = images[exponent]
                         # Force ODD dimensions (add one background row/col if
@@ -151,7 +151,7 @@ def czi2bitmapHPC(
                         """
                         factor = 2**exponent
                         base = _bids_basename(
-                            bids_info, stain, res_labels[exponent], DESC
+                            bids_info, stain_label, res_labels[exponent], DESC
                         )
 
                         if write_tif:
@@ -159,7 +159,7 @@ def czi2bitmapHPC(
                             tf.imwrite(path, image, imagej=True)
                             bmeta.write_micr_sidecar_json(
                                 path,
-                                _sidecar(reader, rect, stain, factor, scene_idx,
+                                _sidecar(reader, rect, staining_name, factor, scene_idx,
                                          (image.shape[1], image.shape[0]), False,
                                          slice_position_map,
                                          original_thickness, reorient),
@@ -170,7 +170,7 @@ def czi2bitmapHPC(
                         if write_nii:
                             path = os.path.join(folders[exponent], base + ".nii.gz")
                             arr = np.swapaxes(image, 0, 1)
-                            meta = _sidecar(reader, rect, stain, factor, scene_idx,
+                            meta = _sidecar(reader, rect, staining_name, factor, scene_idx,
                                             arr.shape[:2], True,
                                             slice_position_map, original_thickness,
                                             reorient)
