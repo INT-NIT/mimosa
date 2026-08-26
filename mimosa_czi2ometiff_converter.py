@@ -695,7 +695,7 @@ def convert_czi_total_bbox_2_ome_tiff(
 
            
             with tempfile.NamedTemporaryFile(
-                suffix=".ome.tif",
+                suffix=".ome.tiff",
                 delete=False,
             ) as tmp:
                 tmp_path = tmp.name
