@@ -186,14 +186,15 @@ def get_json_path(image_path: Path) -> Path:
     """
     image_path = Path(image_path)
     name = image_path.name
-
-    if name.endswith(".nii.gz"):
-        json_name = name[:-7] + ".json"
-    elif name.endswith(".tif"):
-        json_name = name[:-4] + ".json"
-
-
+    for ext in (".ome.tiff", ".ome.tif", ".nii.gz", ".tiff", ".tif", ".nii"):
+        if name.endswith(ext):
+            json_name = name[: -len(ext)] + ".json"
+            break
+    else:
+        json_name = image_path.stem + ".json"
     return image_path.parent / json_name
+
+
 def extract_slices_from_filename(filename: str) -> list[int]:
     """ex: MTO10092101_Cx_008-056.czi -> [8, 56]"""
     match = re.search(r'_(\d+(?:[-_]\d+)+)\.czi$', filename)
