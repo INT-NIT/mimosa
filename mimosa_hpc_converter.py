@@ -128,10 +128,16 @@ def main():
                         participant_id,
                         subject,
                     ))
+                
+    subjects_copied = set()
+    
     for input_dir, filename, derived_from, sample_type, participant_id_from_yaml, subject_label in files_to_process:
+        
         full_input_path = os.path.join(input_dir, filename)
         czi_id = os.path.splitext(filename)[0]
-
+        is_first = subject_label not in subjects_copied
+        bm.create_sourcedata_links(full_input_path, subject_label, bids_root_path, copy_real=is_first)
+        subjects_copied.add(subject_label)
         print(f"\n>>> Processing: {filename}")
 
         try:

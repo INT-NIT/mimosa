@@ -2,6 +2,7 @@ import os
 import pathlib as Path
 import re
 import glob
+import shutil 
 from BIDS import bids_metadata as bmeta
 SESSION_ORDER_BY_ROOT = {}
 
@@ -108,25 +109,8 @@ def initialize_dataset(
                 year, month, day = parts
                 date_key = f"{year}-{month}-{day}"
 
-                valid_slices = []
-                for s in slices:
-                    try:
-                        valid_slices.append(int(s))
-                    except Exception:
-                        continue
-
-                if not valid_slices:
-                    continue
-
-                min_slice = min(valid_slices)
-
-                if date_key not in date_to_min_slice:
-                    date_to_min_slice[date_key] = min_slice
-                else:
-                    date_to_min_slice[date_key] = min(date_to_min_slice[date_key], min_slice)
-
-        sorted_dates = sorted(date_to_min_slice.keys(), key=lambda d: date_to_min_slice[d])
-
+                date_to_min_slice.setdefault(date_key, None)    
+        sorted_dates = sorted(date_to_min_slice.keys())
         session_order[subject] = {
             date_key: f"{idx + 1:02d}"
             for idx, date_key in enumerate(sorted_dates)
@@ -146,20 +130,23 @@ def initialize_dataset(
     return bids_root_path
 
 
-def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: str) -> None:
-    """creating files CZI with same name of the original ones"""
+def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: str,copy_real: bool = False) -> None:
+    """creating files CZI with same name of the original ones , real copy for the first czi file """
     sourcedata_dir = os.path.join(bids_root_path, "sourcedata", f"sub-{subject}")
     os.makedirs(sourcedata_dir, exist_ok=True)
 
-    placeholder_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
+    dest_path = os.path.join(sourcedata_dir, os.path.basename(czi_file_path))
 
-    if os.path.exists(placeholder_path):
+    if os.path.exists(dest_path):
         return
 
-    with open(placeholder_path, "w"):
-        pass
-
-    print(f"Placeholder: {os.path.basename(placeholder_path)}")
+    if copy_real:
+        shutil.copy2(czi_file_path, dest_path)          
+        print(f"First CZI Copied: {os.path.basename(dest_path)}")
+    else:
+        with open(dest_path, "w"):                      
+            pass
+        print(f"Placeholder: {os.path.basename(dest_path)}")
 
 def build_bids_basename(bids_info, stain, suffix="FLUO"):
     stain_clean = re.sub(r"[^a-zA-Z0-9]", "", stain)
