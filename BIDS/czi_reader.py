@@ -406,18 +406,18 @@ class MimosaReader:
         )
 
         meta = {
+            # 1. Acquisition
             "Manufacturer": manufacturer,
+            "AcquisitionDate": self.get_session(),
+            "AcquisitionSignature": self.get_acq_signature(),
+            "SampleStaining": stain,
 
+            # 2. Native image
             "NativePixelSize": [
                 float(px_native_x_um),
                 float(px_native_y_um),
             ],
             "NativePixelSizeUnits": native_unit,
-
-            "PixelSize": scene_geometry["OutputPixelSize"],
-            "PixelSizeUnits": scene_geometry[
-                "OutputPixelSizeUnits"
-            ],
 
             "NativeWidthPixels": scene_geometry[
                 "NativeWidthPixels"
@@ -433,18 +433,15 @@ class MimosaReader:
                 "NativeHeightPhysical"
             ],
 
-            "SampleStaining": stain,
-            "AcquisitionSignature": self.get_acq_signature(),
-            "AcquisitionDate": self.get_session(),
-
-            "ChunkTransformationMatrix": scene_geometry[
-                "ChunkTransformationMatrix"
-            ],
-            "ChunkTransformationMatrixAxis": scene_geometry[
-                "ChunkTransformationMatrixAxis"
-            ],
-
+            # 3. Downsampled output
             "DownsamplingFactor": float(downsampling_factor),
+
+            "PixelSize": scene_geometry[
+                "OutputPixelSize"
+            ],
+            "PixelSizeUnits": scene_geometry[
+                "OutputPixelSizeUnits"
+            ],
         }
 
         if exported_shape is not None:
@@ -462,17 +459,16 @@ class MimosaReader:
                     f"Invalid exported shape: {exported_shape}"
                 )
 
-            meta["ExportedShape"] = [size_x, size_y]
             meta["WidthPixels-DS"] = size_x
             meta["HeightPixels-DS"] = size_y
 
-        if slice_index is not None:
-            meta["SliceIndex"] = int(slice_index)
-
+        
         if is_nifti:
             meta["ConvertedTo"] = "NIfTI"
         else:
-            meta["ConvertedTo"] = "TIFF"
+            meta["ConvertedTo"] = "TIF"
+        if slice_index is not None:
+            meta["SliceIndex"] = int(slice_index)
 
         return meta
     def get_summary(self):
