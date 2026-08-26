@@ -118,7 +118,7 @@ def build_raw_bids_output_path(
 
     Example:
         sub-Una/ses-01/micr/
-        sub-Una_ses-01_sample-slide01_stain-C0_FLUO.ome.tif
+        sub-Una_ses-01_sample-slide01_stain-C0_FLUO.ome.tiff
     """
     out_dir = (
         Path(bids_root)
@@ -136,7 +136,7 @@ def build_raw_bids_output_path(
         f"_ses-{session}"
         f"_sample-{sample_label}"
         f"_stain-{stain_clean}"
-        f"_FLUO.ome.tif"
+        f"_FLUO.ome.tiff"
     )
 
     return out_dir / filename
@@ -231,9 +231,6 @@ def make_sidecar_metadata(
     slice_indices: list[int],
     sample_label: str,
     sample_info: dict,
-    pixel_size_x_um: float,
-    pixel_size_y_um: float,
-    pixel_size_units: str,
 ) -> dict:
     """
     Metadata for raw BIDS OME-TIFF converted from a CZI using the global
@@ -261,12 +258,6 @@ def make_sidecar_metadata(
         "Stain": f"C{channel}",
 
         "DownsamplingFactor": int(downsampling_factor),
-
-        "PixelSize": [
-            float(pixel_size_x_um),
-            float(pixel_size_y_um),
-        ],
-        "PixelSizeUnits": pixel_size_units,
 
         "Width": int(width), # final width of the final image OME-TIFF after downsampling 
         "Height": int(height),
@@ -392,73 +383,9 @@ def inject_scene_positions_into_ome_xml(
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
 
-def read_zoomed_patch(
-    czidoc,
-    channel: int,
-    bbox_x: int,
-    bbox_y: int,
-    bbox_w: int,
-    bbox_h: int,
-    patch_width_full: int,
-    patch_height_full: int,
-    x_idx: int,
-    y_idx: int,
-    downsampling_factor: int,
-):
-    """
-    Read one patch directly at the requested reduced resolution
-    using the CZI zoom mechanism.
 
-    Returns
-    -------
-    patch_res
-        Downsampled patch.
-    output_x
-        X position of the patch in the final mosaic.
-    output_y
-        Y position of the patch in the final mosaic.
-    """
-
-    source_x = x_idx * patch_width_full
-    source_y = y_idx * patch_height_full
-
-    patch_width = min(
-        patch_width_full,
-        bbox_w - source_x,
-    )
-
-    patch_height = min(
-        patch_height_full,
-        bbox_h - source_y,
-    )
-
-    if patch_width <= 0 or patch_height <= 0:
-        return None
-
-    roi = (
-        int(bbox_x + source_x),
-        int(bbox_y + source_y),
-        int(patch_width),
-        int(patch_height),
-    )
-
-    patch_res = np.asarray(
-        czidoc.read(
-            roi=roi,
-            plane={"C": int(channel)},
-            zoom=1.0 / float(downsampling_factor),
-        )
-    ).squeeze()
-
-    if patch_res.ndim == 3:
-        patch_res = patch_res[..., 0]
-
-    output_x = int(source_x // downsampling_factor)
-    output_y = int(source_y // downsampling_factor)
-
-    return patch_res, output_x, output_y
-
-def convert_czi_total_bbox_2_ome_tiff(
+# Conversion
+def convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
     input_czi: Path,
     bids_root: Path,
     subject: str,
@@ -469,8 +396,11 @@ def convert_czi_total_bbox_2_ome_tiff(
     downsampling_factor: int,
     channels: tuple[int, ...],
     patch_size: int = 6144,
+    compression: str = "zlib",
+    quality: float = 0.5,
 ):
     import tempfile
+    import os
 
     input_czi = Path(input_czi)
     bids_root = Path(bids_root)
@@ -486,23 +416,7 @@ def convert_czi_total_bbox_2_ome_tiff(
     print("Patch size:", patch_size)
     print("=" * 80)
 
-    
-    with MimosaReader(str(input_czi)) as reader:
-
-        native_pixel_size_x_um, native_pixel_size_y_um, _ = (
-            reader.get_pixel_size_um()
-        )
-
-        # Use the existing MIMOSA geometry calculation.
-        # total_bounding_rectangle is not available from MimosaReader,
-        # so it is passed below after opening the CZI.
-        print("\nNative pixel size:")
-        print("X =", native_pixel_size_x_um, "um")
-        print("Y =", native_pixel_size_y_um, "um")
-
-    
     with pyczi.open_czi(str(input_czi)) as czidoc:
-
         bbox = czidoc.total_bounding_rectangle
         scenes = czidoc.scenes_bounding_rectangle
 
@@ -514,175 +428,117 @@ def convert_czi_total_bbox_2_ome_tiff(
         print("w =", bbox_w)
         print("h =", bbox_h)
 
-       
-        with MimosaReader(str(input_czi)) as reader:
-
-            geometry = reader.get_chunk_transform_matrix(
-                rect=bbox,
-                pixel_size_um=(
-                    native_pixel_size_x_um,
-                    native_pixel_size_y_um,
-                ),
-                downsampling_factor=downsampling_factor,
-            )
-
-        pixel_size_x_um = float(
-            geometry["OutputPixelSize"][0]
-        )
-
-        pixel_size_y_um = float(
-            geometry["OutputPixelSize"][1]
-        )
-
-        pixel_size_units = geometry[
-            "OutputPixelSizeUnits"
-        ]
-
-        print("\nOutput pixel size:")
-        print("X =", pixel_size_x_um, pixel_size_units)
-        print("Y =", pixel_size_y_um, pixel_size_units)
-
-       
         patch_width_full = int(patch_size)
         patch_height_full = int(patch_size)
 
-        nb_patch_w = int(
-            math.ceil(
-                bbox_w / patch_width_full
-            )
-        )
+        nb_patch_w = int(math.ceil(bbox_w / patch_width_full))
+        nb_patch_h = int(math.ceil(bbox_h / patch_height_full))
 
-        nb_patch_h = int(
-            math.ceil(
-                bbox_h / patch_height_full
-            )
-        )
-
-        mosaic_image_width = int(
-            math.ceil(
-                bbox_w / downsampling_factor
-            )
-        )
-
-        mosaic_image_height = int(
-            math.ceil(
-                bbox_h / downsampling_factor
-            )
-        )
+        mosaic_image_width = int(math.ceil(bbox_w / downsampling_factor))
+        mosaic_image_height = int(math.ceil(bbox_h / downsampling_factor))
 
         print("\nPatch information:")
-        print(
-            "patch_width_full =",
-            patch_width_full,
-        )
-        print(
-            "patch_height_full =",
-            patch_height_full,
-        )
-        print(
-            "nb_patch_w =",
-            nb_patch_w,
-        )
-        print(
-            "nb_patch_h =",
-            nb_patch_h,
-        )
+        print("patch_width_full =", patch_width_full)
+        print("patch_height_full =", patch_height_full)
+        print("nb_patch_w =", nb_patch_w)
+        print("nb_patch_h =", nb_patch_h)
 
         print("\nMosaic output size:")
-        print(
-            "mosaic width =",
-            mosaic_image_width,
-        )
-        print(
-            "mosaic height =",
-            mosaic_image_height,
-        )
+        print("mosaic width =", mosaic_image_width)
+        print("mosaic height =", mosaic_image_height)
 
-        patch_indices = [
-            (x_idx, y_idx)
-            for x_idx in range(nb_patch_w)
-            for y_idx in range(nb_patch_h)
-        ]
+        total_patches = nb_patch_w * nb_patch_h
 
-        total_patches = len(patch_indices)
-
-       
         for channel in channels:
-
             stain_label = f"C{channel}"
 
             print("\n" + "-" * 80)
-            print(
-                f"Converting sample={sample_label}, "
-                f"SliceIndices={slice_indices}, "
-                f"stain={stain_label}"
-            )
+            print(f"Converting sample={sample_label}, SliceIndices={slice_indices}, stain={stain_label}")
             print("-" * 80)
 
             mosaic_image = np.zeros(
-                (
-                    mosaic_image_height,
-                    mosaic_image_width,
-                ),
+                (int(mosaic_image_height), int(mosaic_image_width)),
                 dtype=np.uint16,
             )
+
+            def fill_patch(idx):
+                """
+                Read one CZI patch directly at the requested reduced resolution
+                using the CZI zoom mechanism, then place it in the output mosaic.
+                """
+
+                x_idx, y_idx = idx
+
+                src_x0 = x_idx * patch_width_full
+                src_y0 = y_idx * patch_height_full
+
+                patch_width = min(
+                    patch_width_full,
+                    bbox_w - src_x0,
+                )
+
+                patch_height = min(
+                    patch_height_full,
+                    bbox_h - src_y0,
+                )
+
+                if patch_width <= 0 or patch_height <= 0:
+                    return
+
+                roi = (
+                    int(bbox_x + src_x0),
+                    int(bbox_y + src_y0),
+                    int(patch_width),
+                    int(patch_height),
+                )
+
+                # Read directly at the requested resolution.
+                patch_res = np.asarray(
+                    czidoc.read(
+                        roi=roi,
+                        plane={"C": int(channel)},
+                        zoom=1.0 / float(downsampling_factor),
+                    )
+                ).squeeze()
+
+                if patch_res.ndim == 3:
+                    patch_res = patch_res[..., 0]
+
+                # Position of this patch in the reduced mosaic.
+                out_x0 = int(src_x0 // downsampling_factor)
+                out_y0 = int(src_y0 // downsampling_factor)
+
+                out_x1 = min(
+                    out_x0 + patch_res.shape[1],
+                    mosaic_image_width,
+                )
+
+                out_y1 = min(
+                    out_y0 + patch_res.shape[0],
+                    mosaic_image_height,
+                )
+
+                mosaic_image[
+                    out_y0:out_y1,
+                    out_x0:out_x1,
+                ] = patch_res[
+                    : out_y1 - out_y0,
+                    : out_x1 - out_x0,
+                ]
+            patch_indices = [
+                (x_idx, y_idx)
+                for x_idx in range(nb_patch_w)
+                for y_idx in range(nb_patch_h)
+            ]
 
             with alive_bar(
                 total_patches,
                 force_tty=True,
-                title=(
-                    f"{sample_label} "
-                    f"{stain_label} "
-                    f"ds{downsampling_factor}x"
-                ),
+                title=f"{sample_label} {stain_label} ds{downsampling_factor}x",
             ) as bar:
 
-                for x_idx, y_idx in patch_indices:
-
-                    result = read_zoomed_patch(
-                        czidoc=czidoc,
-                        channel=channel,
-                        bbox_x=bbox_x,
-                        bbox_y=bbox_y,
-                        bbox_w=bbox_w,
-                        bbox_h=bbox_h,
-                        patch_width_full=patch_width_full,
-                        patch_height_full=patch_height_full,
-                        x_idx=x_idx,
-                        y_idx=y_idx,
-                        downsampling_factor=downsampling_factor,
-                    )
-
-                    if result is None:
-                        bar()
-                        continue
-
-                    (
-                        patch_res,
-                        output_x,
-                        output_y,
-                    ) = result
-
-                    output_x_end = min(
-                        output_x
-                        + patch_res.shape[1],
-                        mosaic_image_width,
-                    )
-
-                    output_y_end = min(
-                        output_y
-                        + patch_res.shape[0],
-                        mosaic_image_height,
-                    )
-
-                    mosaic_image[
-                        output_y:output_y_end,
-                        output_x:output_x_end,
-                    ] = patch_res[
-                        : output_y_end - output_y,
-                        : output_x_end - output_x,
-                    ]
-
+                for idx in patch_indices:
+                    fill_patch(idx)
                     bar()
 
             output_path = build_raw_bids_output_path(
@@ -693,125 +549,79 @@ def convert_czi_total_bbox_2_ome_tiff(
                 stain_label=stain_label,
             )
 
-           
-            with tempfile.NamedTemporaryFile(
-                suffix=".ome.tiff",
-                delete=False,
-            ) as tmp:
+            # Step 1 : écrire un fichier temporaire pour récupérer l'XML correct généré par tifffile
+            with tempfile.NamedTemporaryFile(suffix=".tiff", delete=False) as tmp:
                 tmp_path = tmp.name
 
             tifffile.imwrite(
                 tmp_path,
-                mosaic_image,
+                mosaic_image.astype(np.uint16),
                 photometric="minisblack",
-                ome=True,
-                metadata={
-                    "axes": "YX",
-                    "PhysicalSizeX": pixel_size_x_um,
-                    "PhysicalSizeXUnit": "µm",
-                    "PhysicalSizeY": pixel_size_y_um,
-                    "PhysicalSizeYUnit": "µm",
-                },
+                ome=True,                        
+                metadata={"axes": "YX"},
             )
 
-            with tifffile.TiffFile(
-                tmp_path
-            ) as tf:
-
+            with tifffile.TiffFile(tmp_path) as tf:
                 xml_str = tf.ome_metadata
 
             os.unlink(tmp_path)
-
             if xml_str is None:
-                raise RuntimeError(
-                    "tifffile did not generate "
-                    f"OME-XML for {output_path.name}"
-                )
-
-           
-            enriched_xml = (
-                inject_scene_positions_into_ome_xml(
-                    existing_xml=xml_str,
-                    scenes=scenes,
-                    total_bbox=bbox,
-                    downsampling_factor=(
-                        downsampling_factor
-                    ),
-                )
+                raise RuntimeError(f"tifffile did not generate OME-XML for {output_path.name}")
+            # Step 2 : injecter les positions de scènes dans l'XML correct
+            enriched_xml = inject_scene_positions_into_ome_xml(
+                existing_xml=xml_str,
+                scenes=scenes,
+                total_bbox=bbox,
+                downsampling_factor=downsampling_factor,
             )
 
-          
-            with tifffile.TiffWriter(
-                str(output_path),
-                bigtiff=True,
-            ) as tif:
-
-                tif.write(
-                    mosaic_image,
-                    photometric="minisblack",
-                    description=enriched_xml,
-                    metadata=None,
-                    compression="zlib",
-                )
-
-            print(
-                "Written:",
-                output_path,
+            # Step 3 : écrire le vrai fichier BigTIFF avec l'XML enrichi.
+            # zlib is lossless but weak on fluorescence data (~10%). jpegxr and
+            # jpeg2000 are lossy: they shrink the file a lot (like the CZI does)
+            # at the cost of slightly altered pixel values. Lossy is fine for a
+            # visual overview but must not be used for quantification.
+            write_kwargs = dict(
+                photometric="minisblack",
+                description=enriched_xml,
+                metadata=None,
+                compression=compression,
             )
+            if compression in ("jpegxr", "jpeg2000"):
+                write_kwargs["compressionargs"] = {"level": float(quality)}
 
-          
+            with tifffile.TiffWriter(str(output_path), bigtiff=True) as tif:
+                tif.write(mosaic_image.astype(np.uint16), **write_kwargs)
+
+            print("Written:", output_path)
+
             meta = make_sidecar_metadata(
                 source_czi=input_czi,
                 total_bbox=bbox,
                 scenes=scenes,
                 channel=channel,
-                downsampling_factor=(
-                    downsampling_factor
-                ),
+                downsampling_factor=downsampling_factor,
                 width=mosaic_image.shape[1],
                 height=mosaic_image.shape[0],
                 slice_indices=slice_indices,
                 sample_label=sample_label,
                 sample_info=sample_info,
-                pixel_size_x_um=pixel_size_x_um,
-                pixel_size_y_um=pixel_size_y_um,
-                pixel_size_units=pixel_size_units,
             )
 
-            
+            # Record the compression so a reader knows whether the pixel values
+            # are exact (lossless) or slightly altered (lossy overview).
+            meta["Compression"] = compression
+            meta["Lossy"] = compression in ("jpegxr", "jpeg2000")
+            if meta["Lossy"]:
+                meta["CompressionQuality"] = float(quality)
 
-            meta["Compression"] = "zlib"
-            meta["Lossy"] = False
+            write_json_sidecar_for_ome_tiff(output_path, meta)
 
-            write_json_sidecar_for_ome_tiff(
-                output_path,
-                meta,
-            )
+            with tifffile.TiffFile(str(output_path)) as tf:
+                print("is_ome:", tf.is_ome)
+                print("is_bigtiff:", tf.is_bigtiff)
+                print("shape:", tf.series[0].shape)
+                print("axes:", tf.series[0].axes)
 
-          
-            with tifffile.TiffFile(
-                str(output_path)
-            ) as tf:
-
-                print(
-                    "is_ome:",
-                    tf.is_ome,
-                )
-
-                print(
-                    "is_bigtiff:",
-                    tf.is_bigtiff,
-                )
-
-                print(
-                    "shape:",
-                    tf.series[0].shape,
-                )
-
-                print(
-                    "axes:",
-                    tf.series[0].axes,
-                )
 
 def main():
     parser = argparse.ArgumentParser(
@@ -855,6 +665,31 @@ def main():
     )
 
 
+    parser.add_argument(
+        "-compression",
+        type=str,
+        default="zlib",
+        choices=("zlib", "jpegxr", "jpeg2000"),
+        help=(
+            "How to compress the OME-TIFF. 'zlib' is lossless but weak on "
+            "fluorescence (~10%%), so the file stays large. 'jpegxr' and "
+            "'jpeg2000' are lossy: much smaller (like the CZI), at the cost of "
+            "slightly altered pixel values. Use lossy only for a visual "
+            "overview, never for quantification."
+        ),
+    )
+
+    parser.add_argument(
+        "-quality",
+        type=float,
+        default=0.5,
+        help=(
+            "Quality level for lossy compression. ONLY affects jpegxr and "
+            "jpeg2000; it does NOTHING for zlib, which is lossless and keeps "
+            "every value exactly. Lower means smaller and more altered. 0.5 is "
+            "a good mild overview setting, about 6x smaller than lossless."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -950,7 +785,7 @@ def main():
             sessions_by_sub.setdefault(subject, {})
             sessions_by_sub[subject][ses_key] = bids_info["acq_time"]
 
-            convert_czi_total_bbox_2_ome_tiff(
+            convert_one_czi_total_bbox_to_raw_bids_ome_tiff(
                 input_czi=input_czi,
                 bids_root=bids_root,
                 subject=subject,
@@ -961,6 +796,8 @@ def main():
                 downsampling_factor=args.df,
                 channels=channels,
                 patch_size=args.patch_size,
+                compression=args.compression,
+                quality=args.quality,
             )
 
         except Exception as exc:
@@ -998,6 +835,6 @@ Example:
 python mimosa_czi2ometiff_converter.py \
   -y metadata.yml \
   -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
-  -df 8 \
+  -ds 8 \
   -channels 0
 """
