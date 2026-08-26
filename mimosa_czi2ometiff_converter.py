@@ -742,7 +742,8 @@ def convert_czi_total_bbox_2_ome_tiff(
 
           
             with tifffile.TiffWriter(
-                str(output_path)
+                str(output_path),
+                bigtiff=True,
             ) as tif:
 
                 tif.write(
