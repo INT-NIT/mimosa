@@ -179,7 +179,7 @@ python mimosa_hpc_converter.py -f nii -df 4,6,8 \
 | `-y` | metadata YAML. | `metadata.yml` |
 | `-original_thickness` | Section thickness/spacing in µm. | `100` |
 | `-reorient` | Reorients the slice's **SForm matrix** (not the pixels) into the anatomical frame, e.g. `x,-z,-y`. | `none` |
-| `-refreeze` | Recompute the frozen slice count. | off |
+| `-only_slices` | Convert only these slice indices (e.g. `60,62,63`). Positions still come from the full YAML. | all |
 
 **Understanding the options**
 
@@ -188,14 +188,13 @@ python mimosa_hpc_converter.py -f nii -df 4,6,8 \
   pass several at once (`-df 4,6,8`). The current converter requests the
   reduced image through the CZI reader `zoom` mechanism.
 
-- **`-refreeze` (slice count).** MIMOSA records the total number of slice
-  positions of each brain the first time it processes a complete dataset.
-  This frozen value is then reused to compute the physical position of every
-  slice, even if only a subset of CZI files is processed later. Without this
-  reference, exporting only a few slices would change their computed depth in
-  the reconstructed volume. Use `-refreeze` only when the complete slice set
-  of a brain has genuinely changed, for example when slices were permanently
-  added or removed, not for routine partial exports.
+- **`-only_slices` (partial export).** The total slice count and the position
+  of every slice are always computed from the **complete** slice list declared
+  in the YAML. `-only_slices 60,62,63` then converts only those slices, while
+  they keep their **true depth** in the full brain (the other positions stay
+  empty). Keep the full slice list in the YAML and use this option to export a
+  subset — do not delete slices from the YAML. Omit it to convert every
+  declared slice.
 
 - **`-reorient` (orient the slices in the anatomical frame).** A scanned slide
   is not always aligned with the anatomical reference frame that viewers like
@@ -745,7 +744,7 @@ BIDS/
 ├── sub-X/ses-Y/micr/
 │   └── ..._FLUO.ome.tif                      raw OME-TIF mosaic
 ├── derivatives/2D/
-│   ├── mimosa_slice_references.json            frozen slice count per subject
+│   ├── mimosa_slice_references.tsv             slice table: index, position, Z, path
 │   ├── downsampled/sub-X/ses-Y/micr/res-Nx/
 │   │   └── ..._desc-downsampled_FLUO.nii.gz    downsampled NIfTI images
 │   └── preproc/                                padded 2D slices
@@ -753,19 +752,13 @@ BIDS/
 ```
 
 
-# Frozen slice count
+# Slice positions and depth
 
-The total number of slice positions of a brain is computed once per subject
-and stored in:
+The total number of slice positions and the position of every slice are
+computed **from the complete slice list declared in the YAML** (in memory, no
+stored file).
 
-```text
-derivatives/2D/mimosa_slice_references.json
-```
-
-After the first complete pass, this reference is reused unchanged.
-
-The physical depth of a slice depends on the total number of positions because
-the centered stack coordinate uses:
+The physical depth of a slice uses the centered stack coordinate:
 
 ```text
 physical_z =
@@ -786,36 +779,35 @@ slice_spacing =
 physical spacing between consecutive histological sections
 ```
 
-If `number_of_slices` changed simply because only a subset of CZI files was
-present during a later run, all physical slice positions would move.
-
-For example, if the complete brain contains:
+Because the depth depends on `number_of_slices`, this total must always be the
+one of the **complete** brain. For example, if the complete brain contains:
 
 ```text
 number_of_slices = 200
 ```
 
-and a later run exports only 10 slices, those slices must still be positioned
-using:
+and you export only 10 slices, those slices must still be positioned using
+`number_of_slices = 200`, not `number_of_slices = 10`.
 
-```text
-number_of_slices = 200
+**How to export a subset safely.** Keep the full slice list in the YAML and use
+`-only_slices` to choose which slices to convert. The total and positions then
+come from the full list, so the exported slices keep their true depth while the
+other positions stay empty. Do **not** delete slices from the YAML to make a
+partial run.
+
+## Slice reference table
+
+After conversion, build a human-readable table of all slices with:
+
+```bash
+python mimosa_slice_references_tsv.py <bids_root>
 ```
 
-not:
+It writes `derivatives/2D/mimosa_slice_references.tsv`, one row per slice:
 
 ```text
-number_of_slices = 10
+subject   NumberOfSlices   SliceIndex   SlicePosition   Z_mm   path
 ```
 
-Freezing the complete reference prevents this problem.
-
-It allows MIMOSA to export only a few high-resolution slices later while
-keeping exactly the same physical positions that those slices have in the
-complete brain.
-
-Run the first full pass with all CZI files present so that the frozen reference
-is correct.
-
-Use `-refreeze` only when the complete slice set of a brain has genuinely
-changed.
+The `path` contains the session (`ses-XX`) and the chunk (`chunk-XXX`), so it is
+clear which session each slice belongs to and at which depth (`Z_mm`) it sits.

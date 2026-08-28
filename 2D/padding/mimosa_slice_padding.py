@@ -1,7 +1,15 @@
+import os, sys
+# Make the repo root (the folder that contains BIDS/) importable, whatever the
+# depth of this script, so "from BIDS import ..." works.
+_ROOT = os.path.abspath(os.path.dirname(__file__))
+while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, "BIDS")):
+    _ROOT = os.path.dirname(_ROOT)
+sys.path.insert(0, _ROOT)
+
 import numpy as np
 import nibabel as nb
 from pathlib import Path
-import json 
+import json
 from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 

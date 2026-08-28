@@ -15,11 +15,16 @@ import tifffile
 from alive_progress import alive_bar
 from pylibCZIrw import czi as pyczi
  
+# Make the repo root (the folder that contains BIDS/) importable, whatever the
+# depth of this script, so "from BIDS import ..." works.
+_ROOT = os.path.abspath(os.path.dirname(__file__))
+while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, "BIDS")):
+    _ROOT = os.path.dirname(_ROOT)
+sys.path.insert(0, _ROOT)
+
 from BIDS import bids_metadata as bmeta
 from BIDS import bids_manager as bm
 from BIDS.czi_reader import MimosaReader
- 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
  
  
 def parse_channels(value: str) -> tuple[int, ...]:
