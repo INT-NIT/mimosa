@@ -2,7 +2,7 @@ import argparse
 import os
 
 
-from python_scripts import czi_convert as czi
+from core import czi_convert as czi
 from BIDS.czi_reader import MimosaReader  
 from BIDS import bids_manager as bm
 from BIDS import bids_metadata as bmeta
@@ -30,15 +30,24 @@ def main():
     parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
     parser.add_argument(
-        "-refreeze", action="store_true",
+        "-only_slices", type=str, default=None,
         help=(
-            "Recompute the frozen slice count of each subject from the CZI "
-            "currently declared. Use it only when the complete set of a brain "
-            "has genuinely changed. Without it, the total is kept stable so "
-            "exporting a few slices places them at the right depth."
+            "Convert only these slice indices (comma separated, e.g. 60,62,63). "
+            "The total slice count and positions are still computed from the "
+            "COMPLETE slice list in the YAML, so the exported slices keep their "
+            "true depth in the brain. Omit to convert every declared slice."
         ),
     )
     args = parser.parse_args()
+
+    # Optional subset of slice indices to actually export (positions still come
+    # from the complete YAML list).
+    only_slices = None
+    if args.only_slices:
+        only_slices = {
+            int(t) for t in str(args.only_slices).replace(";", ",").split(",")
+            if t.strip()
+        }
 
     output_format = args.output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
@@ -69,20 +78,16 @@ def main():
     bmeta.update_yaml_with_slices(args.yaml)
     cfg = bmeta.load_metadata_config(args.yaml)
 
-    # Freeze the total slice count once per subject. After the first full pass
-    # it is reused unchanged, so deleting CZI files to export only a few
-    # high-resolution slices no longer shifts their depth. Use -refreeze to
-    # recompute when the complete set of a brain has genuinely changed.
+    # Slice positions are computed in memory from the COMPLETE slice list in the
+    # YAML. Keep the full list in the YAML and use -only_slices to export a
+    # subset: the exported slices then keep their true depth in the brain.
     slice_maps_by_subject = {}
     for entry in cfg.get("samples", {}).get("entries", []):
         subj = entry.get("subject")
         if subj is None or subj in slice_maps_by_subject:
             continue
-        slice_maps_by_subject[subj] = bmeta.load_or_freeze_slice_reference(
-            bids_root=bids_root_path,
-            subject=subj,
-            slice_indices=bmeta._all_slice_indices(cfg, subject=subj),
-            refreeze=args.refreeze,
+        slice_maps_by_subject[subj] = bmeta._positions_from_indices(
+            bmeta._all_slice_indices(cfg, subject=subj)
         )
 
     MimosaReader.load_correspondence_from_yaml(cfg)
@@ -96,7 +101,6 @@ def main():
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = entry["path"]
         subject = entry.get("subject")
-        print("DEBUG YAML subject path:", subject_path)
         if not os.path.exists(subject_path):
             print(f"WARNING: path not found: {subject_path}")
             continue
@@ -170,8 +174,7 @@ def main():
 
                 slide_id = f"sample-slide{slide_num}"
 
-                # Pour le nom BIDS : _sample-slide01
-                # donc bids_info["sample"] = "slide01"
+                # BIDS name uses _sample-slide01, so bids_info["sample"] = "slide01".
                 bids_info["sample"] = slide_id.replace("sample-", "")
 
                 samples_rows.append({
@@ -199,6 +202,7 @@ def main():
                     slice_position_map=slice_maps_by_subject[subject_label],
                     original_thickness=args.original_thickness,
                     reorient=args.reorient,
+                    only_slices=only_slices,
                 )
 
         except Exception as e:

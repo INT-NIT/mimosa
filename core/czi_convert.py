@@ -14,7 +14,7 @@ from BIDS import bids_metadata as bmeta
 from BIDS.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from python_scripts.mimosa_downsample import downsample_scene_zoom  # noqa: E402
+from core.downsample import downsample_scene_zoom  # noqa: E402
 
 DESC = "downsampled"
 
@@ -91,11 +91,14 @@ def czi2bitmapHPC(
     slice_position_map=None,
     original_thickness: float = 100,
     reorient: str = "none",
+    only_slices=None,
 ):
     """Export one CZI to every requested resolution using the CZI zoom.
 
     downsampling_factor is an exponent or a list of them (factor = 2**exp).
     The reduction is done by the CZI `zoom` argument (ZEN pyramid).
+    only_slices, when given, is a set of slice indices to export; other scenes
+    are skipped (their positions are still known, so depths stay correct).
     """
     output_format = output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
@@ -125,6 +128,8 @@ def czi2bitmapHPC(
             if slice_idx is None:
                 print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
                 continue
+            if only_slices is not None and slice_idx not in only_slices:
+                continue  # not requested -> skip (its position stays reserved)
             bids_info["chunk"] = slice_idx
 
             with alive_bar(nb_channels, force_tty=True,
