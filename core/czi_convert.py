@@ -9,9 +9,9 @@ import tifffile as tf
 from alive_progress import alive_bar
 from pylibCZIrw import czi as pyczi
 
-from BIDS import bids_manager as bm
-from BIDS import bids_metadata as bmeta
-from BIDS.czi_reader import MimosaReader
+from core.bids import bids_manager as bm
+from core.bids import bids_metadata as bmeta
+from core.bids.czi_reader import MimosaReader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.downsample import downsample_scene_zoom  # noqa: E402

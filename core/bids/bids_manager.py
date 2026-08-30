@@ -3,7 +3,7 @@ import pathlib as Path
 import re
 import glob
 import shutil 
-from BIDS import bids_metadata as bmeta
+from core.bids import bids_metadata as bmeta
 SESSION_ORDER_BY_ROOT = {}
 
 class BIDSSession:
