@@ -23,13 +23,14 @@ It scans every `sub-*.json` sidecar that has a matching `.nii.gz` and carries
 (subject, session, chunk):
 
 ```text
-subject   session   chunk   Z_mm   channels   resolutions
+subject   session   chunk   SlicePosition_mm   channels   resolutions
 ```
 
 - `chunk` is the slice's chunk number (`SliceIndex`).
-- `Z_mm` is the physical depth, computed from the centered stack formula
-  (see [geometry.md](geometry.md#slice-vocabulary-and-depth)). Its sign follows
-  the reorientation recorded in the JSON (`-z` / `flip_z` flips the axis).
+- `SlicePosition_mm` is the physical depth in mm, computed from the centered
+  stack formula (see [geometry.md](geometry.md#slice-vocabulary-and-depth)). Its
+  sign follows the reorientation recorded in the JSON (`-z` / `flip_z` flips the
+  axis).
 - `channels` lists every stain found for that slice (e.g. `C0,C1`).
 - `resolutions` lists every resolution found for that slice (e.g. `4x,6x,8x`).
 

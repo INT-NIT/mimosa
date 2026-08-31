@@ -1,7 +1,7 @@
 import json, glob, os, re, sys, numpy as np, nibabel as nb
 
 # Build the slice reference table as a TSV:
-#   subject  session  chunk  Z_mm  channels  resolutions
+#   subject  session  chunk  SlicePosition_mm  channels  resolutions
 # One row per slice (subject, session, chunk). "channels" and "resolutions"
 # list every stain and every resolution found for that slice.
 #
@@ -69,7 +69,7 @@ ordered = sorted(rows.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[1]["pos"])
 
 os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
 with open(out_tsv, "w") as out:
-    out.write("subject\tsession\tchunk\tZ_mm\tchannels\tresolutions\n")
+    out.write("subject\tsession\tchunk\tSlicePosition_mm\tchannels\tresolutions\n")
     for (sub, ses, chunk), e in ordered:
         channels = ",".join(sorted(e["channels"]))
         resolutions = ",".join(sorted(e["resolutions"], key=res_sort_key))
