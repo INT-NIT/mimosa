@@ -156,10 +156,10 @@ OME-TIF `raw`.
                     │                                         (filed under: raw, micr/)
    .czi  ───────────┤
  (the only          │
-  real source)      └─── mimosa_hpc_converter.py ─────────►  downsampled NIfTI/TIFF
+  real source)      └─── mimosa_czi2nii-tif_converter.py ──►  downsampled NIfTI/TIFF
                                                               (filed under: derivatives)
                                                                      │
-                                                                     │  mimosa_slice_preprocessor.py
+                                                                     │  mimosa_slice_padding.py
                                                                      ▼
                                                               padded 2D slices
                                                               (derivatives)
@@ -172,7 +172,6 @@ OME-TIF `raw`.
 
 In the diagram, the OME-TIF `raw` is only an overview of the data. The actual
 processing pipeline starts from the original `.czi` files.
-
 
 
 
