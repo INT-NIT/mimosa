@@ -152,7 +152,7 @@ the downsampled derivatives are computed from the `.czi`, not from the
 OME-TIF `raw`.
 
 ```text
-                    ┌─── mimosa_czi2ometiff_converter.py ──►  OME-TIF mosaic
+                    ┌─── mimosa_czi2ometif_converter.py ──►  OME-TIF mosaic
                     │                                         (filed under: raw, micr/)
    .czi  ───────────┤
  (the only          │
