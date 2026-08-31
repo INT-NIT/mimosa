@@ -468,8 +468,10 @@ def main():
     )
     parser.add_argument("-y", required=True, help="Path to metadata.yml")
     parser.add_argument("-bids_root", required=True, help="Output BIDS root.")
-    parser.add_argument("-df", type=int, choices=[1, 2, 4, 6, 8], default=8,
-                        help="Downsampling factor.")
+    parser.add_argument("-df", type=int, default=8,
+                        help=("Downsampling exponent: factor = 2**exponent "
+                              "(e.g. -df 8 -> factor 256). Same convention as the "
+                              "NIfTI/TIFF converter."))
     parser.add_argument("-channels", default="0,1", help="Channels, e.g. 0 or 0,1")
     parser.add_argument("-patch_size", type=int, default=6144,
                         help="Patch size in x1 pixels used to read the CZI by blocks.")
@@ -477,6 +479,10 @@ def main():
  
     metadata_path = Path(args.y)
     channels = parse_channels(args.channels)
+
+    # -df is an exponent (like the NIfTI/TIFF converter): factor = 2**exponent.
+    downsampling_factor = 2 ** int(args.df)
+    print(f"Downsampling exponent: {args.df} -> factor {downsampling_factor}")
  
     bids_root = Path(
         bm.initialize_dataset(
@@ -541,7 +547,7 @@ def main():
                 slice_indices=item["slices"],
                 sample_info=item["sample_info"],
                 sample_label=sample_label,
-                downsampling_factor=args.df,
+                downsampling_factor=downsampling_factor,
                 channels=channels,
                 patch_size=args.patch_size,
             )
@@ -571,7 +577,7 @@ Example:
 python mimosa_czi2ometiff_converter.py \
   -y metadata.yml \
   -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
-  -df 8 \
+  -df 3 \
   -channels 0
 """
  

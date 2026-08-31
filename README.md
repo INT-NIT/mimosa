@@ -75,6 +75,225 @@ You do not build this layout by hand. You describe your inputs once in a small
 YAML file, and the scripts create the folders, the names, and the metadata.
 
 
+
+
+
+## How to use ?
+
+This repository provides a complete pipeline that takes the original `.czi`
+microscopy slides and processes them up to a stacked 3D reconstruction. The
+workflow runs in three stages:
+
+1. **Conversion** — convert the original `.czi` slides, either to a global
+   overview image or to individual per-scene images
+2. **Padding** — align every 2D slice of a subject to a common shape
+3. **Stacking** — stack the padded 2D slices into a 3D reconstruction
+
+Follow the stages in order. Each one below links to a detailed page with the
+exact command, arguments and expected inputs/outputs.
+
+---
+
+### 1. Conversion
+
+Two converters are provided. They serve different purposes, not just different
+formats:
+
+[**PART 1: CZI → OME-TIF**](docs/01_czi_to_ometif.md) — produces a single
+OME-TIF per slide, a global overview image that gives an idea of the whole
+scanned `.czi` slide, with its JSON sidecar (for microscopy viewers).
+
+[**PART 2: CZI → NIfTI / TIF**](docs/02_czi_to_nifti.md) — extracts every scene
+from each slide as an individual, downsampled NIfTI and/or TIF image (with the
+correct physical depth in the brain), so each scene can be worked on separately.
+This is the output used by the rest of the pipeline.
+
+---
+
+### 2. Padding
+
+[**Slice padding**](docs/03_padding.md) — pad every 2D slice of a subject to a
+common target shape so that all slices, resolutions and the stacked result
+align.
+
+---
+
+### 3. Stacking
+
+[**2D → 3D stacking**](docs/04_stacking.md) — stack the padded 2D slices into a
+single 3D reconstruction.
+
+---
+
+### Utilities & geometry
+
+Extra scripts (slice-reference table, slice finder) and the explanation of the
+coordinate system (SForm, `reorient`, physical Z) are documented separately:
+
+[**Utilities**](docs/utilities.md) · [**Geometry**](docs/geometry.md)
+
+
+
+
+
+
+
+# Pipeline overview
+
+Each brain is a stack of histological sections. The pipeline converts them,
+places each one correctly in physical space, and can rebuild a 3D volume.
+
+**Honest note: we did not fully follow the BIDS convention.** BIDS says the
+`derivatives` must be produced from the `raw` data. In our dataset the `raw`
+data are the OME-TIF mosaics, but these are only there to **give an idea of
+the data** — a way to see the whole set of scenes at a reasonable size. The
+real inputs of the pipeline are the `.czi` files, **not** the OME-TIFs. So
+the downsampled derivatives are computed from the `.czi`, not from the
+OME-TIF `raw`.
+
+```text
+                    ┌─── mimosa_czi2ometiff_converter.py ──►  OME-TIF mosaic
+                    │                                         (filed under: raw, micr/)
+   .czi  ───────────┤
+ (the only          │
+  real source)      └─── mimosa_hpc_converter.py ─────────►  downsampled NIfTI/TIFF
+                                                              (filed under: derivatives)
+                                                                     │
+                                                                     │  mimosa_slice_preprocessor.py
+                                                                     ▼
+                                                              padded 2D slices
+                                                              (derivatives)
+                                                                     │
+                                                                     │  mimosa_stacking_2D_2_3D.py
+                                                                     ▼
+                                                              3D volume
+                                                              (derivatives)
+```
+
+In the diagram, the OME-TIF `raw` is only an overview of the data. The actual
+processing pipeline starts from the original `.czi` files.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # The `metadata.yml` file
 
 Every command reads a `metadata.yml` that declares your subjects and where
@@ -113,42 +332,6 @@ samples:
   ```
 
 - You can list several subjects; each is treated as its own brain.
-
-
-# Pipeline overview
-
-Each brain is a stack of histological sections. The pipeline converts them,
-places each one correctly in physical space, and can rebuild a 3D volume.
-
-**Honest note: we did not fully follow the BIDS convention.** BIDS says the
-`derivatives` must be produced from the `raw` data. In our dataset the `raw`
-data are the OME-TIF mosaics, but these are only there to **give an idea of
-the data** — a way to see the whole set of scenes at a reasonable size. The
-real inputs of the pipeline are the `.czi` files, **not** the OME-TIFs. So
-the downsampled derivatives are computed from the `.czi`, not from the
-OME-TIF `raw`.
-
-```text
-                    ┌─── mimosa_czi2ometiff_converter.py ──►  OME-TIF mosaic
-                    │                                         (filed under: raw, micr/)
-   .czi  ───────────┤
- (the only          │
-  real source)      └─── mimosa_hpc_converter.py ─────────►  downsampled NIfTI/TIFF
-                                                              (filed under: derivatives)
-                                                                     │
-                                                                     │  mimosa_slice_preprocessor.py
-                                                                     ▼
-                                                              padded 2D slices
-                                                              (derivatives)
-                                                                     │
-                                                                     │  mimosa_stacking_2D_2_3D.py
-                                                                     ▼
-                                                              3D volume
-                                                              (derivatives)
-```
-
-In the diagram, the OME-TIF `raw` is only an overview of the data. The actual
-processing pipeline starts from the original `.czi` files.
 
 
 # Usage
