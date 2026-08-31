@@ -1,9 +1,9 @@
 import json, glob, os, re, sys, numpy as np, nibabel as nb
 
 # Build the slice reference table as a TSV:
-#   subject  NumberOfSlices  SliceIndex  Z_mm  path
-# One row per slice. The path is truncated to the session folder (ses-XX); the
-# chunk is already given by the SliceIndex column.
+#   subject  session  chunk  Z_mm  channels  resolutions
+# One row per slice (subject, session, chunk). "channels" and "resolutions"
+# list every stain and every resolution found for that slice.
 #
 # Usage: python mimosa_slice_references_tsv.py <bids_root> [output.tsv]
 
@@ -11,7 +11,19 @@ bids_root = sys.argv[1]
 out_tsv = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
     bids_root, "derivatives", "2D", "mimosa_slice_references.tsv")
 
-seen = {}  # (subject, SlicePosition) -> row  (one row per slice)
+
+def grab(pattern, text):
+    m = re.search(pattern, text)
+    return m.group(1) if m else None
+
+
+def res_sort_key(r):
+    m = re.match(r"(\d+)", r)
+    return int(m.group(1)) if m else 0
+
+
+# (subject, session, chunk) -> {pos, z, channels set, resolutions set}
+rows = {}
 for f in sorted(glob.glob(f"{bids_root}/**/sub-*.json", recursive=True)):
     nii = f[:-5] + ".nii.gz"
     if not os.path.exists(nii):
@@ -21,12 +33,16 @@ for f in sorted(glob.glob(f"{bids_root}/**/sub-*.json", recursive=True)):
         continue
 
     name = os.path.basename(f)
-    m = re.search(r"sub-([A-Za-z0-9]+)", name)
-    sub = m.group(1) if m else "n/a"
+    sub = grab(r"sub-([A-Za-z0-9]+)", name) or "n/a"
+    ses = grab(r"ses-([A-Za-z0-9]+)", name) or "n/a"
+    chunk = meta.get("SliceIndex")
+    if chunk is None:
+        chunk = grab(r"chunk-([0-9]+)", name) or "n/a"
+    stain = grab(r"stain-([A-Za-z0-9]+)", name)
+    res = grab(r"res-([A-Za-z0-9]+)", name)
 
     N = int(meta["NumberOfSlices"])
     pos = int(meta["SlicePosition"])
-    idx = meta.get("SliceIndex", "n/a")
 
     # thickness (mm) = largest affine column = the slice (depth) axis
     thickness = max(np.linalg.norm(nb.load(nii).affine[:3, :3], axis=0))
@@ -40,22 +56,23 @@ for f in sorted(glob.glob(f"{bids_root}/**/sub-*.json", recursive=True)):
 
     z = round(float(sign_z * (pos - (N - 1) / 2) * thickness), 4)
 
-    # Path only up to the session folder (ses-XX): the chunk is already given by
-    # the SliceIndex column, so the full filename is not needed in the table.
-    rel = os.path.relpath(nii, bids_root)
-    parts = rel.split(os.sep)
-    ses_i = next((i for i, p in enumerate(parts) if p.startswith("ses-")), None)
-    rel = os.sep.join(parts[:ses_i + 1]) if ses_i is not None else os.path.dirname(rel)
+    key = (sub, ses, str(chunk))
+    entry = rows.setdefault(
+        key, {"pos": pos, "z": z, "channels": set(), "resolutions": set()})
+    if stain:
+        entry["channels"].add(stain)
+    if res:
+        entry["resolutions"].add(res)
 
-    # pos is kept only to sort/deduplicate; it is not written to the table.
-    seen.setdefault((sub, pos), (pos, sub, N, idx, z, rel))  # keep the first seen
-
-rows = sorted(seen.values(), key=lambda r: (r[1], r[0]))  # sort by subject, then position
+# sort by subject, then session, then depth (SlicePosition)
+ordered = sorted(rows.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[1]["pos"]))
 
 os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
 with open(out_tsv, "w") as out:
-    out.write("subject\tNumberOfSlices\tSliceIndex\tZ_mm\tpath\n")
-    for r in rows:
-        out.write("\t".join(str(x) for x in r[1:]) + "\n")  # r[0] (pos) is only for sorting
+    out.write("subject\tsession\tchunk\tZ_mm\tchannels\tresolutions\n")
+    for (sub, ses, chunk), e in ordered:
+        channels = ",".join(sorted(e["channels"]))
+        resolutions = ",".join(sorted(e["resolutions"], key=res_sort_key))
+        out.write(f"{sub}\t{ses}\t{chunk}\t{e['z']}\t{channels}\t{resolutions}\n")
 
-print("Wrote:", out_tsv, "| slices:", len(rows))
+print("Wrote:", out_tsv, "| slices:", len(ordered))
