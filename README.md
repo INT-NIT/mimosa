@@ -143,10 +143,10 @@ coordinate system (SForm, `reorient`, physical Z) are documented separately:
 Each brain is a stack of histological sections. The pipeline converts them,
 places each one correctly in physical space, and can rebuild a 3D volume.
 
-**Honest note: we did not fully follow the BIDS convention.** BIDS says the
+**note: we did not fully follow the BIDS convention.** BIDS says the
 `derivatives` must be produced from the `raw` data. In our dataset the `raw`
 data are the OME-TIF mosaics, but these are only there to **give an idea of
-the data** — a way to see the whole set of scenes at a reasonable size. The
+the data** a way to see the whole set of scenes at a reasonable size. The
 real inputs of the pipeline are the `.czi` files, **not** the OME-TIFs. So
 the downsampled derivatives are computed from the `.czi`, not from the
 OME-TIF `raw`.
