@@ -1,4 +1,4 @@
-# CZI → OME-TIF (whole-slide overview)
+# CZI -> OME-TIF (whole-slide overview)
 
 Stitches all the scenes of a `.czi` slide into a single whole-slide OME-TIF,
 written to `sub-<subject>/ses-<session>/micr/`. This image is a global overview
@@ -11,7 +11,7 @@ dataset, with its JSON sidecar.
 python 2D/conversion/mimosa_czi2ometiff_converter.py \
   -y metadata.yml \
   -bids_root /path/to/BIDS \
-  -df 8 \
+  -df 3 \
   -channels 0,1
 ```
 
@@ -21,15 +21,14 @@ python 2D/conversion/mimosa_czi2ometiff_converter.py \
 |--------|--------------|---------|
 | `-y` | metadata YAML. **Required.** | — |
 | `-bids_root` | Output BIDS root. **Required.** | — |
-| `-df` | Downsampling **factor**, one of `1, 2, 4, 6, 8`. | `8` |
+| `-df` | Downsampling **exponent**, factor = `2^df` (e.g. `3` -> factor 8). | `3` |
 | `-channels` | Channels to convert, e.g. `0` or `0,1`. | `0,1` |
 | `-patch_size` | Patch size (px) used to read the CZI. | `6144` |
 
 ## Understanding the options
 
-- **`-df` (downsampling factor, not an exponent).** Here the number *is* the
-  factor: `-df 8` means factor 8. This differs from the NIfTI converter, where
-  `-df 8` means factor 256 (there the number is an exponent).
+- **`-df` (exponent).** The real reduction factor is `2^df`: `-df 3` -> factor
+  8, `-df 4` -> factor 16. Same convention as the NIfTI/TIFF converter.
 
 - **`-channels`.** A CZI can hold several fluorescence channels. Give the ones
   you want, comma-separated. Each channel produces its own OME-TIF.
