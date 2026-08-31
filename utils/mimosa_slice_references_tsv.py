@@ -1,9 +1,9 @@
 import json, glob, os, re, sys, numpy as np, nibabel as nb
 
 # Build the slice reference table as a TSV:
-#   subject  NumberOfSlices  SliceIndex  SlicePosition  Z_mm  path
-# One row per slice. The path contains the session (ses-XX) and the chunk
-# (chunk-XXX), so it is clear which session each slice belongs to.
+#   subject  NumberOfSlices  SliceIndex  Z_mm  path
+# One row per slice. The path is truncated to the session folder (ses-XX); the
+# chunk is already given by the SliceIndex column.
 #
 # Usage: python mimosa_slice_references_tsv.py <bids_root> [output.tsv]
 
@@ -40,15 +40,22 @@ for f in sorted(glob.glob(f"{bids_root}/**/sub-*.json", recursive=True)):
 
     z = round(float(sign_z * (pos - (N - 1) / 2) * thickness), 4)
 
+    # Path only up to the session folder (ses-XX): the chunk is already given by
+    # the SliceIndex column, so the full filename is not needed in the table.
     rel = os.path.relpath(nii, bids_root)
-    seen.setdefault((sub, pos), (sub, N, idx, pos, z, rel))  # keep the first seen
+    parts = rel.split(os.sep)
+    ses_i = next((i for i, p in enumerate(parts) if p.startswith("ses-")), None)
+    rel = os.sep.join(parts[:ses_i + 1]) if ses_i is not None else os.path.dirname(rel)
 
-rows = sorted(seen.values(), key=lambda r: (r[0], r[3]))  # sort by subject, then position
+    # pos is kept only to sort/deduplicate; it is not written to the table.
+    seen.setdefault((sub, pos), (pos, sub, N, idx, z, rel))  # keep the first seen
+
+rows = sorted(seen.values(), key=lambda r: (r[1], r[0]))  # sort by subject, then position
 
 os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
 with open(out_tsv, "w") as out:
-    out.write("subject\tNumberOfSlices\tSliceIndex\tSlicePosition\tZ_mm\tpath\n")
+    out.write("subject\tNumberOfSlices\tSliceIndex\tZ_mm\tpath\n")
     for r in rows:
-        out.write("\t".join(str(x) for x in r) + "\n")
+        out.write("\t".join(str(x) for x in r[1:]) + "\n")  # r[0] (pos) is only for sorting
 
 print("Wrote:", out_tsv, "| slices:", len(rows))
