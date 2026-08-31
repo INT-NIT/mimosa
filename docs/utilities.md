@@ -19,18 +19,19 @@ If the output path is omitted, it writes
 ### What it does
 
 It scans every `sub-*.json` sidecar that has a matching `.nii.gz` and carries
-`SlicePosition` and `NumberOfSlices`, and writes one row per slice:
+`SlicePosition` and `NumberOfSlices`, and writes one row per slice
+(subject, session, chunk):
 
 ```text
-subject   NumberOfSlices   SliceIndex   Z_mm   path
+subject   session   chunk   Z_mm   channels   resolutions
 ```
 
+- `chunk` is the slice's chunk number (`SliceIndex`).
 - `Z_mm` is the physical depth, computed from the centered stack formula
   (see [geometry.md](geometry.md#slice-vocabulary-and-depth)). Its sign follows
   the reorientation recorded in the JSON (`-z` / `flip_z` flips the axis).
-- `path` is the relative path truncated to the session folder (`ses-XX`), so
-  each row tells you which session the slice belongs to. The chunk itself is
-  already given by the `SliceIndex` column, so the full filename is not repeated.
+- `channels` lists every stain found for that slice (e.g. `C0,C1`).
+- `resolutions` lists every resolution found for that slice (e.g. `4x,6x,8x`).
 
 The file is a TSV (tab-separated), which opens directly in a spreadsheet or with
 `pandas.read_csv(path, sep="\t")`.
