@@ -46,7 +46,7 @@ def _bids_basename(bids_info, stain, res_label, desc):
 
 
 def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
-             slice_position_map, thickness, reorient="none"):
+             slice_position_map, thickness, reorient="none", output_format="nii"):
     """Build the JSON sidecar for one exported image, sform included."""
     meta = reader.get_converted_file_metadata(
         rect=rect,
@@ -58,7 +58,18 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
     )
     meta["DownsamplingSource"] = "CZI zoom (ZEN pyramid)"
 
-    if is_nifti and slice_position_map is not None:
+    # get_converted_file_metadata sets ConvertedTo from is_nifti ("NIfTI" or
+    # "TIF"). When the run exports both formats, record that both were produced
+    # in every sidecar, so each JSON tells the full story of the conversion.
+    if output_format == "both":
+        meta["ConvertedTo"] = "NIfTI and TIF"
+
+    # The SForm describes the physical position of the scene in the brain. It
+    # does not depend on the output format, so it is computed for both NIfTI and
+    # TIFF (whenever the slice positions are known). For NIfTI it is also written
+    # into the .nii.gz header; TIFF has no header for a 3D matrix, so for TIFF it
+    # lives only in the JSON sidecar (the BIDS-consistent place for geometry).
+    if slice_position_map is not None:
         meta = bmeta.add_sform_to_json_metadata(
             meta=meta,
             slice_position_map=slice_position_map,
@@ -167,7 +178,7 @@ def czi2bitmapHPC(
                                 _sidecar(reader, rect, staining_name, factor, scene_idx,
                                          (image.shape[1], image.shape[0]), False,
                                          slice_position_map,
-                                         original_thickness, reorient),
+                                         original_thickness, reorient, output_format),
                             )
                             print("  -> BIDS raw: "
                                   f"{os.path.relpath(path, bids_root_path)}")
@@ -178,7 +189,7 @@ def czi2bitmapHPC(
                             meta = _sidecar(reader, rect, staining_name, factor, scene_idx,
                                             arr.shape[:2], True,
                                             slice_position_map, original_thickness,
-                                            reorient)
+                                            reorient, output_format)
                             _save_nifti(
                                 path, arr,
                                 np.asarray(meta.get("SFormMatrix", np.eye(4)),
