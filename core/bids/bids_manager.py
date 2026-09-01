@@ -135,14 +135,11 @@ def initialize_dataset(
     # file list is known (auto-scan resolved). Start empty here.
     SESSION_ORDER_BY_ROOT.setdefault(bids_root_path, {})
 
+    # Only the dataset root gets a dataset_description.json. Derivative folders
+    # do not (no derivatives block required in the YAML).
     bmeta.create_dataset_description(bids_root_path, cfg)
     bmeta.create_participants_files(bids_root_path, cfg)
-    
-    if output_format in ("nii", "both"):
-        bmeta.create_derivatives_descriptions(
-            bids_root_path,
-            cfg        
-            )
+
     print(f"Dataset initialized in {bids_root_path}")
     return bids_root_path
 
