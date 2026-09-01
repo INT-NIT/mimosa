@@ -61,7 +61,7 @@ def build_slice_references_tsv(bids_root, out_tsv=None):
                     or "none").replace(" ", "").lower()
         sign_z = -1 if ("-z" in reorient or "flip_z" in reorient) else 1
 
-        z = round(float(sign_z * (pos - (N - 1) / 2) * thickness), 4)
+        z = round(float(sign_z * (pos - (N - 1) / 2) * thickness), 2)
 
         key = (sub, ses, str(chunk))
         entry = rows.setdefault(
