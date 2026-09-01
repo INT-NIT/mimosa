@@ -44,9 +44,9 @@ class VolumeBuilder3D:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if res_label is not None:
-            return output_dir / f"{subject_dir.name}_{channel}_res-{res_label}_desc-stacking_volume.nii.gz"
+            return output_dir / f"{subject_dir.name}_{channel}_res-{res_label}_volume.nii.gz"
 
-        return output_dir / f"{subject_dir.name}_{channel}_desc-stacking_volume.nii.gz"
+        return output_dir / f"{subject_dir.name}_{channel}_volume.nii.gz"
         
     def update_output_json(self, output_nii_path: Path, new_affine: np.ndarray, volume_shape: tuple[int, int, int]) -> None:
         """

@@ -213,6 +213,50 @@ class MimosaReader:
             if name:
                 return name
         return "Unknown"
+
+    def get_instrument_info(self) -> dict:
+        """Best-effort instrument metadata read from the CZI.
+
+        Returns only the keys actually found (missing ones are omitted), so the
+        BIDS-recommended instrument fields do not have to be typed in the YAML:
+        Manufacturer, ManufacturersModelName, DeviceSerialNumber,
+        SoftwareVersions.
+        """
+        info = {}
+
+        # Microscope "Manufacturer" block: Vendor / Model / SerialNumber.
+        manuf = self._find_key(self.metadata, "Manufacturer")
+        if isinstance(manuf, list) and manuf:
+            manuf = manuf[0]
+        if isinstance(manuf, dict):
+            vendor = self._to_string(manuf.get("Vendor", ""))
+            model = self._to_string(manuf.get("Model", ""))
+            serial = self._to_string(manuf.get("SerialNumber", ""))
+            if vendor:
+                info["Manufacturer"] = vendor
+            if model:
+                info["ManufacturersModelName"] = model
+            if serial:
+                info["DeviceSerialNumber"] = serial
+
+        # Fallback for the model: the microscope @Name (e.g. "Axio Scan.Z1").
+        if "ManufacturersModelName" not in info:
+            model_name = self.get_manufacturer()
+            if model_name and model_name != "Unknown":
+                info["ManufacturersModelName"] = model_name
+
+        # Software (e.g. ZEN) name + version from the Application block.
+        app = self._find_key(self.metadata, "Application")
+        if isinstance(app, list) and app:
+            app = app[0]
+        if isinstance(app, dict):
+            name = self._to_string(app.get("Name", ""))
+            version = self._to_string(app.get("Version", ""))
+            software = " ".join(p for p in (name, version) if p).strip()
+            if software:
+                info["SoftwareVersions"] = software
+
+        return info
     def get_channel_name(self, channel_idx: int) -> str:
         """
         Return the channel/stain name stored in the CZI metadata.

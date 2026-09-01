@@ -169,6 +169,8 @@ def make_sidecar_metadata(
     sample_info: dict,
     pixel_size_x_um: float,
     pixel_size_y_um: float,
+    microscopy_json: dict | None = None,
+    instrument_info: dict | None = None,
 ) -> dict:
     """JSON sidecar for one raw BIDS OME-TIFF (one whole slide).
  
@@ -179,12 +181,9 @@ def make_sidecar_metadata(
     total_x, total_y, total_w, total_h = rect_to_xywh(total_bbox)
     scene_positions = build_scene_positions_metadata(scenes, total_bbox, downsampling_factor)
  
-    anatomical_region = sample_info.get("derived_from", "n/a")
-    sample_type = sample_info.get("sample_type", "n/a")
  
-    return {
+    meta = {
         "SourceFile": source_czi.name,
-        "ImageType": "OME-TIFF",
         "Axes": "YX",
         "Stain": f"C{channel}",
         "DownsamplingFactor": int(downsampling_factor),
@@ -195,10 +194,7 @@ def make_sidecar_metadata(
  
         "Width": int(width),
         "Height": int(height),
-        "SampleLabel": sample_label,
         "SliceIndices": [int(s) for s in slice_indices],
-        "SampleType": sample_type,
-        "AnatomicalRegion": anatomical_region,
         "TotalBoundingBox": {
             "X": total_x, "Y": total_y, "Width": total_w, "Height": total_h,
             "Units": "pixels",
@@ -214,6 +210,33 @@ def make_sidecar_metadata(
             "downsampled output mosaic."
         ),
     }
+
+    # SampleStaining is per sample (it can differ from one subject to another),
+    # so it is read from the sample entry, not from the global block. A list is
+    # treated as one stain per channel; a scalar is the same stain for all.
+    staining = (sample_info or {}).get("SampleStaining")
+    if staining is not None:
+        if isinstance(staining, (list, tuple)):
+            meta["SampleStaining"] = (
+                staining[channel] if channel < len(staining) else list(staining)
+            )
+        else:
+            meta["SampleStaining"] = staining
+
+    # Instrument fields auto-read from the CZI metadata (Manufacturer, model,
+    # serial number, software version). Read from the file, not typed in the
+    # YAML; they take precedence over the YAML block below.
+    for key, value in (instrument_info or {}).items():
+        if value:
+            meta[key] = value
+
+    # BIDS-recommended microscopy fields, filled from the YAML `microscopy_json`
+    # block (BodyPart, SampleEnvironment, ...). setdefault never overwrites a
+    # value already set above (per-sample SampleStaining and CZI instrument
+    # fields win).
+    for key, value in (microscopy_json or {}).items():
+        meta.setdefault(key, value)
+    return meta
  
  
 def get_next_slide_label(samples_rows: list[dict], participant_id: str) -> str:
@@ -326,6 +349,7 @@ def convert_czi_total_bbox_2_ome_tiff(
     downsampling_factor: int,
     channels: tuple[int, ...],
     patch_size: int = 6144,
+    microscopy_json: dict | None = None,
 ):
     import tempfile
  
@@ -339,9 +363,11 @@ def convert_czi_total_bbox_2_ome_tiff(
     print("Downsampling:", downsampling_factor, "| Patch size:", patch_size)
     print("=" * 80)
  
-    # Native pixel size (um) from the CZI metadata.
+    # Native pixel size (um) and instrument info (Manufacturer, model, serial,
+    # software) read directly from the CZI metadata.
     with MimosaReader(str(input_czi)) as reader:
         native_px_x_um, native_px_y_um, _ = reader.get_pixel_size_um()
+        instrument_info = reader.get_instrument_info()
  
     # Output (downsampled) pixel size in um. Consistent between the OME
     # PhysicalSize and the JSON PixelSize, as BIDS requires.
@@ -451,6 +477,8 @@ def convert_czi_total_bbox_2_ome_tiff(
                 sample_info=sample_info,
                 pixel_size_x_um=pixel_size_x_um,
                 pixel_size_y_um=pixel_size_y_um,
+                microscopy_json=microscopy_json,
+                instrument_info=instrument_info,
             )
             meta["Compression"] = "zlib"
             meta["Lossy"] = False
@@ -468,9 +496,9 @@ def main():
     )
     parser.add_argument("-y", required=True, help="Path to metadata.yml")
     parser.add_argument("-bids_root", required=True, help="Output BIDS root.")
-    parser.add_argument("-df", type=int, default=8,
+    parser.add_argument("-df", type=int, default=3,
                         help=("Downsampling exponent: factor = 2**exponent "
-                              "(e.g. -df 8 -> factor 256). Same convention as the "
+                              "(e.g. -df 3 -> factor 8). Same convention as the "
                               "NIfTI/TIFF converter."))
     parser.add_argument("-channels", default="0,1", help="Channels, e.g. 0 or 0,1")
     parser.add_argument("-patch_size", type=int, default=6144,
@@ -494,7 +522,14 @@ def main():
  
     cfg = bmeta.update_yaml_with_slices(metadata_path)
     MimosaReader.load_correspondence_from_yaml(cfg)
+
+    # Number sessions by real acquisition date (earliest day = ses-01).
+    bm.build_session_order_from_acq_time(cfg, str(bids_root))
     session = bm.BIDSSession(str(bids_root))
+
+    # BIDS-recommended microscopy fields, added to every OME-TIF sidecar.
+    # Read from the YAML `raw_json` block.
+    microscopy_json = cfg.get("raw_json", {})
  
     sessions_by_sub = {}
     samples_rows = []
@@ -531,7 +566,6 @@ def main():
                 "sample_id": sample_id,
                 "participant_id": participant_id,
                 "sample_type": item["sample_info"].get("sample_type", "technical sample"),
-                "derived_from": item["sample_info"].get("derived_from", "n/a"),
                 "source_filename": input_czi.name,
             })
  
@@ -550,8 +584,9 @@ def main():
                 downsampling_factor=downsampling_factor,
                 channels=channels,
                 patch_size=args.patch_size,
+                microscopy_json=microscopy_json,
             )
- 
+
         except Exception as exc:
             print(f"ERROR processing {input_czi.name}: {exc}")
             continue
@@ -571,6 +606,14 @@ if __name__ == "__main__":
     main()
  
  
-
+"""
+Example:
+ 
+python mimosa_czi2ometiff_converter.py \
+  -y metadata.yml \
+  -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
+  -df 3 \
+  -channels 0
+"""
  
 
