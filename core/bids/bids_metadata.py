@@ -270,6 +270,10 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
     with open(yaml_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
+    print("=" * 60)
+    print("MIMOSA - reading slices from metadata.yml")
+    print("=" * 60)
+
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = Path(entry["path"])
         subject = entry.get("subject", "Unknown")
@@ -311,9 +315,7 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
                     updated_files.append(file_entry)
 
-                print(
-                    f"{subject} → {len(updated_files)} files kept from YAML"
-                )
+                print(f"  sub-{str(subject):<8} {len(updated_files):4d} files  (from YAML)")
 
             else:
                 # files: null or files: [] => scan all .czi files in the subject path.
@@ -326,9 +328,7 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
 
                     updated_files.append(file_entry)
 
-                print(
-                    f"{subject} → {len(updated_files)} files added by scan"
-                )
+                print(f"  sub-{str(subject):<8} {len(updated_files):4d} files  (scanned)")
 
             sample["files"] = updated_files
 

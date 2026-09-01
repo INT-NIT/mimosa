@@ -404,11 +404,3 @@ if __name__ == "__main__":
     )
     builder.build_all_volumes()
 
-   
-"""
-python mimosa_stacking_2D_2_3D-2.py \
-  -bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
-  -res 4x \
-  -reorient x,-z,-y \
-  -original_thickness 100
-"""

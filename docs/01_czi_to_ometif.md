@@ -8,7 +8,7 @@ dataset, with its JSON sidecar.
 ## Command
 
 ```bash
-python 2D/conversion/mimosa_czi2ometiff_converter.py \
+python 2D/conversion/mimosa_czi2ometif_converter.py \
   -y metadata.yml \
   -bids_root /path/to/BIDS \
   -df 3 \
