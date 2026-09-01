@@ -55,9 +55,19 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     native_x, native_y = (float(v) * UM_TO_MM for v in native_pixel_um[:2])
     step_z = float(thickness_um) * UM_TO_MM
 
-    origin_x = -(native_width - 1) / 2 * native_x     # origine au NATIF, COMMUNE a toutes les resolutions
-    origin_y = -(native_height - 1) / 2 * native_y
-    
+    # Center on the EXPORTED (downsampled) grid when its size is known: the
+    # tissue center then lands exactly on 0 for every slice, whatever its native
+    # size (with odd sizes, a real pixel center sits on 0). All slices then share
+    # the same origin and overlay exactly, and the resolutions stay nested.
+    # Centering on the native grid instead leaves a per-slice sub-pixel offset,
+    # because floor(native/factor) drops a variable "native mod factor" remainder.
+    if ds_width is not None and ds_height is not None:
+        origin_x = -(float(ds_width) - 1) / 2 * step_x
+        origin_y = -(float(ds_height) - 1) / 2 * step_y
+    else:
+        origin_x = -(native_width - 1) / 2 * native_x   # fallback: native centering
+        origin_y = -(native_height - 1) / 2 * native_y
+
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
     return np.array([[step_x, 0.0, 0.0, origin_x],
