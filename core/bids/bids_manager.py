@@ -68,6 +68,54 @@ class BIDSSession:
             "bids_root_path": self.bids_root_path,
         }
 
+def build_session_order_from_acq_time(cfg: dict, bids_root_path: str) -> dict:
+    """Number sessions by real acquisition date.
+
+    Opens each CZI listed in cfg, reads its acquisition time, groups files by
+    day per subject, sorts the days ascending and assigns ses-01, ses-02, ...
+    (earliest day = ses-01). All CZIs scanned on the same day share the session.
+    The result is stored in SESSION_ORDER_BY_ROOT and used by BIDSSession.
+    """
+    from core.bids.czi_reader import MimosaReader  # local import avoids a cycle
+
+    bids_root_path = os.path.abspath(bids_root_path)
+    dates_by_sub = {}
+    for entry in cfg.get("samples", {}).get("entries", []):
+        subject_path = entry.get("path")
+        for sample in entry.get("samples", []):
+            if not isinstance(sample, dict):
+                continue
+            for file_entry in (sample.get("files") or []):
+                if not isinstance(file_entry, dict):
+                    continue
+                filename = file_entry.get("filename")
+                if not filename or not subject_path:
+                    continue
+                full_path = os.path.join(subject_path, filename)
+                if not os.path.exists(full_path):
+                    continue
+                try:
+                    with MimosaReader(full_path) as reader:
+                        summary = reader.get_summary()
+                except Exception as exc:
+                    print(f"WARNING: cannot read acq_time from {filename}: {exc}")
+                    continue
+                sub = summary.get("sub")
+                acq_time = summary.get("acq_time")
+                if not sub or not acq_time:
+                    continue
+                date_key = str(acq_time).split("T")[0]
+                dates_by_sub.setdefault(sub, set()).add(date_key)
+
+    session_order = {
+        sub: {date_key: f"{idx + 1:02d}"
+              for idx, date_key in enumerate(sorted(dates))}
+        for sub, dates in dates_by_sub.items()
+    }
+    SESSION_ORDER_BY_ROOT[bids_root_path] = session_order
+    return session_order
+
+
 def initialize_dataset(
     bids_root_path: str,
     yaml_path: str = "metadata.yml",
@@ -80,43 +128,12 @@ def initialize_dataset(
         raise FileNotFoundError(f"YAML not found: {yaml_path}")
 
     cfg = bmeta.load_metadata_config(yaml_path)
-    session_order = {}
 
-    for entry in cfg.get("samples", {}).get("entries", []):
-        subject = entry.get("subject")
-        if not subject:
-            continue
-
-        date_to_min_slice = {}
-
-        for sample in entry.get("samples", []):
-            if not isinstance(sample, dict):
-                continue
-            for file_entry in (sample.get("files") or []):
-                if not isinstance(file_entry, dict):
-                    continue
-                filename = file_entry.get("filename")
-                slices = file_entry.get("slices", [])
-                if not filename or not slices:
-                    continue
-
-                date_part = filename.split("__")[0]
-                parts = date_part.split("_")
-
-                if len(parts) != 3:
-                    continue
-
-                year, month, day = parts
-                date_key = f"{year}-{month}-{day}"
-
-                date_to_min_slice.setdefault(date_key, None)    
-        sorted_dates = sorted(date_to_min_slice.keys())
-        session_order[subject] = {
-            date_key: f"{idx + 1:02d}"
-            for idx, date_key in enumerate(sorted_dates)
-        }
-
-    SESSION_ORDER_BY_ROOT[bids_root_path] = session_order
+    # The session order (which acquisition date becomes ses-01, ses-02, ...) is
+    # built from the real acquisition time read in each CZI, not from the file
+    # name. The converters call build_session_order_from_acq_time() once the
+    # file list is known (auto-scan resolved). Start empty here.
+    SESSION_ORDER_BY_ROOT.setdefault(bids_root_path, {})
 
     bmeta.create_dataset_description(bids_root_path, cfg)
     bmeta.create_participants_files(bids_root_path, cfg)

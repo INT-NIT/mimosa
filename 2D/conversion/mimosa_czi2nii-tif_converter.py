@@ -98,6 +98,8 @@ def main():
 
     MimosaReader.load_correspondence_from_yaml(cfg)
 
+    # Number sessions by real acquisition date (earliest day = ses-01).
+    bm.build_session_order_from_acq_time(cfg, bids_root_path)
     session = bm.BIDSSession(bids_root_path)
 
     files_to_process = []
@@ -187,7 +189,6 @@ def main():
                     "sample_id": slide_id,
                     "participant_id": participant_id,
                     "sample_type": sample_type,
-                    "anatomical_region": derived_from,
                     "source_filename": filename,
                 })
 

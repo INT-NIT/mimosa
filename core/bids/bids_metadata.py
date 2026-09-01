@@ -131,7 +131,7 @@ def write_subject_sessions_tsv(bids_root: str, subject: str, ses_rows: list[dict
 def write_samples_tsv(bids_root: Path, samples_rows: list) -> None:
     path = Path(bids_root) / "samples.tsv"
     cols = ["sample_id", "participant_id", "sample_type",
-            "anatomical_region", "source_filename"]
+            "source_filename"]
 
     # 1) re-read the rows already present (subjects from previous runs)
     existing = {}

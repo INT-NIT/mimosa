@@ -571,14 +571,6 @@ if __name__ == "__main__":
     main()
  
  
-"""
-Example:
- 
-python mimosa_czi2ometiff_converter.py \
-  -y metadata.yml \
-  -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
-  -df 3 \
-  -channels 0
-"""
+
  
 
