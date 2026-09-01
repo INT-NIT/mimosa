@@ -230,6 +230,18 @@ def main():
 
     bmeta.write_samples_tsv(bids_root_path, samples_rows)
 
+    # If a slice-reference table already exists, refresh it so it reflects the
+    # slices just converted (useful after a -only_slices run, which adds slices).
+    ref_tsv = os.path.join(bids_root_path, "derivatives", "2D",
+                           "mimosa_slice_references.tsv")
+    if os.path.exists(ref_tsv):
+        try:
+            from utils.mimosa_slice_references_tsv import build_slice_references_tsv
+            build_slice_references_tsv(bids_root_path, ref_tsv)
+            print(f"Slice reference table updated: {ref_tsv}")
+        except Exception as exc:
+            print(f"WARNING: could not update slice reference table: {exc}")
+
     print("\n[SUCCESS] Conversion done.")
 
 if __name__ == "__main__":
