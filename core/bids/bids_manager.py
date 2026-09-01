@@ -140,7 +140,8 @@ def initialize_dataset(
     bmeta.create_dataset_description(bids_root_path, cfg)
     bmeta.create_participants_files(bids_root_path, cfg)
 
-    print(f"Dataset initialized in {bids_root_path}")
+    print("=" * 60)
+    print(f"BIDS dataset initialized: {bids_root_path}")
     return bids_root_path
 
 
