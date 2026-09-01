@@ -1,17 +1,18 @@
 import os, sys
-# Make the repo root (the folder that contains core/) importable, whatever the
-# depth of this script, so "from core.bids import ..." works.
-_ROOT = os.path.abspath(os.path.dirname(__file__))
-while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, "core")):
-    _ROOT = os.path.dirname(_ROOT)
-sys.path.insert(0, _ROOT)
-
 import numpy as np
 import nibabel as nb
 from pathlib import Path
 import json
 from core.bids import bids_metadata as bmeta
 from core.bids import bids_manager as bm
+
+
+# Make the repo root (the folder that contains core/) importable, whatever the
+# depth of this script, so "from core.bids import ..." works.
+_ROOT = os.path.abspath(os.path.dirname(__file__))
+while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, "core")):
+    _ROOT = os.path.dirname(_ROOT)
+sys.path.insert(0, _ROOT)
 
 
 
