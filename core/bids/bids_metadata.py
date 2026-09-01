@@ -91,7 +91,9 @@ def create_participants_files(bids_root: Path, cfg: dict) -> None:
 def create_derivatives_descriptions(bids_root: str, cfg: dict) -> None:
     derivs = cfg.get("derivatives", {})
     if not derivs:
-        raise ValueError("Key 'derivatives' missing in YAML")
+        print("WARNING: no 'derivatives' block in YAML, "
+              "skipping derivative dataset_description.json")
+        return
 
     # Créer seulement 2D ici — 3D sera créé par le script stacking
     for folder in ["2D"]:

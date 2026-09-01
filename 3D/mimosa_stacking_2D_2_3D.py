@@ -30,10 +30,6 @@ class VolumeBuilder3D:
 
         self.stacking_root.mkdir(parents=True, exist_ok=True)
 
-        d3_desc = self.bids_root / "derivatives" / "3D" / "dataset_description.json"
-        if not d3_desc.exists():
-            with open(d3_desc, "w") as f:
-                json.dump({"Name": "3D stacking", "BIDSVersion": "1.8.0", "PipelineDescription": {"Name": "3D-stacking"}}, f, indent=2)
     def build_volume_output_path(
         self,
         subject_dir: Path,
