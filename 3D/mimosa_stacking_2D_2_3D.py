@@ -6,6 +6,13 @@ while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, 
     _ROOT = os.path.dirname(_ROOT)
 sys.path.insert(0, _ROOT)
 
+import numpy as np
+import nibabel as nb
+from pathlib import Path
+import json
+from core.bids import bids_metadata as bmeta
+from core.bids import bids_manager as bm
+
 
 
 class VolumeBuilder3D:
