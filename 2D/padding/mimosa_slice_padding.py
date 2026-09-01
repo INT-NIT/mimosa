@@ -216,10 +216,10 @@ class SlicePreprocessor:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="2D slice preprocessing")
+    parser = argparse.ArgumentParser(description="2D slice padding")
     parser.add_argument("-bids_root", required=True, help="Path to BIDS root folder")
     parser.add_argument("-padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
-    parser.add_argument("-res",required=True,help="Resolution label to preprocess, for example 4x")
+    parser.add_argument("-res",required=True,help="Resolution label to pad, for example 8x")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
     args = parser.parse_args()
 
@@ -231,15 +231,25 @@ if __name__ == "__main__":
     )
     
     downsampled_niftis = [p for p in proc.downsampled_root.rglob("*.nii.gz") if f"_res-{args.res}_" in p.name]
-    preproc_niftis     = [p for p in proc.preproc_root.rglob("*.nii.gz")     if f"_res-{args.res}_" in p.name]
+    padded_niftis      = [p for p in proc.preproc_root.rglob("*.nii.gz")     if f"_res-{args.res}_" in p.name]
 
-    print(f"Downsampled: {len(downsampled_niftis)} files")
-    print(f"Preproc:     {len(preproc_niftis)} files")
+    print("=" * 60)
+    print("MIMOSA - 2D slice padding")
+    print(f"  BIDS root                : {args.bids_root}")
+    print(f"  Resolution               : res-{args.res}")
+    print(f"  Downsampled slices found : {len(downsampled_niftis)}")
+    print(f"  Already padded           : {len(padded_niftis)}")
+    print("=" * 60)
 
-    if len(preproc_niftis) >= len(downsampled_niftis):
-        print("Preproc is complete — skipping SlicePreprocessor")
+    if not downsampled_niftis:
+        print(f"No downsampled slices found for res-{args.res} - nothing to pad.")
+        print("Run the NIfTI conversion first with a -df matching this resolution "
+              "(e.g. -df 8 produces res-8x).")
+    elif len(padded_niftis) >= len(downsampled_niftis):
+        print(f"All {len(downsampled_niftis)} slices are already padded - nothing to do.")
     else:
-        print("Preproc incomplete or missing — running SlicePreprocessor...")
+        remaining = len(downsampled_niftis) - len(padded_niftis)
+        print(f"Padding {remaining} remaining slice(s)...\n")
 
         for subject_dir in bm.iter_subject_dirs(proc.downsampled_root):
             subject_niftis = [
@@ -277,9 +287,4 @@ if __name__ == "__main__":
 
                 print(f"  IN : {nii_path.name}")
                 print(f"  OUT: {out.name}")
-"""
-python mimosa_slice_preprocessor.py \
-  -bids_root /envau/work/nit/users/boudlal.h/BIDS-una \
-  -res 4x \
-  -padding_delta 100
-"""
+

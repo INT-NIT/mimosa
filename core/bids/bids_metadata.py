@@ -289,7 +289,6 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
             ]
 
         for sample in entry.get("samples", []):
-            region = sample.get("derived_from", "n/a")
             existing_files = sample.get("files") or []
 
             updated_files = []
@@ -313,8 +312,7 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
                     updated_files.append(file_entry)
 
                 print(
-                    f"{subject} / {region} → "
-                    f"{len(updated_files)} files kept from YAML"
+                    f"{subject} → {len(updated_files)} files kept from YAML"
                 )
 
             else:
@@ -329,8 +327,7 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
                     updated_files.append(file_entry)
 
                 print(
-                    f"{subject} / {region} → "
-                    f"{len(updated_files)} files added by scan"
+                    f"{subject} → {len(updated_files)} files added by scan"
                 )
 
             sample["files"] = updated_files

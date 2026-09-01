@@ -144,6 +144,27 @@ def initialize_dataset(
     return bids_root_path
 
 
+def _copy_with_progress(src: str, dst: str, chunk_size: int = 8 * 1024 * 1024) -> None:
+    """Copy a file showing a live percentage (CZI files are large)."""
+    total = os.path.getsize(src)
+    total_mb = total / (1024 * 1024)
+    copied = 0
+    name = os.path.basename(dst)
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        while True:
+            buf = fin.read(chunk_size)
+            if not buf:
+                break
+            fout.write(buf)
+            copied += len(buf)
+            pct = (copied / total * 100) if total else 100.0
+            print(f"\r  Copying {name}: {pct:5.1f}%  "
+                  f"({copied / (1024 * 1024):.0f}/{total_mb:.0f} MB)",
+                  end="", flush=True)
+    print()  # end the progress line with a newline
+    shutil.copystat(src, dst)  # keep timestamps/permissions, like copy2
+
+
 def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: str,copy_real: bool = False) -> None:
     """creating files CZI with same name of the original ones , real copy for the first czi file """
     sourcedata_dir = os.path.join(bids_root_path, "sourcedata", f"sub-{subject}")
@@ -155,8 +176,9 @@ def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: st
         return
 
     if copy_real:
-        shutil.copy2(czi_file_path, dest_path)          
-        print(f"First CZI Copied: {os.path.basename(dest_path)}")
+        print(f"Copying first CZI for sub-{subject} ...")
+        _copy_with_progress(czi_file_path, dest_path)
+        print(f"First CZI copied: {os.path.basename(dest_path)}")
     else:
         with open(dest_path, "w"):                      
             pass
