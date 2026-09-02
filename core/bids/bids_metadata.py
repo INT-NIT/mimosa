@@ -521,51 +521,6 @@ def parse_reorientation_mode(mode: str) -> tuple[list[int], list[int]]:
 
         return transpose_axes, flip_axes
 
-def build_slice_sform(
-    pixel_size: list[float],
-    native_pixel_size: list[float],
-    native_width: int,
-    native_height: int,
-    slice_position: int,
-    nb_slices: int,
-    thickness: float,
-    block_value: str = "decimate",
-    reorient: str = "none",
-    ds_width: int | None = None,
-    ds_height: int | None = None,
-) -> list[list[float]]:
-    """Build the SForm of one exported 2D slice, as a nested list.
-
-    The base geometry (block-centered origin, exact resolution tiling) is
-    computed by mimosa_downsample.slice_sform. If ``reorient`` is not the
-    identity, the sform axes and origin are then permuted and flipped so the
-    slice already sits in the requested anatomical frame — the same transform
-    the 3D stacking applies to the volume, so a slice viewed alone matches the
-    reoriented volume.
-
-    block_value is accepted for call-site clarity but does not move the voxel.
-    """
-    if block_value not in ("decimate", "mean"):
-        raise ValueError(f"block_value must be 'decimate' or 'mean', got {block_value!r}")
-
-    sform = slice_sform(
-        pixel_size_um=pixel_size,
-        native_pixel_um=native_pixel_size,
-        native_width=native_width,
-        native_height=native_height,
-        slice_position=slice_position,
-        nb_slices=nb_slices,
-        thickness_um=thickness,
-        ds_width=ds_width,
-        ds_height=ds_height,
-    )
-
-    if not is_identity_reorientation(reorient):
-        sform = apply_reorientation_to_sform(sform, reorient)
-
-    return sform.tolist()
-
-
 def apply_reorientation_to_sform(sform: np.ndarray, reorient: str) -> np.ndarray:
     """Permute and flip the sform axes and origin according to ``reorient``.
 
@@ -615,6 +570,53 @@ def build_centered_affine(
             affine[ax, 3]  = -affine[ax, 3] 
 
     return affine.tolist()
+
+
+def build_slice_sform(
+    pixel_size: list[float],
+    native_pixel_size: list[float],
+    native_width: int,
+    native_height: int,
+    slice_position: int,
+    nb_slices: int,
+    thickness: float,
+    block_value: str = "decimate",
+    reorient: str = "none",
+    ds_width: int | None = None,
+    ds_height: int | None = None,
+) -> list[list[float]]:
+    """Build the SForm of one exported 2D slice, as a nested list.
+
+    The base geometry (block-centered origin, exact resolution tiling) is
+    computed by mimosa_downsample.slice_sform. If ``reorient`` is not the
+    identity, the sform axes and origin are then permuted and flipped so the
+    slice already sits in the requested anatomical frame — the same transform
+    the 3D stacking applies to the volume, so a slice viewed alone matches the
+    reoriented volume.
+
+    block_value is accepted for call-site clarity but does not move the voxel.
+    """
+    if block_value not in ("decimate", "mean"):
+        raise ValueError(f"block_value must be 'decimate' or 'mean', got {block_value!r}")
+
+    sform = slice_sform(
+        pixel_size_um=pixel_size,
+        native_pixel_um=native_pixel_size,
+        native_width=native_width,
+        native_height=native_height,
+        slice_position=slice_position,
+        nb_slices=nb_slices,
+        thickness_um=thickness,
+        ds_width=ds_width,
+        ds_height=ds_height,
+    )
+
+    if not is_identity_reorientation(reorient):
+        sform = apply_reorientation_to_sform(sform, reorient)
+
+    return sform.tolist()
+
+
 def add_sform_to_json_metadata(
     meta: dict,
     slice_position_map: dict[int, int],
