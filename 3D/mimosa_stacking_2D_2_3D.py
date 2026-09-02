@@ -292,9 +292,15 @@ class VolumeBuilder3D:
             )
 
         # The padded slices already define the correct spatial reference.
-        # We take the affine before reorienting the volume data.
-        reference_position = int(sorted_slices[0][0])
-        reference_padded_slice = sorted_slices[0][2]
+        # Reference = the available padded slice with the SMALLEST chunk
+        # (SliceIndex), not the smallest SlicePosition. Thanks to the centered
+        # downsampled-grid origin, every padded slice shares the same in-plane
+        # origin, so any slice gives the same x/y for the volume. We still take
+        # reference_position as the SlicePosition OF THAT reference slice, so the
+        # z-shift below places the volume correctly along z.
+        reference_slice = min(sorted_slices, key=lambda item: item[1])
+        reference_position = int(reference_slice[0])
+        reference_padded_slice = reference_slice[2]
 
         reference_affine = VolumeBuilder3D.build_affine_from_padded_slice(
             reference_padded_slice

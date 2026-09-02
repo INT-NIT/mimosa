@@ -144,8 +144,8 @@ def build_scene_positions_metadata(scenes, total_bbox, downsampling_factor: int)
         x, y, w, h = rect_to_xywh(rect)
         output_x = int(round((x - total_x) / downsampling_factor))
         output_y = int(round((y - total_y) / downsampling_factor))
-        output_w = int(math.ceil(w / downsampling_factor))
-        output_h = int(math.ceil(h / downsampling_factor))
+        output_w = int(w // downsampling_factor)   # floor, like the CZI zoom
+        output_h = int(h // downsampling_factor)
         scene_positions.append(
             {
                 "SceneIndex": int(scene_idx),
@@ -387,8 +387,9 @@ def convert_czi_total_bbox_2_ome_tiff(
         nb_patch_w = int(math.ceil(bbox_w / patch_width_full))
         nb_patch_h = int(math.ceil(bbox_h / patch_height_full))
  
-        mosaic_image_width = int(math.ceil(bbox_w / downsampling_factor))
-        mosaic_image_height = int(math.ceil(bbox_h / downsampling_factor))
+        # floor, to match what the CZI zoom actually returns (ZEN truncates).
+        mosaic_image_width = int(bbox_w // downsampling_factor)
+        mosaic_image_height = int(bbox_h // downsampling_factor)
         print("Mosaic output size:", (mosaic_image_width, mosaic_image_height))
  
         patch_indices = [(x, y) for x in range(nb_patch_w) for y in range(nb_patch_h)]
@@ -606,6 +607,14 @@ if __name__ == "__main__":
     main()
  
  
-
+"""
+Example:
+ 
+python mimosa_czi2ometif_converter.py \
+  -y metadata.yml \
+  -bids_root /envau/work/nit/users/boudlal.h/BIDS-test \
+  -df 3 \
+  -channels 0
+"""
  
 
