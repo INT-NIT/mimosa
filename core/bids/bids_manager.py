@@ -178,7 +178,7 @@ def create_sourcedata_links(czi_file_path: str, subject: str, bids_root_path: st
 
     if copy_real:
         print(f"Copying first CZI for sub-{subject} ...")
-        _copy_with_progress(czi_file_path, dest_path)
+        #_copy_with_progress(czi_file_path, dest_path)
         print(f"First CZI copied: {os.path.basename(dest_path)}")
     else:
         with open(dest_path, "w"):                      
