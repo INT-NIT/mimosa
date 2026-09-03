@@ -5,7 +5,7 @@ _ROOT = os.path.abspath(os.path.dirname(__file__))
 while _ROOT != os.path.dirname(_ROOT) and not os.path.isdir(os.path.join(_ROOT, "core")):
     _ROOT = os.path.dirname(_ROOT)
 sys.path.insert(0, _ROOT)
-
+from nibabel.processing import resample_from_to
 import numpy as np
 import nibabel as nb
 from pathlib import Path
@@ -56,32 +56,125 @@ class SlicePreprocessor:
         return int(data_2d.shape[0]), int(data_2d.shape[1])
     
     def compute_target_shape(self, nii_paths, padding_delta, subject_name):
-        max_width = 0
-        max_height = 0
+
+        max_native_width = 0
+        max_native_height = 0
+
+        max_ds_width = 0
+        max_ds_height = 0
+
+        factor = None
 
         for nii_path in nii_paths:
-            width, height = self.get_slice_size_from_nifti(nii_path)
 
-            if width > max_width:
-                max_width = width
-            if height > max_height:
-                max_height = height
+            # Taille réelle du NIfTI downsampled
+            ds_width, ds_height = self.get_slice_size_from_nifti(nii_path)
 
-        self.subject_max_sizes[subject_name] = (max_width, max_height)
+            max_ds_width = max(max_ds_width, ds_width)
+            max_ds_height = max(max_ds_height, ds_height)
 
-        target_width = max_width + padding_delta
-        target_height = max_height + padding_delta
-        # Force an ODD target. Slices are exported odd, so target - width is even
-        # -> symmetric padding is exact (no rounding). Odd + centered keeps a
-        # pixel center on 0 for every slice and every resolution, so raw, padded
-        # and volume align, and the resolutions align with each other too.
+            # Métadonnées natives
+            meta, _ = bmeta.load_metadata(nii_path)
+
+            native_width = int(meta["NativeWidthPixels"])
+            native_height = int(meta["NativeHeightPixels"])
+
+            current_factor = float(meta["DownsamplingFactor"])
+
+            max_native_width = max(
+                max_native_width,
+                native_width,
+            )
+
+            max_native_height = max(
+                max_native_height,
+                native_height,
+            )
+
+            if factor is None:
+                factor = current_factor
+
+            elif not np.isclose(factor, current_factor):
+                raise ValueError(
+                    f"Different DownsamplingFactor values for {subject_name}: "
+                    f"{factor} and {current_factor}"
+                )
+
+
+        if factor is None:
+            raise ValueError(
+                f"No slices found for {subject_name}"
+            )
+
+
+        # padding_delta reste exprimé en pixels DS.
+        # On le convertit en pixels natifs.
+        native_target_width = (
+            max_native_width
+            + padding_delta * factor
+        )
+
+        native_target_height = (
+            max_native_height
+            + padding_delta * factor
+        )
+
+
+        # IMPORTANT :
+        # on mémorise le canvas NATIF commun
+        self.subject_native_target[subject_name] = (
+            native_target_width,
+            native_target_height,
+        )
+
+
+        # Conversion du canvas natif vers la grille DS
+        target_width = int(
+            np.ceil(native_target_width / factor)
+        )
+
+        target_height = int(
+            np.ceil(native_target_height / factor)
+        )
+
+
+        # Sécurité
+        target_width = max(
+            target_width,
+            max_ds_width,
+        )
+
+        target_height = max(
+            target_height,
+            max_ds_height,
+        )
+
+
+        # Garder une taille impaire
         if target_width % 2 == 0:
             target_width += 1
+
         if target_height % 2 == 0:
             target_height += 1
+
+
+        self.subject_max_sizes[subject_name] = (
+            max_ds_width,
+            max_ds_height,
+        )
+
+
+        print(
+            f"{subject_name}: "
+            f"max native=({max_native_width}, {max_native_height}), "
+            f"factor={factor}, "
+            f"native target=({native_target_width}, {native_target_height}), "
+            f"DS target=({target_width}, {target_height})"
+        )
+
+
         return target_width, target_height
     
-   
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
         """
@@ -144,29 +237,11 @@ class SlicePreprocessor:
 
         target_width, target_height = target_shape
 
-        shift_x = target_width - current_width
-        shift_y = target_height - current_height
-
-        if shift_x < 0 or shift_y < 0:
+        if target_width < current_width or target_height < current_height:
             raise ValueError(
                 f"Target shape {target_shape} smaller than the image "
                 f"{data_2d.shape} for {nii_path.name}"
             )
-
-        pad_x_before = round(shift_x / 2)
-        pad_y_before = round(shift_y / 2)
-        pad_x_after = shift_x - pad_x_before
-        pad_y_after = shift_y - pad_y_before
-        padded_data_2d = np.pad(
-            data_2d,
-            (
-                (pad_x_before, pad_x_after),
-                (pad_y_before, pad_y_after),
-            ),
-            mode="constant",
-            constant_values=0,
-        )
-        padded_data = np.expand_dims(padded_data_2d, axis=2)
 
         meta, _ = bmeta.load_metadata(nii_path)
 
@@ -175,16 +250,126 @@ class SlicePreprocessor:
 
         nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
 
-        # Padding keeps the original pixels at their exact world position. The raw
-        # slice is centered on its (even) downsampled grid and the target is even,
-        # so the symmetric padding is exact (no rounding). Result: the raw slice,
-        # its padded version and the 3D volume all overlay exactly, and every
-        # padded slice ends up with the same in-plane origin.
+
+        # ------------------------------------------------------------
+        # 1. Informations de la grille native de CETTE coupe
+        # ------------------------------------------------------------
+
+        native_width = int(meta["NativeWidthPixels"])
+        native_height = int(meta["NativeHeightPixels"])
+
+        native_pixel_x = float(meta["NativePixelSize"][0]) / 1000.0
+        native_pixel_y = float(meta["NativePixelSize"][1]) / 1000.0
+
+
+        # ------------------------------------------------------------
+        # 2. Taille native commune calculée dans compute_target_shape()
+        # ------------------------------------------------------------
+
+        native_target_width, native_target_height = (
+            self.subject_native_target[subject_name]
+        )
+
+
+        # ------------------------------------------------------------
+        # 3. Origine native actuelle de la coupe
+        # ------------------------------------------------------------
+
+        native_origin_x = (
+            -(native_width - 1) / 2.0 * native_pixel_x
+        )
+
+        native_origin_y = (
+            -(native_height - 1) / 2.0 * native_pixel_y
+        )
+
+
+        # ------------------------------------------------------------
+        # 4. Origine du canvas NATIF commun
+        # ------------------------------------------------------------
+
+        target_origin_x = (
+            -(native_target_width - 1) / 2.0 * native_pixel_x
+        )
+
+        target_origin_y = (
+            -(native_target_height - 1) / 2.0 * native_pixel_y
+        )
+
+
+        # ------------------------------------------------------------
+        # 5. Différence physique à corriger
+        # ------------------------------------------------------------
+
+        delta_x_mm = target_origin_x - native_origin_x
+        delta_y_mm = target_origin_y - native_origin_y
+
+
+        # Taille physique d'un pixel DS
+        step_x_mm = np.linalg.norm(nonpadded_sform[:3, 0])
+        step_y_mm = np.linalg.norm(nonpadded_sform[:3, 1])
+
+
+        # Pour voir combien cela représente en pixels DS.
+        # Ces valeurs peuvent être fractionnaires :
+        # 0.125 pixel, 0.27 pixel, etc.
+        shift_x_vox = delta_x_mm / step_x_mm
+        shift_y_vox = delta_y_mm / step_y_mm
+
+        print(
+            f"  Native-grid correction: "
+            f"dx={delta_x_mm:.6f} mm ({shift_x_vox:.4f} DS vox), "
+            f"dy={delta_y_mm:.6f} mm ({shift_y_vox:.4f} DS vox)"
+        )
+
+
+        # ------------------------------------------------------------
+        # 6. Construire la SForm commune du padded
+        # ------------------------------------------------------------
+
         preproc_sform = nonpadded_sform.copy()
+
         preproc_sform[:3, 3] = (
             nonpadded_sform[:3, 3]
-            - pad_x_before * nonpadded_sform[:3, 0]
-            - pad_y_before * nonpadded_sform[:3, 1]
+            + shift_x_vox * nonpadded_sform[:3, 0]
+            + shift_y_vox * nonpadded_sform[:3, 1]
+        )
+
+
+        # ------------------------------------------------------------
+        # 7. Resampling de l'image DS vers cette nouvelle grille
+        # ------------------------------------------------------------
+
+        source_data = np.expand_dims(
+            data_2d.astype(np.float32),
+            axis=2,
+        )
+
+        source_img = nb.Nifti1Image(
+            source_data,
+            nonpadded_sform,
+        )
+
+        source_img.set_sform(nonpadded_sform, code=1)
+        source_img.set_qform(nonpadded_sform, code=1)
+
+
+        target = (
+            (target_width, target_height, 1),
+            preproc_sform,
+        )
+
+        resampled_img = resample_from_to(
+            source_img,
+            target,
+            order=1,
+            mode="constant",
+            cval=0.0,
+        )
+
+        padded_data = np.asarray(
+            resampled_img.dataobj,
+            dtype=np.float32,
         )
 
         padded_data = padded_data.astype(np.float32)
