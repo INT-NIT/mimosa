@@ -65,7 +65,7 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     native_origin_x = -(native_width - 1) / 2 * native_x
     native_origin_y = -(native_height - 1) / 2 * native_y
 
-    """if ds_width is not None and ds_height is not None:
+    if ds_width is not None and ds_height is not None:
 
         # 2. Origin required by the ACTUAL exported downsampled grid
         # so that its physical centre stays at the same reference centre.
@@ -80,9 +80,9 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
         origin_x = native_origin_x + correction_x
         origin_y = native_origin_y + correction_y
 
-    else:"""
-    origin_x = native_origin_x
-    origin_y = native_origin_y
+    else:
+        origin_x = native_origin_x
+        origin_y = native_origin_y
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
     return np.array([[step_x, 0.0, 0.0, origin_x],
