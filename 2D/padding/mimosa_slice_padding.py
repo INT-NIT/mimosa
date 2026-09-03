@@ -56,85 +56,33 @@ class SlicePreprocessor:
         return int(data_2d.shape[0]), int(data_2d.shape[1])
     
     def compute_target_shape(self, nii_paths, padding_delta, subject_name):
-        max_native_width = 0
-        max_native_height = 0
-
-        max_ds_width = 0
-        max_ds_height = 0
-
-        factor = None
+        max_width = 0
+        max_height = 0
 
         for nii_path in nii_paths:
+            width, height = self.get_slice_size_from_nifti(nii_path)
 
-            # Taille REELLE du NIfTI downsampled
-            ds_width, ds_height = self.get_slice_size_from_nifti(nii_path)
+            if width > max_width:
+                max_width = width
+            if height > max_height:
+                max_height = height
 
-            max_ds_width = max(max_ds_width, ds_width)
-            max_ds_height = max(max_ds_height, ds_height)
+        self.subject_max_sizes[subject_name] = (max_width, max_height)
 
-            # Métadonnées du CZI natif
-            meta, _ = bmeta.load_metadata(nii_path)
-
-            native_width = int(meta["NativeWidthPixels"])
-            native_height = int(meta["NativeHeightPixels"])
-            current_factor = float(meta["DownsamplingFactor"])
-
-            max_native_width = max(max_native_width, native_width)
-            max_native_height = max(max_native_height, native_height)
-
-            if factor is None:
-                factor = current_factor
-            elif not np.isclose(factor, current_factor):
-                raise ValueError(
-                    f"Different DownsamplingFactor values for {subject_name}: "
-                    f"{factor} and {current_factor}"
-                )
-
-        if factor is None:
-            raise ValueError(f"No slices found for {subject_name}")
-
-        # On garde padding_delta dans la même unité qu'avant :
-        # padding_delta = nombre de pixels DS.
-        #
-        # On le convertit d'abord en pixels natifs pour définir
-        # le canvas NATIF commun.
-        native_target_width = (
-            max_native_width + padding_delta * factor
-        )
-
-        native_target_height = (
-            max_native_height + padding_delta * factor
-        )
-
-        # Taille native commune utilisée comme référence
-        self.subject_native_target[subject_name] = (
-            native_target_width,
-            native_target_height,
-        )
-
-        # Maintenant on convertit ce canvas natif en grille DS
-        target_width = int(np.ceil(native_target_width / factor))
-        target_height = int(np.ceil(native_target_height / factor))
-
-        # Sécurité :
-        # la target ne doit jamais être plus petite qu'une vraie image DS
-        target_width = max(target_width, max_ds_width)
-        target_height = max(target_height, max_ds_height)
-
-        # Tes images DS sont impaires.
-        # On garde aussi une target impaire pour avoir un padding symétrique.
+        target_width = max_width + padding_delta
+        target_height = max_height + padding_delta
+        # Force an ODD target. Slices are exported odd, so target - width is even
+        # -> symmetric padding is exact (no rounding). Odd + centered keeps a
+        # pixel center on 0 for every slice and every resolution, so raw, padded
+        # and volume align, and the resolutions align with each other too.
         if target_width % 2 == 0:
             target_width += 1
-
         if target_height % 2 == 0:
             target_height += 1
-
-        self.subject_max_sizes[subject_name] = (
-            max_ds_width,
-            max_ds_height,
-        )
-
         return target_width, target_height
+    
+   
+        
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
         """
         Update copied JSON sidecar with preprocessing metadata
