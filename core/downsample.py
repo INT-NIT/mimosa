@@ -61,12 +61,12 @@ def slice_sform(pixel_size_um, native_pixel_um, native_width, native_height,
     # the same origin and overlay exactly, and the resolutions stay nested.
     # Centering on the native grid instead leaves a per-slice sub-pixel offset,
     # because floor(native/factor) drops a variable "native mod factor" remainder.
-    if ds_width is not None and ds_height is not None:
+    """if ds_width is not None and ds_height is not None:
         origin_x = -(float(ds_width) - 1) / 2 * step_x
         origin_y = -(float(ds_height) - 1) / 2 * step_y
-    else:
-        origin_x = -(native_width - 1) / 2 * native_x   # fallback: native centering
-        origin_y = -(native_height - 1) / 2 * native_y
+    else:"""
+    origin_x = -(native_width - 1) / 2 * native_x   # fallback: native centering
+    origin_y = -(native_height - 1) / 2 * native_y
 
     origin_z = (slice_position - (nb_slices - 1) / 2) * step_z
 
