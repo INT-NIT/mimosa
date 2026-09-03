@@ -150,6 +150,7 @@ class VolumeBuilder3D:
             if new_axis in flip_axes:
                 col *= -1.0
 
+
             new_affine[:3, new_axis] = col
 
         # Start from old origin
