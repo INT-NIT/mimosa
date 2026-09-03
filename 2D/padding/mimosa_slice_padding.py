@@ -67,7 +67,7 @@ class SlicePreprocessor:
 
         for nii_path in nii_paths:
 
-            # Taille réelle du NIfTI downsampled
+            # Taille réelle de l'image downsampled
             ds_width, ds_height = self.get_slice_size_from_nifti(nii_path)
 
             max_ds_width = max(max_ds_width, ds_width)
@@ -81,15 +81,8 @@ class SlicePreprocessor:
 
             current_factor = float(meta["DownsamplingFactor"])
 
-            max_native_width = max(
-                max_native_width,
-                native_width,
-            )
-
-            max_native_height = max(
-                max_native_height,
-                native_height,
-            )
+            max_native_width = max(max_native_width, native_width)
+            max_native_height = max(max_native_height, native_height)
 
             if factor is None:
                 factor = current_factor
@@ -100,63 +93,69 @@ class SlicePreprocessor:
                     f"{factor} and {current_factor}"
                 )
 
-
         if factor is None:
-            raise ValueError(
-                f"No slices found for {subject_name}"
-            )
+            raise ValueError(f"No slices found for {subject_name}")
 
 
-        # padding_delta reste exprimé en pixels DS.
-        # On le convertit en pixels natifs.
-        native_target_width = (
-            max_native_width
-            + padding_delta * factor
+        # ------------------------------------------------------------
+        # 1. Canvas souhaité défini depuis le NATIF
+        # padding_delta reste exprimé en pixels DS
+        # ------------------------------------------------------------
+
+        requested_native_width = (
+            max_native_width + padding_delta * factor
         )
 
-        native_target_height = (
-            max_native_height
-            + padding_delta * factor
-        )
-
-
-        # IMPORTANT :
-        # on mémorise le canvas NATIF commun
-        self.subject_native_target[subject_name] = (
-            native_target_width,
-            native_target_height,
+        requested_native_height = (
+            max_native_height + padding_delta * factor
         )
 
 
-        # Conversion du canvas natif vers la grille DS
+        # ------------------------------------------------------------
+        # 2. Conversion vers une vraie grille DS entière
+        # ------------------------------------------------------------
+
         target_width = int(
-            np.ceil(native_target_width / factor)
+            np.ceil(requested_native_width / factor)
         )
 
         target_height = int(
-            np.ceil(native_target_height / factor)
+            np.ceil(requested_native_height / factor)
         )
 
 
-        # Sécurité
-        target_width = max(
-            target_width,
-            max_ds_width,
-        )
-
-        target_height = max(
-            target_height,
-            max_ds_height,
-        )
+        # Sécurité : jamais plus petit qu'une vraie image DS
+        target_width = max(target_width, max_ds_width)
+        target_height = max(target_height, max_ds_height)
 
 
-        # Garder une taille impaire
+        # On garde une target DS impaire
         if target_width % 2 == 0:
             target_width += 1
 
         if target_height % 2 == 0:
             target_height += 1
 
+
+        # ------------------------------------------------------------
+        # 3. Canvas NATIF exactement compatible avec cette grille DS
+        #
+        # N pixels -> N-1 intervalles entre centres de pixels
+        # ------------------------------------------------------------
+
+        native_target_width = (
+            (target_width - 1) * factor + 1
+        )
+
+        native_target_height = (
+            (target_height - 1) * factor + 1
+        )
+
+
+        self.subject_native_target[subject_name] = (
+            native_target_width,
+            native_target_height,
+        )
 
         self.subject_max_sizes[subject_name] = (
             max_ds_width,
@@ -172,9 +171,7 @@ class SlicePreprocessor:
             f"DS target=({target_width}, {target_height})"
         )
 
-
         return target_width, target_height
-    
         
     def update_output_json(self, output_nii_path: Path, target_shape: tuple[int, int], subject_name: str) -> None:
         """
