@@ -103,7 +103,7 @@ formats:
 OME-TIF per slide, a global overview image that gives an idea of the whole
 scanned `.czi` slide, with its JSON sidecar (for microscopy viewers).
 
-[**PART 2: CZI → NIfTI / TIF**](docs/02_czi_to_nifti.md) — extracts every scene
+[**PART 2: CZI → NIfTI / TIF**](docs/02_czi_to_nifti-tif.md) — extracts every scene
 from each slide as an individual, downsampled NIfTI and/or TIF image (with the
 correct physical depth in the brain), so each scene can be worked on separately.
 This is the output used by the rest of the pipeline.
