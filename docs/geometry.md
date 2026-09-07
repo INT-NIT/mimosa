@@ -66,17 +66,19 @@ pixel_spacing_y = exported_pixel_size_y_um / 1000
 
 ### X and Y origin
 
-The X/Y origin is based on the **native physical extent** of the CZI scene, not
-on the rounded pixel count of the downsampled image:
+The X/Y origin centres the image on its **exported (downsampled) pixel grid**,
+using the real (integer) pixel count of the downsampled image:
 
 ```text
-origin_x = - native_physical_width_mm  / 2
-origin_y = - native_physical_height_mm / 2
+origin_x = -(exported_width_px  - 1) / 2 * pixel_spacing_x
+origin_y = -(exported_height_px - 1) / 2 * pixel_spacing_y
 ```
 
-This keeps every output resolution in the same physical reference: a fine image
-has many small pixels and a coarse image fewer large pixels, while both describe
-the same physical field of view.
+Because the exported slices are forced to an **odd** size, a real pixel centre
+lands exactly on 0 for every slice and every resolution. All slices — and all
+resolutions — therefore share the same origin and overlay exactly, with no
+per-slice sub-pixel drift (which native-grid centring would leave, because
+`native / factor` is not an integer).
 
 ### Z position
 
@@ -108,14 +110,15 @@ padded_origin = origin
 
 where `x_axis_vector` and `y_axis_vector` are the first and second columns of
 the affine. The Z origin does not change (padding is only in the image plane).
-Because slices are exported odd and centered and the target is even, the
+Because slices are exported odd and the target shape is also forced odd, the
 symmetric padding is exact (no rounding), so raw, padded and volume all overlay,
 and the different resolutions align with each other.
 
 ## 3D volume affine matrix
 
 The volume matrix is built from the matrix of one padded slice used as a
-reference (the first available slice, sorted by `SlicePosition`).
+reference (the available slice with the smallest chunk, i.e. the smallest
+`SliceIndex`).
 
 **Step 1 - start from the reference slice matrix.** It already holds the X/Y
 spacing, the X/Y origin after padding, the stack spacing and the physical

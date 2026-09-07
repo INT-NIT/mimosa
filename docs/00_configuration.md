@@ -6,19 +6,14 @@ Every command reads a `metadata.yml` that declares your subjects and where their
 ```yaml
 samples:
   entries:
-    - path: /path/to/Una/czi/folder     # folder holding this subject's CZI
+    - path: /path/to/Una/czi/folder       # folder holding this subject's CZI
       subject: Una
       samples:
-        - sample_type: technical sample
-          derived_from: midbrain
+        - sample_type: tissue             # BIDS controlled term
           participant_id: sub-Una
-          files: []    
-          - filename: 2026_02_02__12_17__0122.czi
-            slices:
-            - 67
-            - 69
-            - 71
-            - 73                  # empty => scan the folder automatically
+          files:                          # leave as `files: []` to scan the folder
+            - filename: 2026_02_02__12_17__0122.czi
+              slices: [67, 69, 71, 73]    # slice (chunk) numbers of this file
 ```
 
 ## How the slices are found
