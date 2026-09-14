@@ -7,7 +7,9 @@ mkdir BIDS-EBrains_test
 python 2D/conversion/mimosa_czi2ometif_converter.py  -y  ../metadata_ebrain.yml -bids_root ../BIDS-EBrains_test/ -df 3  -channels 0,1
 ```
 
+
 output:
+```bash
 Downsampling exponent: 3 -> factor 8
 dataset_description.json created
 participants.json created
@@ -53,3 +55,4 @@ slide01 C1 ds8x |█████████████████████
 Written: /envau/work/nit/users/boudlal.h/BIDS-EBrains_test/sub-01/ses-01/micr/sub-01_ses-01_sample-slide01_stain-C1_FLUO.ome.tif
 sidecar created: /envau/work/nit/users/boudlal.h/BIDS-EBrains_test/sub-01/ses-01/micr/sub-01_ses-01_sample-slide01_stain-C1_FLUO.json
 is_ome: True | is_bigtiff: True | shape: (7888, 16702) | axes: YX
+```
