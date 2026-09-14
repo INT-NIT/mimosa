@@ -1,0 +1,86 @@
+dataset_description:
+  Name: MIMOSA Microscopy Dataset
+  BIDSVersion: 1.11.1
+  DatasetType: raw
+  Authors:
+  - Hanane Boudlal
+  - Guilhem Ibos
+  - Arnaud Le Troter
+  GeneratedBy:
+  - Name: MIMOSA
+    Description: CZI microscopy conversion pipeline
+    CodeURL: https://github.com/INT-NIT/mimosa.git
+participants_json:
+  participant_id:
+    Description: Unique participant ID
+  species:
+    Description: 'Specie of the animal , e.g: Marmouset'
+participants_tsv:
+  columns:
+  - participant_id
+  - participant_name
+  - species
+  rows:
+  - participant_id: sub-01
+    participant_name: Marmot
+    species: Marmouset
+  - participant_id: sub-02
+    participant_name: Sully
+    species: Marmouset
+raw_json:
+  MicroscopyTechnique: Fluorescence microscopy
+  SampleEnvironment: ex vivo
+  BodyPart: Brain
+samples:
+  columns:
+  - sample_id
+  - participant_id
+  - sample_type
+  - derived_from
+  - source_filename
+  entries:
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/6-Marmot-MJO16052401/originaux
+    subject: '01'
+    samples:
+    - sample_type: tissue
+      participant_id: sub-01
+      SampleStaining:
+      - DAPI
+      - EGFP
+      - DsRed
+      files:
+      - filename: MJO16052401_Cx_512_514x.czi
+      - filename: MJO16052401_Cx_36_38_40_42_44_46_48_50_52.czi
+        slices:
+        - 36
+        - 38
+        - 40
+        - 42
+        - 44
+        - 46
+        - 48
+        - 50
+        - 52
+      - filename: MJO16052401_Cx_296_298.czi
+        slices:
+        - 296
+        - 298
+  - path: /envau/work/invibe/USERS/IBOS/data/Marmoset/lames/1-renamed/5-Sully-MIO21100401/originaux
+    subject: '02'
+    samples:
+    - sample_type: tissue
+      participant_id: sub-02
+      SampleStaining:
+      - DAPI
+      - EGFP
+      files:
+      - filename: MIO21100401_Cx_104_112_120_128.czi
+        slices:
+        - 104
+        - 112
+        - 120
+        - 128
+      - filename: MIO21100401_Cx_390_394.czi
+        slices:
+        - 390
+        - 394
