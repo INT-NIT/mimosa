@@ -51,7 +51,7 @@ BIDS-EBrains_test/
 ```
 
 output:
-```bash
+```
 Downsampling exponent: 5 -> factor 32
 dataset_description.json created
 participants.json created
