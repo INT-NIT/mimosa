@@ -53,16 +53,17 @@ BIDS-EBrains_test/
 <table>
 <tr>
     <td align="center">
-    <img src="https://github.com/mimosa/docs/ebrain/sub-01_ses-01_sample-slide01_stain-C0_FLUO.ome.tif" width="320" />
+    <img src="https://raw.githubusercontent.com/INT-NIT/mimosa/refs/heads/main/docs/ebrain/sub-01_ses-01_sample-slide01_stain-C0_FLUO.ome.tif" width="320" />
     </td>
     <td align="center">
-    <img src="https://github.com/mimosa/docs/ebrain/sub-01_ses-02_sample-slide02_stain-C1_FLUO.ome.tif" width="400" />
+    <img src="https://raw.githubusercontent.com/INT-NIT/mimosa/refs/heads/main/docs/ebrain/sub-01_ses-02_sample-slide02_stain-C1_FLUO.ome.tif" width="320" />
     </td>
 </tr>
 <tr> 
     <td align="center">sub-01_ses-01_sample-slide01_stain-C0_FLUO.ome.tif </td> 
     <td align="center">sub-01_ses-02_sample-slide02_stain-C1_FLUO.ome.tif</td> 
 </tr>
+</table>table>
 
 command line output:
 ```
