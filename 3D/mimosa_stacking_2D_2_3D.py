@@ -303,31 +303,17 @@ class VolumeBuilder3D:
         reference_position = int(reference_slice[0])
         reference_padded_slice = reference_slice[2]
 
-        reference_affine = VolumeBuilder3D.build_affine_from_padded_slice(
+        # The reference padded slice matrix is ALREADY reoriented at the
+        # conversion step (apply_reorientation_to_sform). The volume simply
+        # INHERITS it, so we do NOT reorient a second time here (doing so was a
+        # double reorientation that shifted the volume by a sub-pixel vs the
+        # slices). We only re-place the origin at volume[:, :, 0] along z.
+        new_affine = VolumeBuilder3D.build_affine_from_padded_slice(
             reference_padded_slice
         )
-
-        # Ramener l'origine à la position correspondant à volume[:, :, 0].
-        reference_affine[:3, 3] -= (
-            reference_position * reference_affine[:3, 2]
-        )
-
-        # Reorient the actual 3D data array.
-        stack_of_slices, new_resolution = self.reorient_volume_3d(
-            stack_of_slices,
-            new_resolution,
-            self.reorient,
-        )
+        new_affine[:3, 3] -= reference_position * new_affine[:3, 2]
 
         final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
-
-        # Reorient the affine using the same transpose/flip operations as the data.
-        # This keeps the physical position consistent after reorientation.
-        new_affine = VolumeBuilder3D.reorient_affine_like_data(
-            affine=reference_affine,
-            old_shape=old_volume_shape,
-            mode=self.reorient,
-        )
 
         # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
