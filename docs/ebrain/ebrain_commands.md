@@ -50,7 +50,21 @@ BIDS-EBrains_test/
     └── sub-02_sessions.tsv
 ```
 
-output:
+<table>
+<tr>
+    <td align="center">
+    <img src="https://github.com/mimosa/docs/ebrain/sub-01_ses-01_sample-slide01_stain-C0_FLUO.ome.tif" width="320" />
+    </td>
+    <td align="center">
+    <img src="https://github.com/mimosa/docs/ebrain/sub-01_ses-02_sample-slide02_stain-C1_FLUO.ome.tif" width="400" />
+    </td>
+</tr>
+<tr> 
+    <td align="center">sub-01_ses-01_sample-slide01_stain-C0_FLUO.ome.tif </td> 
+    <td align="center">sub-01_ses-02_sample-slide02_stain-C1_FLUO.ome.tif</td> 
+</tr>
+
+command line output:
 ```
 Downsampling exponent: 5 -> factor 32
 dataset_description.json created
