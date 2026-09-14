@@ -83,7 +83,7 @@ YAML file, and the scripts create the folders, the names, and the metadata.
 This repository provides a complete pipeline that takes the original `.czi`
 microscopy slides and processes them up to a stacked 3D reconstruction. The
 workflow runs in three stages:
-
+0. **Bids Dataset Configuration** - from yaml file
 1. **Conversion** — convert the original `.czi` slides, either to a global
    overview image or to individual per-scene images
 2. **Padding** — align every 2D slice of a subject to a common shape
@@ -93,6 +93,9 @@ Follow the stages in order. Each one below links to a detailed page with the
 exact command, arguments and expected inputs/outputs.
 
 ---
+
+### 0. Bids Dataset Configuration
+[**PART 0: **](docs/00_configuration.md) —  Bids Dataset Configuration -
 
 ### 1. Conversion
 
