@@ -95,7 +95,7 @@ exact command, arguments and expected inputs/outputs.
 ---
 
 ### 0. Bids Dataset Configuration
-[**PART 0: **](docs/00_configuration.md) —  Bids Dataset Configuration -
+[**PART 0:**](docs/00_configuration.md) —  Bids Dataset Configuration -
 
 ### 1. Conversion
 
