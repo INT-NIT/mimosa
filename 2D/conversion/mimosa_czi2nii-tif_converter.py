@@ -44,6 +44,14 @@ def main():
             "true depth in the brain. Omit to convert every declared slice."
         ),
     )
+    parser.add_argument(
+        "-refreeze", action="store_true",
+        help=(
+            "Recompute the complete-brain slice total from the current YAML and "
+            "overwrite the frozen value stored in the YAML. Use only when the "
+            "real complete slice set of a brain has actually changed."
+        ),
+    )
     args = parser.parse_args()
 
     # Optional subset of slice indices to actually export (positions still come
@@ -92,8 +100,16 @@ def main():
         subj = entry.get("subject")
         if subj is None or subj in slice_maps_by_subject:
             continue
-        slice_maps_by_subject[subj] = bmeta._positions_from_indices(
-            bmeta._all_slice_indices(cfg, subject=subj)
+        # Freeze the complete-brain slice total INSIDE the YAML (no separate
+        # slice_reference.json). Reused as-is on later runs, so partial or
+        # interrupted conversions keep the true depth and the total never
+        # shrinks; pass -refreeze to recompute it from the current YAML.
+        slice_maps_by_subject[subj] = bmeta.load_or_freeze_slice_reference_in_yaml(
+            cfg=cfg,
+            yaml_path=args.yaml,
+            subject=subj,
+            slice_indices=bmeta._all_slice_indices(cfg, subject=subj),
+            refreeze=args.refreeze,
         )
 
     MimosaReader.load_correspondence_from_yaml(cfg)

@@ -378,6 +378,65 @@ def _positions_from_indices(unique_indices: list[int]) -> dict[int, int]:
     return {idx: pos for pos, idx in enumerate(sorted(set(unique_indices)))}
 
 
+def load_or_freeze_slice_reference_in_yaml(cfg, yaml_path, subject,
+                                           slice_indices, refreeze=False):
+    """Return the SliceIndex -> position map of one subject, frozen IN THE YAML.
+
+    The complete-brain total (NumberOfSlices) is stored under the subject's entry
+    as ``slice_reference``. On later runs the stored map is reused unchanged, so a
+    partial or interrupted conversion can never shrink the total: exported slices
+    still land at their true depth in the complete brain. No separate
+    slice_reference.json is written -- the total lives in the YAML itself. Pass
+    ``refreeze=True`` to recompute it from the current slice list and overwrite
+    the stored value.
+    """
+    subject = str(subject)
+    entries = cfg.get("samples", {}).get("entries", [])
+
+    # Reuse the frozen map stored in the YAML, unless we are asked to refreeze.
+    if not refreeze:
+        for entry in entries:
+            if str(entry.get("subject")) == subject:
+                ref = entry.get("slice_reference")
+                if ref and ref.get("slice_index_to_position"):
+                    return {int(k): int(v)
+                            for k, v in ref["slice_index_to_position"].items()}
+
+    positions = _positions_from_indices(slice_indices)
+    if not positions:
+        raise ValueError(
+            f"No slice index found for subject {subject!r}. Cannot freeze a "
+            "slice reference from an empty set."
+        )
+
+    ref = {
+        "number_of_slices": len(positions),
+        "slice_index_to_position": {str(k): int(v) for k, v in positions.items()},
+    }
+
+    written = False
+    for entry in entries:
+        if str(entry.get("subject")) == subject:
+            entry["slice_reference"] = ref
+            written = True
+            break
+
+    if written:
+        _atomic_write_text(
+            yaml_path,
+            yaml.dump(
+                cfg,
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+            ),
+        )
+        print(f"Slice reference frozen in YAML for {subject}: "
+              f"{len(positions)} slices")
+
+    return positions
+
+
 def is_identity_reorientation(mode: str) -> bool:
     if mode is None:
         return True
