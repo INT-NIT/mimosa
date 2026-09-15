@@ -54,7 +54,7 @@ def main():
         ),
     )
     parser.add_argument(
-        "-sub", type=str, default=None,
+        "-subject", "-subject", dest="subject", type=str, default=None,
         help=(
             "Convert only this subject (the 'subject' value in the YAML). "
             "Omit to convert every subject."
