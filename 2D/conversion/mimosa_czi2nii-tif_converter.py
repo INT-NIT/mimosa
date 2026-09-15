@@ -53,6 +53,13 @@ def main():
             "volume of only a few slices)."
         ),
     )
+    parser.add_argument(
+        "-sub", type=str, default=None,
+        help=(
+            "Convert only this subject (the 'subject' value in the YAML). "
+            "Omit to convert every subject."
+        ),
+    )
     args = parser.parse_args()
 
     # Optional subset of slice indices to actually export (positions still come
@@ -101,6 +108,8 @@ def main():
         subj = entry.get("subject")
         if subj is None or subj in slice_maps_by_subject:
             continue
+        if args.subject and str(subj) != str(args.subject):
+            continue
         # Freeze the slice total IN THE YAML (no slice_reference.json). The total
         # is reused on later runs; pass -refreeze to recompute it. List only the
         # slices you want in the YAML -> contiguous positions -> dense volume.
@@ -125,6 +134,9 @@ def main():
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = entry["path"]
         subject = entry.get("subject")
+        # If -subject is given, skip every other subject.
+        if args.subject and str(subject) != str(args.subject):
+            continue
         if not os.path.exists(subject_path):
             print(f"WARNING: path not found: {subject_path}")
             continue
