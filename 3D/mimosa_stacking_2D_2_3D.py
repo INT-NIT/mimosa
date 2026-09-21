@@ -291,40 +291,25 @@ class VolumeBuilder3D:
                 + (" ..." if len(missing_positions) > 20 else "")
             )
 
-        # The padded slices already define the correct spatial reference.
-        # We take the affine before reorienting the volume data.
-        reference_position = int(sorted_slices[0][0])
-        reference_padded_slice = sorted_slices[0][2]
-
-                # Matrice de base en IDENTITE, construite depuis la géométrie du volume
-        # (centrée sur sa propre forme). On NE part PAS de la matrice de la coupe
-        # car elle est déjà réorientée à la conversion -> la réorienter encore
-        # ici faisait une DOUBLE réorientation (l'origine du décalage).
         res_mm = np.array(
             [downsampled_res_x, downsampled_res_y, float(self.original_thickness)],
             dtype=float,
         ) * 1e-3  # um -> mm
         shape_arr = np.array([width, height, nb_slices], dtype=float)
+
         base_affine = np.eye(4, dtype=float)
         base_affine[:3, :3] = np.diag(res_mm)
         base_affine[:3, 3] = -((shape_arr - 1.0) * res_mm) / 2.0
 
-        # On retourne VRAIMENT les voxels du volume (comme avant).
-        stack_of_slices, new_resolution = self.reorient_volume_3d(
-            stack_of_slices,
-            new_resolution,
-            self.reorient,
-        )
-        final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
+        if bmeta.is_identity_reorientation(self.reorient):
+            new_affine = base_affine
+        else:
+            new_affine = np.array(
+                bmeta.apply_reorientation_to_sform(base_affine, self.reorient),
+                dtype=float,
+            )
 
-        # On réoriente la matrice UNE seule fois pour coller aux voxels retournés.
-        # La base étant en identité (pas déjà réorientée), la réorientation n'est
-        # appliquée qu'une fois -> plus de double réorientation.
-        new_affine = VolumeBuilder3D.reorient_affine_like_data(
-            affine=base_affine,
-            old_shape=old_volume_shape,
-            mode=self.reorient,
-        )
+        final_volume_shape = tuple(int(v) for v in stack_of_slices.shape)
 
         # Save the 3D volume.
         out_img = nb.Nifti1Image(stack_of_slices, new_affine)
