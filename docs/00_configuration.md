@@ -42,11 +42,39 @@ samples:
   ```
 
 - You can list several subjects; each is treated as its own brain.
+## The `slice_reference` block
 
-## Exporting a subset
+```yaml
+slice_reference:
+  number_of_slices: 277            # depth of the complete volume
+  slice_index_to_position:         # chunk (slide label) -> voxel position (rank)
+    '2': 0
+    '4': 1
+    '66': 32
+```
 
-Keep the **complete** slice list in the YAML and use `-only_slices` on the
-converter to export just a few slices. The total and the positions still come
-from the full list, so the exported slices keep their true depth. Do **not**
-delete slices from the YAML to make a partial run — that would corrupt the
-depths (see [geometry.md](geometry.md#why-numberofslices-must-be-the-complete-brain)).
+Chunk = slide label (2, 4, 6…, with gaps); position = its rank = the voxel index.
+Using the chunk directly would inflate the volume and add empty planes between
+adjacent sections. Stored once so a partial run (`-only_slices`) reuses the same
+total and positions — every slice always lands at the same depth.
+
+## Exporting a subset with `-only_slices`
+
+This is the whole point of keeping the complete `slice_reference`.
+
+- **With the complete reference**, `-only_slices` exports just a few slices, and
+  each one is placed at its **true position** in the complete volume — with empty
+  (black) gaps where the other slices would be. Example: convert only slices 10
+  and 20, and they land at positions 10 and 20, not next to each other.
+- **Without it** (a reduced reference, or slices deleted from the YAML), the
+  positions are renumbered 0, 1, 2, … and the few slices get **packed one after
+  another**, losing their real depth.
+
+So keep the **complete** slice list and its `slice_reference` in the YAML, and use
+`-only_slices` on the converter to export a subset. Do **not** delete slices from
+the YAML to make a partial run — that would corrupt the depths
+(see [geometry.md](geometry.md#why-numberofslices-must-be-the-complete-brain)).
+
+A slice that is declared in `slice_reference` but not converted simply leaves its
+position empty in the volume — this is what the stacking reports as `empty slice
+positions` (see [04_stacking.md](04_stacking.md)).
