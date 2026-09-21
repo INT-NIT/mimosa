@@ -128,7 +128,7 @@ def build_slice_references_tsv(bids_root, out_tsv=None):
                         or meta.get("VolumeReorientationMode")
                         or "none").replace(" ", "").lower()
             sign_z = -1 if ("-z" in reorient or "flip_z" in reorient) else 1
-            z = float(sign_z * (pos - (N - 1) / 2) * thickness)
+            z = round(sign_z * (pos - (N - 1) / 2) * thickness)
  
         key = (sub, ses, str(chunk))
         entry = rows.setdefault(
