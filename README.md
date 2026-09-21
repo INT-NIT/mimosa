@@ -54,7 +54,7 @@ A BIDS dataset has three layers, and MIMOSA fills all three:
 - **`derivatives/`** — the downsampled images, the preprocessed slices, and the
   reconstructed 3D volumes.
 
-### An honest note on the BIDS layers
+### note on the BIDS layers
 
 **We did not fully follow the BIDS convention, and we want to be clear about
 it.** BIDS says that files in `derivatives/` must be produced from the `raw`
@@ -83,18 +83,25 @@ YAML file, and the scripts create the folders, the names, and the metadata.
 This repository provides a complete pipeline that takes the original `.czi`
 microscopy slides and processes them up to a stacked 3D reconstruction. The
 workflow runs in three stages:
-
-1. **Conversion** — convert the original `.czi` slides, either to a global
+1. **Configuration** — describe your subjects and slices in `metadata.yml`
+2. **Conversion** — convert the original `.czi` slides, either to a global
    overview image or to individual per-scene images
-2. **Padding** — align every 2D slice of a subject to a common shape
-3. **Stacking** — stack the padded 2D slices into a 3D reconstruction
+3. **Padding** — align every 2D slice of a subject to a common shape
+4. **Stacking** — stack the padded 2D slices into a 3D reconstruction
 
 Follow the stages in order. Each one below links to a detailed page with the
 exact command, arguments and expected inputs/outputs.
 
+
+### 1. Configuration
+
+[**Configuration: `metadata.yml`**](docs/00_configuration.md) — declare your
+subjects, their `.czi` folders and their slices. **Every command in the pipeline
+reads this file**, so fill it before running any stage.
+
 ---
 
-### 1. Conversion
+### 2. Conversion
 
 Two converters are provided. They serve different purposes, not just different
 formats:
@@ -103,14 +110,14 @@ formats:
 OME-TIF per slide, a global overview image that gives an idea of the whole
 scanned `.czi` slide, with its JSON sidecar (for microscopy viewers).
 
-[**PART 2: CZI → NIfTI / TIF**](docs/02_czi_to_nifti.md) — extracts every scene
-from each slide as an individual, downsampled NIfTI and/or TIF image (with the
-correct physical depth in the brain), so each scene can be worked on separately.
-This is the output used by the rest of the pipeline.
+[**PART 2: CZI → NIfTI / TIF**](docs/02_czi_to_nifti-tif.md) — extracts every
+scene from each slide as an individual, downsampled NIfTI and/or TIF image (with
+the correct physical depth in the brain), so each scene can be worked on
+separately. This is the output used by the rest of the pipeline.
 
 ---
 
-### 2. Padding
+### 3. Padding
 
 [**Slice padding**](docs/03_padding.md) — pad every 2D slice of a subject to a
 common target shape so that all slices, resolutions and the stacked result
@@ -118,7 +125,7 @@ align.
 
 ---
 
-### 3. Stacking
+### 4. Stacking
 
 [**2D → 3D stacking**](docs/04_stacking.md) — stack the padded 2D slices into a
 single 3D reconstruction.
