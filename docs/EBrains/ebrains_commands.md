@@ -163,7 +163,7 @@ Placeholder: MJO16052401_Cx_72_74_76_78_80_82_84_86.czi
 **Preview:**
 
 <!-- replace with your screenshot, e.g. images/01_ometiff.png -->
-![OME-TIFF preview](docs/EBrains-images/sub-01_ses-01_sample-slide06_stain-C0_FLUO.ome.tif)
+![OME-TIFF preview](EBrains-images/sub-01_ses-01_sample-slide06_stain-C0_FLUO.ome.tif)
 
 ---
 
@@ -319,7 +319,7 @@ python 2D/conversion/mimosa_czi2nii-tif_converter.py \
 **Preview:**
 
 <!-- replace with your screenshot, e.g. images/02_niftitiff.png -->
-![NIfTI preview](docs/EBrains-images/sub-01_ses-01_sample-slide6_chunk-108_stain-C0_res-8x_desc-downsampled_FLUO.nii.gz)
+![NIfTI preview](EBrains-images/sub-01_ses-01_sample-slide6_chunk-108_stain-C0_res-8x_desc-downsampled_FLUO.nii.gz)
 
 ---
 
@@ -382,7 +382,7 @@ Subject: sub-01 — target shape: (305, 197)
 **Preview:**
 
 <!-- replace with your screenshot, e.g. images/03_padding.png -->
-![Padding preview](docs/EBrains-images/sub-02_ses-05_sample-slide85_chunk-428_stain-C1_res-8x_desc-padded_FLUO.nii.gz)
+![Padding preview](EBrains-images/sub-02_ses-05_sample-slide85_chunk-428_stain-C1_res-8x_desc-padded_FLUO.nii.gz)
 
 ---
 
@@ -415,4 +415,4 @@ VOLUME: /envau/work/nit/users/boudlal.h/BIDS-EBrains/derivatives/3D/stacking/sub
 **Preview:**
 
 <!-- replace with your FSLeyes screenshot of the volume, e.g. images/04_volume.png -->
-![3D volume preview](docs/EBrains-images/sub-01_C1_res-8x_volume.nii.gz)
+![3D volume preview](EBrains-images/sub-01_C1_res-8x_volume.nii.gz)
