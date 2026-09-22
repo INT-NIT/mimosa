@@ -162,7 +162,7 @@ Placeholder: MJO16052401_Cx_72_74_76_78_80_82_84_86.czi
 
 **Example output:**
 
-[OME-TIFF ](../../EBrains-images/sub-01_ses-01_sample-slide06_stain-C0_FLUO.ome.tif)
+[OME-TIFF ](../EBrains-images/sub-01_ses-01_sample-slide06_stain-C0_FLUO.ome.tif)
 
 ---
 
@@ -317,7 +317,7 @@ python 2D/conversion/mimosa_czi2nii-tif_converter.py \
 
 **Example output:**
 
-[NIfTI ](../../EBrains-images/sub-01_ses-01_sample-slide6_chunk-108_stain-C0_res-8x_desc-downsampled_FLUO.nii.gz)
+[NIfTI ](../EBrains-images/sub-01_ses-01_sample-slide6_chunk-108_stain-C0_res-8x_desc-downsampled_FLUO.nii.gz)
 
 ---
 
@@ -379,7 +379,7 @@ Subject: sub-01 — target shape: (305, 197)
 
 **Example output:**
 
-[Padding ](../../EBrains-images/sub-02_ses-05_sample-slide85_chunk-428_stain-C1_res-8x_desc-padded_FLUO.nii.gz)
+[Padding ](../EBrains-images/sub-02_ses-05_sample-slide85_chunk-428_stain-C1_res-8x_desc-padded_FLUO.nii.gz)
 
 ---
 
@@ -411,4 +411,4 @@ VOLUME: /envau/work/nit/users/boudlal.h/BIDS-EBrains/derivatives/3D/stacking/sub
 
 **Example output:**
 
-[3D volume ](../../EBrains-images/sub-01_C1_res-8x_volume.nii.gz)
+[3D volume ](../EBrains-images/sub-01_C1_res-8x_volume.nii.gz)
