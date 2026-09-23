@@ -141,7 +141,6 @@ def main():
             print(f"WARNING: path not found: {subject_path}")
             continue
         for sample in entry.get("samples", []):
-            derived_from = sample.get("derived_from", "n/a")
             sample_type = sample.get("sample_type", "technical sample")
             participant_id = sample.get("participant_id", f"sub-{subject}")
             for file_entry in sample.get("files", []):
@@ -163,7 +162,6 @@ def main():
                     (
                         subject_path,
                         filename,
-                        derived_from,
                         sample_type,
                         participant_id,
                         subject,
@@ -171,7 +169,7 @@ def main():
                 
     subjects_copied = set()
     
-    for input_dir, filename, derived_from, sample_type, participant_id_from_yaml, subject_label in files_to_process:
+    for input_dir, filename, sample_type, participant_id_from_yaml, subject_label in files_to_process:
         
         full_input_path = os.path.join(input_dir, filename)
         czi_id = os.path.splitext(filename)[0]
