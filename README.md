@@ -4,7 +4,7 @@ A set of tools for **M**ultiscale **I**maging for mar**MO**set/**MO**use **S**of
 
 # Description
 
-The MIMOSA project aims to provide a multiscale, automated, versatile, and user-friendly tool for 3D reconstruction and cell quantification in the brain of the marmoset (<i>Callithrix jacchus</i>) using histological sections. Designed to meet the need for precise and accurate quantification in viral tracing experiments, MIMOSA facilitates efficient analysis.
+The MIMOSA project aims to provide a multiscale, automated, versatile, and user-friendly tool for 3D reconstruction and cell quantification in the brain of the marmoset (<i>Callithrix jacchus</I>) and mouse using histological sections. Designed to meet the need for precise and accurate quantification in viral tracing experiments, MIMOSA facilitates efficient analysis.
 
 The tool utilizes DAPI staining to register histological sections to MRI atlases of the marmoset brain, while fluorescent protein labeling enables neuron quantification in targeted areas. MIMOSA integrates Cellpose, allowing users to develop custom-trained models for neuron quantification. Additionally, it includes CZI conversion tools that produce downsampled TIFF/NIfTI derivatives and whole-slide OME-TIF overview images. The current TIFF/NIfTI converter requests reduced-resolution data through the CZI reader `zoom` mechanism, while the spatial position of each NIfTI image is encoded in its SForm/QForm matrices.
 
