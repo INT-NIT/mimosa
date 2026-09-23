@@ -81,7 +81,7 @@ Details: [`../01_czi_to_ometif.md`](../01_czi_to_ometif.md)
 ```bash
 python 2D/conversion/mimosa_czi2ometif_converter.py \
   -y .../metadata.yml \
-  -bids_root .../BIDS-EBrains \
+  -bids_root  $BIDS_paths/ \
   -df 8 \
   -channels 0
 ```
@@ -176,7 +176,7 @@ Details: [`../02_czi_to_nifti-tif.md`](../02_czi_to_nifti-tif.md)
 python 2D/conversion/mimosa_czi2nii-tif_converter.py \
   -f nii \
   -df 8 \
-  -o /envau/work/nit/users/boudlal.h/BIDS-EBrains \
+  -o  $BIDS_paths/ \
   -y metadata.yml \
   -reorient x,-z,-y \
   -original_thickness 100
@@ -308,7 +308,7 @@ on 2:   -> derivatives: derivatives/2D/downsampled/sub-01/ses-01/micr/res-8x/sub
 python 2D/conversion/mimosa_czi2nii-tif_converter.py \
   -f both \
   -df 2 \
-  -o .../BIDS-EBrains \
+  -o  $BIDS_paths/ \
   -y .../metadata.yml \
   -reorient x,-z,-y \
   -original_thickness 100 \
@@ -329,7 +329,7 @@ Details: [`../03_padding.md`](../03_padding.md)
 
 ```bash
 python 2D/padding/mimosa_slice_padding.py \
-  -bids_root .../BIDS-EBrains \
+  -bids_root . $BIDS_paths/ \
   -res 8x \
   -padding_delta 100 \
   -reorient x,-z,-y
@@ -392,7 +392,7 @@ Details: [`../04_stacking.md`](../04_stacking.md)
 
 ```bash
 python 3D/mimosa_stacking_2D_2_3D.py \
-  -bids_root .../BIDS-EBrains \
+  -bids_root  $BIDS_paths/ \
   -res 8x \
   -reorient x,-z,-y \
   -original_thickness 100
