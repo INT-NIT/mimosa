@@ -18,7 +18,7 @@ class MimosaReader:
         Here we only need:
         - subject
         - filename -> slices
-        - optionally filename -> derived_from / sample_type / participant_id
+        - optionally filename ->   sample_type / participant_id
         """
         cls.correspondence_subject_sample = {}
 
@@ -36,7 +36,6 @@ class MimosaReader:
                 if not isinstance(sample, dict):
                     continue
 
-                derived_from = sample.get("derived_from", "n/a")
                 sample_type = sample.get("sample_type", "technical sample")
                 participant_id = sample.get("participant_id", f"sub-{subject}")
 
@@ -49,7 +48,6 @@ class MimosaReader:
                         continue
 
                     files_map[filename] = f.get("slices", [])
-                    file_regions[filename] = derived_from
                     file_sample_types[filename] = sample_type
                     file_participants[filename] = participant_id
 

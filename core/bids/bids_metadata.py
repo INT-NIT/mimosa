@@ -255,7 +255,6 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
           subject: Una
           samples:
             - sample_type: technical sample
-              derived_from: midbrain
               participant_id: sub-Una
               files:
 
@@ -287,7 +286,6 @@ def update_yaml_with_slices(yaml_path: Path) -> dict:
                 {
                     "participant_id": f"sub-{subject}",
                     "sample_type": "technical sample",
-                    "derived_from": "n/a",
                     "files": [],
                 }
             ]
