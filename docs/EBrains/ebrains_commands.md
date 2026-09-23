@@ -306,7 +306,7 @@ on 2:   -> derivatives: derivatives/2D/downsampled/sub-01/ses-01/micr/res-8x/sub
 ```bash
 # 2) a few chosen slices, 2x (kept at their true position via -only_slices)
 python 2D/conversion/mimosa_czi2nii-tif_converter.py \
-  -f both \
+  -f nii \
   -df 2 \
   -o  $BIDS_paths/ \
   -y .../metadata.yml \
