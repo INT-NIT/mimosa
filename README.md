@@ -1,6 +1,6 @@
 # The Mimosa Project
 
-A set of tools for **M**ultiscale **I**maging for mar**MO**set/MOuse **S**oftware &amp; **A**nalysis.
+A set of tools for **M**ultiscale **I**maging for mar**MO**set/**MO**use **S**oftware &amp; **A**nalysis.
 
 # Description
 
