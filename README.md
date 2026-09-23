@@ -96,7 +96,7 @@ exact command, arguments and expected inputs/outputs.
 ### 1. Configuration
 
 [**Configuration: `metadata.yml`**](docs/00_configuration.md) — declare your
-subjects, their `.czi` folders and their slices. **Every command in the pipeline
+subjects, selected metadata, their `.czi` folders and their slices. **Every command in the pipeline
 reads this file**, so fill it before running any stage.
 
 ---
@@ -119,30 +119,22 @@ separately. This is the output used by the rest of the pipeline.
 
 ### 3. Padding
 
-[**Slice padding**](docs/03_padding.md) — pad every 2D slice of a subject to a
-common target shape so that all slices, resolutions and the stacked result
-align.
+[**Slice padding**](docs/03_padding.md) — applies an adapted common size to each 2D slice of a subject by searching the series for the largest slice (using zero-filling) 
 
 ---
 
 ### 4. Stacking
 
-[**2D → 3D stacking**](docs/04_stacking.md) — stack the padded 2D slices into a
-single 3D reconstruction.
+[**2D → 3D stacking**](docs/04_stacking.md) — stack the padded 2D slices into a single 3D volume so that all sections are stacked according to their cutting thickness and their relative positions along an axis (to be defined by the user)
 
 ---
 
 ### Utilities & geometry
 
-Extra scripts (slice-reference table, slice finder) and the explanation of the
+Extra scripts (creation of 2D slice / 3D positions table of correspondances, slice finder) and the explanation of the
 coordinate system (SForm, `reorient`, physical Z) are documented separately:
 
 [**Utilities**](docs/utilities.md) · [**Geometry**](docs/geometry.md)
-
-
-
-
-
 
 
 # Pipeline overview
