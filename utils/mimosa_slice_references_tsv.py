@@ -1,4 +1,4 @@
-import json, glob, os, re, sys, numpy as np, nibabel as nb
+import json, glob, os, re, sys, numpy as np
  
 # Repo root importable so "from core.bids import ..." works whatever the depth.
 _ROOT = os.path.abspath(os.path.dirname(__file__))
@@ -114,22 +114,20 @@ def build_slice_references_tsv(bids_root, out_tsv=None):
  
         N = int(meta["NumberOfSlices"])
         pos = int(meta["SlicePosition"])
- 
+
         geom = _load_volume_geometry(bids_root, sub)
-        if geom is not None:
-            # Exactly what FSLeyes shows for this slice in the volume.
-            z = _fsleyes_through_plane_z(geom["affine"], geom["reorient"], N, pos)
-        else:
-            # No volume built yet: fall back to the formula (magnitude only,
-            # sign from the slice's own reorient tag).
-            thickness = max(np.linalg.norm(nb.load(nii).affine[:3, :3], axis=0))
-            reorient = (meta.get("SFormReorientationMode")
-                        or meta.get("SFormVolumeReorientationMode")
-                        or meta.get("VolumeReorientationMode")
-                        or "none").replace(" ", "").lower()
-            sign_z = -1 if ("-z" in reorient or "flip_z" in reorient) else 1
-            z = round(sign_z * (pos - (N - 1) / 2) * thickness)
- 
+        if geom is None:
+            raise RuntimeError(
+                f"No stacked 3D volume found for subject {sub!r} "
+                f"(expected derivatives/3D/stacking/sub-{sub}/micr/res-*/"
+                f"sub-{sub}_*_volume.json). Run the 3D stacking step for this "
+                "subject first, then regenerate this table."
+            )
+        # Exactly what FSLeyes shows for this slice in the volume.
+        # Rounded to kill float32 noise (e.g. 10.799999974668026 -> 10.8);
+        # this does not change which voxel/slice it refers to.
+        z = round(_fsleyes_through_plane_z(geom["affine"], geom["reorient"], N, pos), 4)
+
         key = (sub, ses, str(chunk))
         entry = rows.setdefault(
             key, {"pos": pos, "z": z, "channels": set(), "resolutions": set()})
