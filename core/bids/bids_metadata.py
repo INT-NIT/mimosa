@@ -724,7 +724,7 @@ def add_sform_to_json_metadata(
             "Expected NativeWidthPixels and NativeHeightPixels."
         )
 
-    # Exported (downsampled) image size, forced even by the converter. Used to
+    # Exported (downsampled) image size, forced odd by the converter. Used to
     # center the sform on the downsampled grid so raw, padded and volume align.
     ds_width = meta.get("WidthPixels-DS")
     ds_height = meta.get("HeightPixels-DS")
