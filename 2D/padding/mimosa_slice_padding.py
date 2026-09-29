@@ -175,7 +175,7 @@ class SlicePreprocessor:
         nonpadded_sform = np.array(meta["SFormMatrix"], dtype=float)
 
         # Padding keeps the original pixels at their exact world position. The raw
-        # slice is centered on its (even) downsampled grid and the target is even,
+        # slice is centered on its (odd) downsampled grid and the target is odd,
         # so the symmetric padding is exact (no rounding). Result: the raw slice,
         # its padded version and the 3D volume all overlay exactly, and every
         # padded slice ends up with the same in-plane origin.

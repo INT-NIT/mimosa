@@ -49,6 +49,24 @@ python 2D/conversion/mimosa_czi2nii-tif_converter.py \
 - **`-reorient`.** Rewrites only the SForm matrix, not the pixels — the real 3D
   reorientation happens at stacking.
 
+## Example output
+
+To check the output, three slices converted at `-df 8` (256× smaller) were
+opened together: one **anterior**, one at the **center** of the volume and one
+**posterior**.
+
+**3D view.** Even before stacking, each slice sits at its real place in the
+brain. Its position is stored in the SForm matrix, so the slices keep their
+spatial position in the 3D volume.
+
+![Three downsampled slices (anterior, center, posterior) in 3D view](ds1.png)
+
+**Orthogonal views.** In the sagittal (left) and axial views (middle), the three slices appear as
+lines at their respective depths along the A-P axis; the coronal view shows the
+central slice.
+
+![Orthogonal views of the same three slices](ds2.png)
+
 ## Geometry
 
 How the 2D slice affine matrix (pixel spacing, origin, Z depth) is computed is

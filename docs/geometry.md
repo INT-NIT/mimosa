@@ -66,17 +66,18 @@ pixel_spacing_y = exported_pixel_size_y_um / 1000
 
 ### X and Y origin
 
-The X/Y origin is based on the **native physical extent** of the CZI scene, not
-on the rounded pixel count of the downsampled image:
+The X/Y origin centers the image on its own **downsampled** pixel grid
+(`WidthPixels-DS`, `HeightPixels-DS` in the JSON sidecar):
 
 ```text
-origin_x = - native_physical_width_mm  / 2
-origin_y = - native_physical_height_mm / 2
+origin_x = - (ds_width  - 1) / 2 * pixel_spacing_x
+origin_y = - (ds_height - 1) / 2 * pixel_spacing_y
 ```
 
-This keeps every output resolution in the same physical reference: a fine image
-has many small pixels and a coarse image fewer large pixels, while both describe
-the same physical field of view.
+Every slice is exported with **odd** dimensions (one background row/column is
+added if needed), so the central pixel sits exactly on 0. All slices then share
+the same in-plane center, and the different resolutions stay aligned with each
+other.
 
 ### Z position
 
@@ -108,14 +109,15 @@ padded_origin = origin
 
 where `x_axis_vector` and `y_axis_vector` are the first and second columns of
 the affine. The Z origin does not change (padding is only in the image plane).
-Because slices are exported odd and centered and the target is even, the
-symmetric padding is exact (no rounding), so raw, padded and volume all overlay,
-and the different resolutions align with each other.
+Because slices are exported odd and the target is odd, the padding is split
+exactly in half (no rounding), so raw, padded and volume all overlay, and the
+different resolutions align with each other.
 
 ## 3D volume affine matrix
 
 The volume matrix is built from the matrix of one padded slice used as a
-reference (the first available slice, sorted by `SlicePosition`).
+reference (the available slice with the smallest `SliceIndex`). Since every
+padded slice shares the same in-plane origin, any slice gives the same X/Y.
 
 **Step 1 - start from the reference slice matrix.** It already holds the X/Y
 spacing, the X/Y origin after padding, the stack spacing and the physical
