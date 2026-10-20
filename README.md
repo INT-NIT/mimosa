@@ -1,11 +1,11 @@
- <table>
+<table>
   <tr>
-    <td width="183" align="center" valign="middle">
-      <img src="images/mimosa_logo.png" width="100" alt="The Mimosa Project logo">
+    <td align="left" valign="middle">
+      <img src="images/mimosa_logo.png" width="300" alt="The Mimosa Project logo">
     </td>
-    <td valign="middle">
+    <td align="left" valign="middle">
       <h1>The Mimosa Project</h1>
-      <p>A set of tools for <strong>M</strong>ultiscale <strong>I</strong>maging for mar<strong>MO</strong>set/<strong>MO</strong>use <strong>S</strong>oftware &amp; <strong>A</strong>nalysis.</p>
+      A set of tools for <strong>M</strong>ultiscale <strong>I</strong>maging for mar<strong>MO</strong>set/<strong>MO</strong>use <strong>S</strong>oftware &amp; <strong>A</strong>nalysis.
     </td>
   </tr>
 </table>
