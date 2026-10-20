@@ -1,6 +1,14 @@
-# The Mimosa Project
-
-A set of tools for **M**ultiscale **I**maging for mar**MO**set/**MO**use **S**oftware &amp; **A**nalysis.
+ <table>
+  <tr>
+    <td width="183" align="center" valign="middle">
+      <img src="images/mimosa_logo.png" width="100" alt="The Mimosa Project logo">
+    </td>
+    <td valign="middle">
+      <h1>The Mimosa Project</h1>
+      <p>A set of tools for <strong>M</strong>ultiscale <strong>I</strong>maging for mar<strong>MO</strong>set/<strong>MO</strong>use <strong>S</strong>oftware &amp; <strong>A</strong>nalysis.</p>
+    </td>
+  </tr>
+</table>
 
 # Description
 
