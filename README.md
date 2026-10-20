@@ -181,7 +181,7 @@ In the diagram, the OME-TIF `raw` is only an overview of the data. The actual
 processing pipeline starts from the original `.czi` files.
 
 #Illustration of the pipeline (WIP) for connectivity in the superior colliculus of the marmoset
-<img src="images/marmo_pipeline" width="800" alt="The Mimosa Project logo">
+<img src="images/marmo_pipeline.png" width="1313" alt="Marmoset Connectivity pipeline">
 
 
 
