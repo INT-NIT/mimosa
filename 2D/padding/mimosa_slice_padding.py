@@ -218,6 +218,8 @@ if __name__ == "__main__":
     parser.add_argument("-padding_delta", required=False, type=int, default=100, help="Padding size in pixels")
     parser.add_argument("-res",required=True,help="Resolution label to pad, for example 8x")
     parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for preprocessed 2D slices")
+    parser.add_argument("-force",action="store_true", help="Force repadding of all slices, even if padded files already exist")
+ 
     args = parser.parse_args()
 
     proc = SlicePreprocessor(
@@ -242,7 +244,7 @@ if __name__ == "__main__":
         print(f"No downsampled slices found for res-{args.res} - nothing to pad.")
         print("Run the NIfTI conversion first with a -df matching this resolution "
               "(e.g. -df 8 produces res-8x).")
-    elif len(padded_niftis) >= len(downsampled_niftis):
+    elif len(padded_niftis) >= len(downsampled_niftis) and not args.force:
         print(f"All {len(downsampled_niftis)} slices are already padded - nothing to do.")
     else:
         remaining = len(downsampled_niftis) - len(padded_niftis)
@@ -271,7 +273,7 @@ if __name__ == "__main__":
             for nii_path in sorted_subject_niftis:
                 output_path = proc.build_output_path(nii_path)
 
-                if output_path.exists():
+                if output_path.exists() and not args.force:
                     print(f"  SKIP (already exists): {nii_path.name}")
                     continue
                 

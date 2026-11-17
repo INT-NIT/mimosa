@@ -39,15 +39,20 @@ def _as_res_labels(res_label, exponents):
 
 def _bids_basename(bids_info, stain, res_label, desc):
     """Build the BIDS basename, inserting res- and desc- when absent."""
-    base = bm.build_bids_basename(bids_info=bids_info, stain=stain, suffix="FLUO")
+    base = bm.build_bids_basename(
+        bids_info=bids_info, stain=stain, suffix="FLUO"
+    )
     if "_res-" in base:
         return base
     return base.replace("_FLUO", f"_res-{res_label}_desc-{desc}_FLUO")
 
 
-def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
-             slice_position_map, thickness, reorient="none", output_format="nii"):
-    """Build the JSON sidecar for one exported image, sform included."""
+def _sidecar(
+    reader, rect, stain, factor, scene_idx, shape, is_nifti,
+    slice_position_map, thickness, reorient="none", output_format="nii",
+    delete_content=False,
+):
+    """Build the JSON sidecar for one exported image, including its sform."""
     meta = reader.get_converted_file_metadata(
         rect=rect,
         stain=stain,
@@ -58,17 +63,9 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
     )
     meta["DownsamplingSource"] = "CZI zoom (ZEN pyramid)"
 
-    # get_converted_file_metadata sets ConvertedTo from is_nifti ("NIfTI" or
-    # "TIF"). When the run exports both formats, record that both were produced
-    # in every sidecar, so each JSON tells the full story of the conversion.
     if output_format == "both":
         meta["ConvertedTo"] = "NIfTI and TIF"
 
-    # The SForm describes the physical position of the scene in the brain. It
-    # does not depend on the output format, so it is computed for both NIfTI and
-    # TIFF (whenever the slice positions are known). For NIfTI it is also written
-    # into the .nii.gz header; TIFF has no header for a 3D matrix, so for TIFF it
-    # lives only in the JSON sidecar (the BIDS-consistent place for geometry).
     if slice_position_map is not None:
         meta = bmeta.add_sform_to_json_metadata(
             meta=meta,
@@ -76,13 +73,17 @@ def _sidecar(reader, rect, stain, factor, scene_idx, shape, is_nifti,
             original_thickness=thickness,
             reorient=reorient,
         )
+
+    # These fields are intentionally absent for normal conversions.
+    if delete_content:
+        meta["DeleteContent"] = True
+        meta["DeleteContentMethod"] = "zero_fill"
+
     return meta
 
 
 def _save_nifti(path, image, sform):
     """Write a 2D image as NIfTI with sform and qform set from one matrix."""
-    # One single convention: NIfTI slices in float32 (like the padded slices
-    # and the 3D volume).
     img = nib.Nifti1Image(np.asarray(image, dtype=np.float32), sform)
     img.set_sform(sform, code=1)
     img.set_qform(sform, code=1)
@@ -103,17 +104,28 @@ def czi2bitmapHPC(
     original_thickness: float = 100,
     reorient: str = "none",
     only_slices=None,
+    delete_content: bool = False,
 ):
-    """Export one CZI to every requested resolution using the CZI zoom.
+    """Export selected CZI scenes at the requested resolutions.
 
-    downsampling_factor is an exponent or a list of them (factor = 2**exp).
-    The reduction is done by the CZI `zoom` argument (ZEN pyramid).
-    only_slices, when given, is a set of slice indices to export; other scenes
-    are skipped (their positions are still known, so depths stay correct).
+    When delete_content=True, selected slices are exported with all pixel values
+    set to zero. Their files remain present and their JSON sidecars receive
+    DeleteContent=true and DeleteContentMethod="zero_fill".
+
+    delete_content requires only_slices, so the operation cannot accidentally
+    zero every slice.
     """
     output_format = output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
         raise ValueError("output_format must be 'tif', 'nii' or 'both'")
+
+    if delete_content and not only_slices:
+        raise ValueError(
+            "delete_content=True requires a non-empty only_slices selection"
+        )
+
+    if only_slices is not None:
+        only_slices = {int(index) for index in only_slices}
 
     exponents = _as_exponents(downsampling_factor)
     res_labels = _as_res_labels(res_label, exponents)
@@ -125,8 +137,10 @@ def czi2bitmapHPC(
         nb_channels = MimosaReader.get_nb_channels(czidoc)
 
         folders = {
-            e: bm.get_derivative_folder(bids_root_path, bids_info, res_labels[e])
-            for e in exponents
+            exponent: bm.get_derivative_folder(
+                bids_root_path, bids_info, res_labels[exponent]
+            )
+            for exponent in exponents
         }
         for folder in folders.values():
             os.makedirs(folder, exist_ok=True)
@@ -137,65 +151,93 @@ def czi2bitmapHPC(
 
             slice_idx = reader.get_slice_index_for_scene(scene_idx)
             if slice_idx is None:
-                print(f"  WARNING: no slice index for scene {scene_idx}, skipping")
+                print(
+                    f"  WARNING: no slice index for scene {scene_idx}, skipping"
+                )
                 continue
+
             if only_slices is not None and slice_idx not in only_slices:
-                continue  # not requested -> skip (its position stays reserved)
+                continue
+
             bids_info["chunk"] = slice_idx
 
-            with alive_bar(nb_channels, force_tty=True,
-                           title=f"Scene {scene_idx}") as bar:
+            with alive_bar(
+                nb_channels, force_tty=True, title=f"Scene {scene_idx}"
+            ) as bar:
                 for channel_idx in range(nb_channels):
                     images = downsample_scene_zoom(
-                        czidoc=czidoc, roi=roi, scene=scene_idx,
-                        channel=channel_idx, exponents=exponents,
+                        czidoc=czidoc,
+                        roi=roi,
+                        scene=scene_idx,
+                        channel=channel_idx,
+                        exponents=exponents,
                     )
                     stain_label = f"C{channel_idx}"
                     staining_name = reader.get_channel_name(channel_idx)
+
                     for exponent in exponents:
                         image = images[exponent]
-                        # Force ODD dimensions (add one background row/col if
-                        # even). Odd + centered puts a pixel center exactly on 0
-                        # for every slice AND every resolution, so raw, padded,
-                        # volume align within a resolution AND res-4x/6x/8x align
-                        # with each other (coarse pixels fall on fine pixels).
+
+                        # Keep the same odd-sized output geometry as normal
+                        # conversion. Padding is applied before zero filling.
                         if image.shape[0] % 2 == 0:
                             image = np.pad(image, ((0, 1), (0, 0)))
                         if image.shape[1] % 2 == 0:
                             image = np.pad(image, ((0, 0), (0, 1)))
-                        factor = 2**exponent
+
+                        if delete_content:
+                            # Preserve shape and dtype while clearing all pixel
+                            # values. This zeroed array is used for both formats.
+                            image = np.zeros_like(image)
+
+                        factor = 2 ** exponent
                         base = _bids_basename(
                             bids_info, stain_label, res_labels[exponent], DESC
                         )
 
                         if write_tif:
-                            path = os.path.join(folders[exponent], base + ".tif")
-                            tf.imwrite(path, image, imagej=True)
-                            bmeta.write_micr_sidecar_json(
-                                path,
-                                _sidecar(reader, rect, staining_name, factor, scene_idx,
-                                         (image.shape[1], image.shape[0]), False,
-                                         slice_position_map,
-                                         original_thickness, reorient, output_format),
+                            tif_path = os.path.join(
+                                folders[exponent], base + ".tif"
                             )
-                            print("  -> BIDS raw: "
-                                  f"{os.path.relpath(path, bids_root_path)}")
+                            tf.imwrite(tif_path, image, imagej=True)
+                            tif_meta = _sidecar(
+                                reader, rect, staining_name, factor, scene_idx,
+                                (image.shape[1], image.shape[0]), False,
+                                slice_position_map, original_thickness,
+                                reorient, output_format,
+                                delete_content=delete_content,
+                            )
+                            bmeta.write_micr_sidecar_json(tif_path, tif_meta)
+                            print(
+                                "  -> BIDS raw: "
+                                f"{os.path.relpath(tif_path, bids_root_path)}"
+                            )
 
                         if write_nii:
-                            path = os.path.join(folders[exponent], base + ".nii.gz")
-                            arr = np.swapaxes(image, 0, 1)
-                            meta = _sidecar(reader, rect, staining_name, factor, scene_idx,
-                                            arr.shape[:2], True,
-                                            slice_position_map, original_thickness,
-                                            reorient, output_format)
-                            _save_nifti(
-                                path, arr,
-                                np.asarray(meta.get("SFormMatrix", np.eye(4)),
-                                           dtype=float),
+                            nii_path = os.path.join(
+                                folders[exponent], base + ".nii.gz"
                             )
-                            bmeta.write_micr_sidecar_json(path, meta)
-                            print("  -> derivatives: "
-                                  f"{os.path.relpath(path, bids_root_path)}")
+                            arr = np.swapaxes(image, 0, 1)
+                            nii_meta = _sidecar(
+                                reader, rect, staining_name, factor, scene_idx,
+                                arr.shape[:2], True,
+                                slice_position_map, original_thickness,
+                                reorient, output_format,
+                                delete_content=delete_content,
+                            )
+                            _save_nifti(
+                                nii_path,
+                                arr,
+                                np.asarray(
+                                    nii_meta.get("SFormMatrix", np.eye(4)),
+                                    dtype=float,
+                                ),
+                            )
+                            bmeta.write_micr_sidecar_json(nii_path, nii_meta)
+                            print(
+                                "  -> derivatives: "
+                                f"{os.path.relpath(nii_path, bids_root_path)}"
+                            )
 
                     del images
                     bar()

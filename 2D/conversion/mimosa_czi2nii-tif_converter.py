@@ -1,4 +1,6 @@
-import os, sys
+import os
+import sys
+
 # Make the repo root (the folder that contains core/) importable, whatever the
 # depth of this script, so "from core.bids import ..." works.
 _ROOT = os.path.abspath(os.path.dirname(__file__))
@@ -9,20 +11,45 @@ sys.path.insert(0, _ROOT)
 import argparse
 
 from core import czi_convert as czi
-from core.bids.czi_reader import MimosaReader  
+from core.bids.czi_reader import MimosaReader
 from core.bids import bids_manager as bm
 from core.bids import bids_metadata as bmeta
 
 
-def dir_path(path):
-    if os.path.isdir(path):
-        return path
-    raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
+def parse_slice_indices(value):
+    """Parse comma/semicolon-separated slice indices."""
+    if value is None:
+        return None
+
+    tokens = [
+        token.strip()
+        for token in str(value).replace(";", ",").split(",")
+        if token.strip()
+    ]
+    if not tokens:
+        raise argparse.ArgumentTypeError(
+            "-only_slices must contain at least one slice index, e.g. 60,62,63"
+        )
+
+    try:
+        indices = {int(token) for token in tokens}
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "Slice indices must be integers, e.g. 60,62,63"
+        ) from exc
+
+    if any(index < 0 for index in indices):
+        raise argparse.ArgumentTypeError("Slice indices must be non-negative")
+
+    return indices
 
 
 def main():
     parser = argparse.ArgumentParser(description="Process for CZI conversion to BIDS")
-    parser.add_argument("-f", "--output_format",     type=str,      required=True,  help="tif, nii or both")
+    parser.add_argument(
+        "-f", "--output_format", type=str, required=True,
+        help="tif, nii or both",
+    )
     parser.add_argument(
         "-df", "--downsampling_factor", type=str, required=True,
         help=(
@@ -31,65 +58,84 @@ def main():
             "(e.g. 4,6,8). Several resolutions cost one single native read."
         ),
     )
-    parser.add_argument("-o", "--output_path",       type=str,      required=True,  help="BIDS dataset root")
-    parser.add_argument("-y", "--yaml",              type=str,      default="metadata.yml", help="metadata YAML file")
-    parser.add_argument("-original_thickness",required=False,type=float,default=100,help="Histological section thickness in micrometers")
-    parser.add_argument("-reorient",required=False,default="none",help="Reference reorientation used to compute SFormMatrix for 2D slices")
+    parser.add_argument(
+        "-o", "--output_path", type=str, required=True,
+        help="BIDS dataset root",
+    )
+    parser.add_argument(
+        "-y", "--yaml", type=str, default="metadata.yml",
+        help="metadata YAML file",
+    )
+    parser.add_argument(
+        "-original_thickness", required=False, type=float, default=100,
+        help="Histological section thickness in micrometers",
+    )
+    parser.add_argument(
+        "-reorient", type=str, required=False, default="none",
+        help="Reference reorientation used to compute SFormMatrix for 2D slices",
+    )
     parser.add_argument(
         "-only_slices", type=str, default=None,
         help=(
-            "Convert only these slice indices (comma separated, e.g. 60,62,63). "
+            "Process only these slice indices (comma separated, e.g. 60,62,63). "
             "The total slice count and positions are still computed from the "
-            "COMPLETE slice list in the YAML, so the exported slices keep their "
-            "true depth in the brain. Omit to convert every declared slice."
+            "complete slice list in the YAML."
+        ),
+    )
+    parser.add_argument(
+        "-delete", "--delete-content", dest="delete_content",
+        action="store_true",
+        help=(
+            "Replace the pixel/voxel data of the selected slices with zeros. "
+            "Requires -only_slices. Files are kept and their JSON sidecars are "
+            "marked with DeleteContent=true and DeleteContentMethod=zero_fill."
         ),
     )
     parser.add_argument(
         "-refreeze", action="store_true",
         help=(
             "Recompute and overwrite the frozen slice total (NumberOfSlices) "
-            "stored in the YAML, from the current slice list. Use it whenever you "
-            "change the set of slices of a brain (e.g. to make a small dense "
-            "volume of only a few slices)."
+            "stored in the YAML, from the current slice list."
         ),
     )
     parser.add_argument(
-        "-subject", "-subject", dest="subject", type=str, default=None,
+        "-subject", dest="subject", type=str, default=None,
         help=(
             "Convert only this subject (the 'subject' value in the YAML). "
             "Omit to convert every subject."
         ),
     )
+
     args = parser.parse_args()
 
-    # Optional subset of slice indices to actually export (positions still come
-    # from the complete YAML list).
-    only_slices = None
-    if args.only_slices:
-        only_slices = {
-            int(t) for t in str(args.only_slices).replace(";", ",").split(",")
-            if t.strip()
-        }
+    only_slices = parse_slice_indices(args.only_slices)
+    if args.delete_content and only_slices is None:
+        parser.error("-delete requires -only_slices to avoid zeroing every slice")
 
     output_format = args.output_format.lower().strip()
     if output_format not in ("tif", "nii", "both"):
-        raise ValueError("output_format must be 'tif', 'nii' or 'both'")
+        parser.error("output_format must be 'tif', 'nii' or 'both'")
 
     clean_output_path = args.output_path.rstrip("/")
 
-    downsampling_factor = sorted(
-        {
+    try:
+        downsampling_factor = sorted({
             int(token)
             for token in str(args.downsampling_factor).replace(";", ",").split(",")
             if token.strip()
-        }
-    )
+        })
+    except ValueError as exc:
+        parser.error(f"Invalid downsampling exponent: {exc}")
+
     if not downsampling_factor:
-        raise ValueError("At least one downsampling exponent is required")
+        parser.error("At least one downsampling exponent is required")
 
     res_label = {exponent: f"{exponent}x" for exponent in downsampling_factor}
     print("Exported resolutions:", ", ".join(res_label.values()))
     print("Reduction method    : zoom (ZEN pyramid)")
+    if args.delete_content:
+        print("DELETE CONTENT      : selected slices will be written as zeros")
+        print("Selected slices     :", ", ".join(map(str, sorted(only_slices))))
 
     bids_root_path = bm.initialize_dataset(
         clean_output_path,
@@ -100,9 +146,8 @@ def main():
     bmeta.update_yaml_with_slices(args.yaml)
     cfg = bmeta.load_metadata_config(args.yaml)
 
-    # Slice positions are computed in memory from the COMPLETE slice list in the
-    # YAML. Keep the full list in the YAML and use -only_slices to export a
-    # subset: the exported slices then keep their true depth in the brain.
+    # Compute positions from the complete slice list, not only the selected
+    # slices. This preserves the true depth of each selected slice.
     slice_maps_by_subject = {}
     for entry in cfg.get("samples", {}).get("entries", []):
         subj = entry.get("subject")
@@ -110,9 +155,7 @@ def main():
             continue
         if args.subject and str(subj) != str(args.subject):
             continue
-        # Freeze the slice total IN THE YAML (no slice_reference.json). The total
-        # is reused on later runs; pass -refreeze to recompute it. List only the
-        # slices you want in the YAML -> contiguous positions -> dense volume.
+
         slice_maps_by_subject[subj] = bmeta.load_or_freeze_slice_reference_in_yaml(
             cfg=cfg,
             yaml_path=args.yaml,
@@ -129,52 +172,54 @@ def main():
 
     files_to_process = []
     sessions_by_sub = {}
-    samples_rows    = []
+    samples_rows = []
 
     for entry in cfg.get("samples", {}).get("entries", []):
         subject_path = entry["path"]
         subject = entry.get("subject")
-        # If -subject is given, skip every other subject.
+
         if args.subject and str(subject) != str(args.subject):
             continue
         if not os.path.exists(subject_path):
             print(f"WARNING: path not found: {subject_path}")
             continue
+
         for sample in entry.get("samples", []):
             sample_type = sample.get("sample_type", "technical sample")
             participant_id = sample.get("participant_id", f"sub-{subject}")
+
             for file_entry in sample.get("files", []):
                 filename = file_entry.get("filename")
                 slices = file_entry.get("slices", [])
-                if not filename:
-                    continue
-                if not filename.endswith(".czi"):
+
+                if not filename or not filename.endswith(".czi"):
                     continue
                 if not slices:
                     print(f"  SKIP YAML file without slices: {filename}")
                     continue
+
                 full_path = os.path.join(subject_path, filename)
                 if not os.path.exists(full_path):
                     print(f"WARNING: file listed in YAML but not found: {full_path}")
                     continue
 
-                files_to_process.append(
-                    (
-                        subject_path,
-                        filename,
-                        sample_type,
-                        participant_id,
-                        subject,
-                    ))
-                
+                files_to_process.append((
+                    subject_path,
+                    filename,
+                    sample_type,
+                    participant_id,
+                    subject,
+                ))
+
     subjects_copied = set()
-    
+
     for input_dir, filename, sample_type, participant_id_from_yaml, subject_label in files_to_process:
-        
         full_input_path = os.path.join(input_dir, filename)
         czi_id = os.path.splitext(filename)[0]
         is_first = subject_label not in subjects_copied
-        bm.create_sourcedata_links(full_input_path, subject_label, bids_root_path, copy_real=is_first)
+        bm.create_sourcedata_links(
+            full_input_path, subject_label, bids_root_path, copy_real=is_first
+        )
         subjects_copied.add(subject_label)
         print(f"\n>>> Processing: {filename}")
 
@@ -185,7 +230,6 @@ def main():
                     continue
 
                 summary = reader.get_summary()
-
                 print(
                     f"    Subject: {summary['sub']}, "
                     f"Date: {summary['acq_time']}, "
@@ -198,17 +242,15 @@ def main():
                     section_idx=None,
                 )
 
-                participant_id = participant_id_from_yaml or f"sub-{bids_info['sub']}"
-
+                participant_id = (
+                    participant_id_from_yaml or f"sub-{bids_info['sub']}"
+                )
                 slide_num = len([
-                    r for r in samples_rows
-                    if r["sample_id"].startswith("sample-slide")
-                    and r["participant_id"] == participant_id
+                    row for row in samples_rows
+                    if row["sample_id"].startswith("sample-slide")
+                    and row["participant_id"] == participant_id
                 ]) + 1
-
                 slide_id = f"sample-slide{slide_num}"
-
-                # BIDS name uses _sample-slide01, so bids_info["sample"] = "slide01".
                 bids_info["sample"] = slide_id.replace("sample-", "")
 
                 samples_rows.append({
@@ -236,30 +278,29 @@ def main():
                     original_thickness=args.original_thickness,
                     reorient=args.reorient,
                     only_slices=only_slices,
+                    delete_content=args.delete_content,
                 )
 
-        except Exception as e:
-            print(f"    ERROR processing {filename}: {e}")
+        except Exception as exc:
+            print(f"    ERROR processing {filename}: {exc}")
             continue
 
-    for sub, d in sessions_by_sub.items():
+    for sub, session_dates in sessions_by_sub.items():
         rows = [
-            {"session_id": ses_id, "acq_time": d[ses_id]}
-            for ses_id in sorted(d.keys())
+            {"session_id": ses_id, "acq_time": session_dates[ses_id]}
+            for ses_id in sorted(session_dates)
         ]
-
         bmeta.write_subject_sessions_tsv(
-            os.path.join(bids_root_path, "derivatives", "2D","downsampled"),
+            os.path.join(bids_root_path, "derivatives", "2D", "downsampled"),
             sub,
             rows,
         )
 
     bmeta.write_samples_tsv(bids_root_path, samples_rows)
 
-    # If a slice-reference table already exists, refresh it so it reflects the
-    # slices just converted (useful after a -only_slices run, which adds slices).
-    ref_tsv = os.path.join(bids_root_path, "derivatives", "2D",
-                           "mimosa_slice_references.tsv")
+    ref_tsv = os.path.join(
+        bids_root_path, "derivatives", "2D", "mimosa_slice_references.tsv"
+    )
     if os.path.exists(ref_tsv):
         try:
             from utils.mimosa_slice_references_tsv import build_slice_references_tsv
@@ -269,6 +310,7 @@ def main():
             print(f"WARNING: could not update slice reference table: {exc}")
 
     print("\n[SUCCESS] Conversion done.")
+
 
 if __name__ == "__main__":
     main()

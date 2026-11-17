@@ -137,8 +137,10 @@ def build_slice_references_tsv(bids_root, out_tsv=None):
             entry["resolutions"].add(res)
  
     # sort by subject, then session, then depth (SlicePosition)
-    ordered = sorted(rows.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[1]["pos"]))
- 
+    #ordered = sorted(rows.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[1]["pos"]))
+    # sorted by subject , and slicePosition_mm)
+    ordered = sorted(rows.items(), key=lambda kv: (kv[0][0], kv[1]["z"])
+)
     os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
     with open(out_tsv, "w") as out:
         out.write("subject\tsession\tchunk\tSlicePosition_mm\tchannels\tresolutions\n")
