@@ -108,6 +108,7 @@ subjects, selected metadata, their `.czi` folders and their slices. **Every comm
 reads this file**, so fill it before running any stage.
 
 ---
+a minimalist yaml sample is given [here](docs/EBrains/metadata_ebrain_minimal.yml)
 
 ### 2. Conversion
 
