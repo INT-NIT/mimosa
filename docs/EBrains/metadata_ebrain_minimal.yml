@@ -1,0 +1,62 @@
+dataset_description:
+  Name: MIMOSA Microscopy Dataset (example subset)
+  BIDSVersion: 1.11.1
+  DatasetType: raw
+  Authors:
+  - Hanane Boudlal
+  - Arnaud Le Troter
+  GeneratedBy:
+  - Name: MIMOSA
+    Description: CZI microscopy conversion pipeline
+    CodeURL: https://github.com/INT-NIT/mimosa.git
+participants_json:
+  participant_id:
+    Description: Unique participant ID
+  species:
+    Description: 'Specie of the animal , e.g: Marmouset'
+  GUID:
+    Description: Unique subject ID
+  name:
+    Description: Animal name
+participants_tsv:
+  columns:
+  - participant_id
+  - species
+  rows:
+  - participant_id: sub-01
+    species: Marmouset
+  - participant_id: sub-02
+    species: Marmouset
+raw_json:
+  MicroscopyTechnique: Fluorescence microscopy
+  SampleEnvironment: in vitro
+  BodyPart: Brain
+samples:
+  columns:
+  - sample_id
+  - participant_id
+  - sample_type
+  - derived_from
+  - source_filename
+  entries:
+  - path: /path_for_sub-01
+    subject: '01'
+    samples:
+    - sample_type: tissue
+      participant_id: sub-01
+      SampleStaining:
+      - DAPI
+      - EGFP
+      - DsRed
+      files:
+      - filename: file1.czi
+  - path: /path_for_sub-02
+    subject: '02'
+    samples:
+    - sample_type: tissue
+      participant_id: sub-02
+      SampleStaining:
+      - DAPI
+      - EGFP
+      files:
+      - filename: file2.czi
